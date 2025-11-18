@@ -1,0 +1,106 @@
+import React, { useState } from 'react';
+import { Card, Button, Space, Typography, Spin } from 'antd';
+import {
+  FacebookFilled,
+  GoogleCircleFilled,
+  SmileOutlined,
+  UsergroupAddOutlined,
+} from '@ant-design/icons';
+import { AuthUser } from '@/types';
+
+const { Title, Text } = Typography;
+
+interface AuthGateSectionProps {
+  onAuthSuccess: (user: AuthUser) => void;
+}
+
+const generateMockAuthUser = (provider: string): AuthUser => {
+  let firstName, lastName, nickname;
+  switch (provider) {
+    case 'Facebook':
+      firstName = 'ธนากร';
+      lastName = 'สุขใจ';
+      nickname = 'เติ้ล';
+      break;
+    case 'Line':
+      firstName = 'ณิชา';
+      lastName = 'มีสกุล';
+      nickname = 'นิดหน่อย';
+      break;
+    case 'Google':
+      firstName = 'จิรายุ';
+      lastName = 'รักการงาน';
+      nickname = 'เจมส์';
+      break;
+    default:
+      firstName = '';
+      lastName = '';
+      nickname = '';
+  }
+  const id = `${provider.toLowerCase()}-${firstName}-${lastName}`;
+  return { id, firstName, lastName, nickname };
+};
+
+const AuthGateSection: React.FC<AuthGateSectionProps> = ({ onAuthSuccess }) => {
+  const [authLoading, setAuthLoading] = useState(false);
+
+  const simulateAuth = (provider: string) => {
+    setAuthLoading(true);
+    const mockUser = generateMockAuthUser(provider);
+    setTimeout(() => {
+      setAuthLoading(false);
+      onAuthSuccess(mockUser);
+    }, 800);
+  };
+
+  return (
+    <Card className="w-full shadow-none border-none bg-transparent text-center p-4">
+      <UsergroupAddOutlined style={{ fontSize: 48, color: '#f97316' }} />
+      <Title level={3} className="mt-4 mb-2 text-gray-700">
+        ยืนยันตัวตนเพื่อลงทะเบียน
+      </Title>
+      <Text type="secondary" className="block mb-8 text-lg">
+        กรุณาเลือกช่องทางที่คุณสะดวก <br /> ระบบจะช่วยดึงข้อมูลชื่อของคุณให้อัตโนมัติ
+      </Text>
+      <Space direction="vertical" size="middle" className="w-full max-w-xs mx-auto">
+        <Button
+          block
+          size="large"
+          disabled={authLoading}
+          onClick={() => simulateAuth('Facebook')}
+          icon={<FacebookFilled />}
+          className="h-12 bg-[#1877f2] text-white border-none hover:bg-[#166fe5]"
+        >
+          เข้าสู่ระบบด้วย Facebook
+        </Button>
+        <Button
+          block
+          size="large"
+          disabled={authLoading}
+          onClick={() => simulateAuth('Line')}
+          icon={<SmileOutlined />}
+          className="h-12 bg-[#06c755] text-white border-none hover:bg-[#05b64d]"
+        >
+          เข้าสู่ระบบด้วย Line
+        </Button>
+        <Button
+          block
+          size="large"
+          disabled={authLoading}
+          onClick={() => simulateAuth('Google')}
+          icon={<GoogleCircleFilled />}
+          className="h-12 bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+        >
+          เข้าสู่ระบบด้วย Google
+        </Button>
+      </Space>
+      {authLoading && (
+        <div className="mt-8">
+          <Spin size="large" tip="กำลังดึงข้อมูล..." />
+        </div>
+      )}
+    </Card>
+  );
+};
+
+export default AuthGateSection;
