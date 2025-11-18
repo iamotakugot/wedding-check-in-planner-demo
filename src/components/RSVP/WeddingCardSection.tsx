@@ -15,6 +15,8 @@ interface InviteConfig {
   bannerImage?: string;
   bannerObjectFit?: 'cover' | 'contain';
   schedule?: ScheduleItem[];
+  youtubeUrl?: string;
+  musicVolume?: number;
 }
 
 interface WeddingCardSectionProps {

@@ -6,6 +6,7 @@ import WeddingCardSection from './WeddingCardSection';
 import AuthGateSection from './AuthGateSection';
 import RSVPFormSection from './RSVPFormSection';
 import DashboardTicket from './DashboardTicket';
+import MusicPlayer from './MusicPlayer';
 
 interface GuestRSVPAppProps {
   onExitGuestMode: () => void;
@@ -15,6 +16,22 @@ interface GuestRSVPAppProps {
 const simulatedDatabase: { [userId: string]: RSVPData } = {};
 
 const STORAGE_KEY = 'invitation_config_v1';
+const RSVP_STORAGE_KEY = 'rsvp_database';
+
+// Get RSVP database from localStorage
+const getRSVPDatabase = (): { [userId: string]: RSVPData } => {
+  try {
+    const saved = localStorage.getItem(RSVP_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+};
+
+// Save RSVP database to localStorage
+const saveRSVPDatabase = (db: { [userId: string]: RSVPData }) => {
+  localStorage.setItem(RSVP_STORAGE_KEY, JSON.stringify(db));
+};
 
 const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
   const [mode, setMode] = useState<'auth' | 'form' | 'dashboard'>('auth');
@@ -35,7 +52,8 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
 
   const handleAuthSuccess = (user: AuthUser) => {
     setAuthUserData(user);
-    const existingData = simulatedDatabase[user.id] || null;
+    const db = getRSVPDatabase();
+    const existingData = db[user.id] || null;
 
     if (existingData) {
       setCurrentUserRSVPData(existingData);
@@ -58,7 +76,9 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
       accompanyingGuests: accompanyingGuests,
     };
 
-    simulatedDatabase[authUserData.id] = submittedData;
+    const db = getRSVPDatabase();
+    db[authUserData.id] = submittedData;
+    saveRSVPDatabase(db);
 
     setTimeout(() => {
       setLoading(false);
@@ -131,6 +151,9 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
 
       {/* Section 1: Wedding Card (Full Height) */}
       <WeddingCardSection onScrollToAction={scrollToActions} config={inviteConfig} />
+
+      {/* Music Player */}
+      <MusicPlayer youtubeUrl={inviteConfig?.youtubeUrl} defaultVolume={inviteConfig?.musicVolume || 30} />
 
       {/* Section 2: Dynamic Actions (Auth / Form / Dashboard) */}
       <div

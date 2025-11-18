@@ -65,7 +65,7 @@ const App: React.FC = () => {
           />
         );
       case '4':
-        return <LinkManagerPage onPreview={() => setAppMode('guest')} />;
+        return <LinkManagerPage onPreview={() => setAppMode('guest')} guests={guests} setGuests={setGuests} />;
       case '5':
         return (
           <CheckInPage

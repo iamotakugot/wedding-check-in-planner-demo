@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Card, Row, Col, Typography, Input, Select, Table, Tag, Button, Space, Statistic, Divider, message } from 'antd';
+import { Card, Row, Col, Typography, Input, Select, Table, Tag, Button, Space, Statistic, Divider, message, Timeline, Progress, Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Guest, Zone, TableData, Side } from '@/types';
 
 const { Title, Text } = Typography;
+const { Search } = Input;
 
 interface CheckInPageProps {
   guests: Guest[];
@@ -25,6 +26,7 @@ type GroupRow = {
 
 const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tables }) => {
   const [search, setSearch] = useState('');
+  const [quickCheck, setQuickCheck] = useState('');
   const [filterSide, setFilterSide] = useState<Side | 'all'>('all');
   const [filterZone, setFilterZone] = useState<string | 'all'>('all');
   const [filterTable, setFilterTable] = useState<string | 'all'>('all');
@@ -74,6 +76,37 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
     return { total, checkedIn, notChecked: total - checkedIn };
   }, [filteredGuests]);
 
+  // Check-in history (sorted by time)
+  const checkInHistory = useMemo(() => {
+    return guests
+      .filter(g => g.checkedInAt)
+      .sort((a, b) => (b.checkedInAt || '').localeCompare(a.checkedInAt || ''))
+      .slice(0, 10) // Latest 10
+      .map(g => ({
+        id: g.id,
+        name: `${g.firstName} ${g.lastName} (${g.nickname})`,
+        time: g.checkedInAt,
+        method: g.checkInMethod || 'manual',
+      }));
+  }, [guests]);
+
+  const formatTime = (isoString: string | null) => {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const formatDateTime = (isoString: string | null) => {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    return date.toLocaleString('th-TH', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const toggleGuest = (guestId: string, value: boolean) => {
     const now = new Date().toISOString();
     setGuests(prev => prev.map(g => g.id === guestId ? ({
@@ -81,6 +114,9 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
       checkedInAt: value ? now : null,
       checkInMethod: value ? 'manual' : null,
     }) : g));
+    if (value) {
+      message.success('เช็คอินสำเร็จ!');
+    }
   };
 
   const toggleGroup = (group: GroupRow, value: boolean) => {
@@ -95,6 +131,29 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
       };
     }));
     message.success(value ? `เช็คอินกลุ่ม "${group.groupName}" แล้ว` : `ยกเลิกเช็คอินกลุ่ม "${group.groupName}"`);
+  };
+
+  // Quick check-in by name
+  const handleQuickCheck = () => {
+    const name = quickCheck.trim().toLowerCase();
+    if (!name) return;
+
+    const found = guests.find(g =>
+      !g.checkedInAt && (
+        g.firstName.toLowerCase().includes(name) ||
+        g.lastName.toLowerCase().includes(name) ||
+        g.nickname.toLowerCase().includes(name) ||
+        g.id.toLowerCase().includes(name)
+      )
+    );
+
+    if (found) {
+      toggleGuest(found.id, true);
+      setQuickCheck('');
+      message.success(`เช็คอิน ${found.firstName} ${found.lastName} แล้ว`);
+    } else {
+      message.warning('ไม่พบแขกที่ยังไม่เช็คอิน');
+    }
   };
 
   const columns: ColumnsType<GroupRow> = [
@@ -115,7 +174,19 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
       title: 'สรุป',
       key: 'summary',
       width: 140,
-      render: (_, row) => <Text>{row.checkedIn}/{row.total} คน</Text>,
+      render: (_, row) => (
+        <Space>
+          <Text>{row.checkedIn}/{row.total} คน</Text>
+          {row.total > 0 && (
+            <Progress
+              percent={Math.round((row.checkedIn / row.total) * 100)}
+              size="small"
+              showInfo={false}
+              status={row.checkedIn === row.total ? 'success' : 'active'}
+            />
+          )}
+        </Space>
+      ),
     },
     {
       title: 'เช็คอินทั้งกลุ่ม',
@@ -140,12 +211,58 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8} lg={6}>
-          <Card>
+          <Card variant="borderless" className="shadow-sm">
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <Statistic title="เช็คอินแล้ว" value={totals.checkedIn} prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />} />
-              <Statistic title="ยังไม่เช็คอิน" value={totals.notChecked} prefix={<CloseCircleOutlined style={{ color: '#f5222d' }} />} />
+              <Statistic
+                title="เช็คอินแล้ว"
+                value={totals.checkedIn}
+                suffix={`/ ${totals.total}`}
+                prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                valueStyle={{ color: '#52c41a' }}
+              />
+              <Statistic
+                title="ยังไม่เช็คอิน"
+                value={totals.notChecked}
+                prefix={<CloseCircleOutlined style={{ color: '#f5222d' }} />}
+                valueStyle={{ color: '#f5222d' }}
+              />
+              {totals.total > 0 && (
+                <Progress
+                  percent={Math.round((totals.checkedIn / totals.total) * 100)}
+                  status={totals.checkedIn === totals.total ? 'success' : 'active'}
+                />
+              )}
+
               <Divider style={{ margin: '8px 0' }} />
-              <Input allowClear prefix={<SearchOutlined />} placeholder="ค้นหา: ชื่อ/ชื่อเล่น/ID" value={search} onChange={(e) => setSearch(e.target.value)} />
+
+              <Alert
+                message="Quick Check-in"
+                description="พิมพ์ชื่อแล้วกด Enter"
+                type="info"
+                showIcon
+                icon={<ThunderboltOutlined />}
+                style={{ marginBottom: 8 }}
+              />
+
+              <Search
+                placeholder="พิมพ์ชื่อ/ชื่อเล่น/ID → Enter"
+                value={quickCheck}
+                onChange={(e) => setQuickCheck(e.target.value)}
+                onSearch={handleQuickCheck}
+                onPressEnter={handleQuickCheck}
+                allowClear
+                enterButton={<CheckCircleOutlined />}
+              />
+
+              <Divider style={{ margin: '8px 0' }} />
+
+              <Input
+                allowClear
+                prefix={<SearchOutlined />}
+                placeholder="ค้นหา: ชื่อ/ชื่อเล่น/ID"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
               <Select
                 value={filterSide}
                 onChange={setFilterSide}
@@ -163,9 +280,36 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
               />
             </Space>
           </Card>
+
+          {/* Check-in History Timeline */}
+          {checkInHistory.length > 0 && (
+            <Card
+              title={<><ClockCircleOutlined /> ประวัติการเช็คอิน</>}
+              variant="borderless"
+              className="shadow-sm mt-4"
+              size="small"
+            >
+              <Timeline
+                size="small"
+                items={checkInHistory.map(item => ({
+                  color: 'green',
+                  children: (
+                    <div>
+                      <Text strong>{item.name}</Text>
+                      <br />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {formatDateTime(item.time)}
+                      </Text>
+                    </div>
+                  ),
+                }))}
+              />
+            </Card>
+          )}
         </Col>
+
         <Col xs={24} md={16} lg={18}>
-          <Card>
+          <Card variant="borderless" className="shadow-sm">
             <Table
               columns={columns}
               dataSource={groups}
@@ -178,12 +322,22 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
                       const table = tables.find(t => t.tableId === m.tableId);
                       const checked = !!m.checkedInAt;
                       return (
-                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                          <Space>
-                            <Text strong>#{m.id}</Text>
-                            <Text>{m.firstName} {m.lastName} ({m.nickname})</Text>
-                            {zone ? <Tag color="volcano">{zone.zoneName}</Tag> : <Tag>ยังไม่จัด</Tag>}
-                            {table && <Tag color="cyan">{table.tableName}</Tag>}
+                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                          <Space direction="vertical" size={4} style={{ flex: 1 }}>
+                            <Space>
+                              <Text strong>#{m.id}</Text>
+                              <Text>{m.firstName} {m.lastName} ({m.nickname})</Text>
+                              {checked && <Tag color="green" icon={<CheckCircleOutlined />}>เช็คอินแล้ว</Tag>}
+                              {checked && m.checkedInAt && (
+                                <Tag color="default" icon={<ClockCircleOutlined />}>
+                                  {formatTime(m.checkedInAt)}
+                                </Tag>
+                              )}
+                            </Space>
+                            <Space size="small">
+                              {zone ? <Tag color="volcano" size="small">{zone.zoneName}</Tag> : <Tag size="small">ยังไม่จัด</Tag>}
+                              {table && <Tag color="cyan" size="small">{table.tableName}</Tag>}
+                            </Space>
                           </Space>
                           <Button type={checked ? 'default' : 'primary'} onClick={() => toggleGuest(m.id, !checked)}>
                             {checked ? 'ยกเลิกเช็คอิน' : 'เช็คอิน'}
