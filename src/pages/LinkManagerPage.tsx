@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Typography, Input, Button, Space, Statistic, List, Tag, Tooltip, message, Form, Divider, Select, InputNumber, Tabs, Alert, Badge } from 'antd';
+import { Card, Row, Col, Typography, Input, Button, Space, Statistic, List, Tag, Tooltip, message, Form, Divider, Select, InputNumber, Tabs, Alert, Badge, Slider } from 'antd';
 import {
   LinkOutlined,
   CopyOutlined,
@@ -8,7 +8,7 @@ import {
   CloseCircleOutlined,
   EnvironmentOutlined,
   SaveOutlined,
-  MusicOutlined,
+  CustomerServiceOutlined,
   FileTextOutlined,
   BarChartOutlined,
 } from '@ant-design/icons';
@@ -36,7 +36,7 @@ const getRSVPData = () => {
   }
 };
 
-const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, guests, setGuests }) => {
+const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, setGuests }) => {
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState('card');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -350,7 +350,7 @@ const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, guests, se
       key: 'music',
       label: (
         <span>
-          <MusicOutlined /> เพลงบรรเลง
+          <CustomerServiceOutlined /> เพลงบรรเลง
         </span>
       ),
       children: (
@@ -378,7 +378,7 @@ const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, guests, se
               <Slider
                 min={0}
                 max={100}
-                tooltip={{ formatter: (v) => `${v}%` }}
+                tooltip={{ formatter: (v?: number) => `${v}%` }}
               />
             </Form.Item>
             {values.youtubeUrl && (

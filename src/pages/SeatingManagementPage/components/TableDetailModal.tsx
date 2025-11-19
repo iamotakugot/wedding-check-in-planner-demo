@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography, Empty } from 'antd';
+import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography } from 'antd';
 import { TableData, Guest } from '@/types';
 
 const { Text } = Typography;

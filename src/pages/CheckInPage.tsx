@@ -290,7 +290,6 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
               size="small"
             >
               <Timeline
-                size="small"
                 items={checkInHistory.map(item => ({
                   color: 'green',
                   children: (
@@ -298,7 +297,7 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
                       <Text strong>{item.name}</Text>
                       <br />
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {formatDateTime(item.time)}
+                        {formatDateTime(item.time ?? null)}
                       </Text>
                     </div>
                   ),
@@ -335,8 +334,8 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
                               )}
                             </Space>
                             <Space size="small">
-                              {zone ? <Tag color="volcano" size="small">{zone.zoneName}</Tag> : <Tag size="small">ยังไม่จัด</Tag>}
-                              {table && <Tag color="cyan" size="small">{table.tableName}</Tag>}
+                              {zone ? <Tag color="volcano">{zone.zoneName}</Tag> : <Tag>ยังไม่จัด</Tag>}
+                              {table && <Tag color="cyan">{table.tableName}</Tag>}
                             </Space>
                           </Space>
                           <Button type={checked ? 'default' : 'primary'} onClick={() => toggleGuest(m.id, !checked)}>

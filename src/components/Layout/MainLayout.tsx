@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Typography } from 'antd';
+import { Layout, Menu, Avatar } from 'antd';
 import {
   DashboardOutlined,
   TeamOutlined,
@@ -12,7 +12,6 @@ import {
 import type { MenuProps } from 'antd';
 
 const { Header, Content, Sider } = Layout;
-const { Title } = Typography;
 
 interface MainLayoutProps {
   onLogout: () => void;

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { AuthUser, RSVPData } from '@/types';
@@ -6,14 +6,10 @@ import WeddingCardSection from './WeddingCardSection';
 import AuthGateSection from './AuthGateSection';
 import RSVPFormSection from './RSVPFormSection';
 import DashboardTicket from './DashboardTicket';
-import MusicPlayer from './MusicPlayer';
 
 interface GuestRSVPAppProps {
   onExitGuestMode: () => void;
 }
-
-// Simulated database
-const simulatedDatabase: { [userId: string]: RSVPData } = {};
 
 const STORAGE_KEY = 'invitation_config_v1';
 const RSVP_STORAGE_KEY = 'rsvp_database';
@@ -151,9 +147,6 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
 
       {/* Section 1: Wedding Card (Full Height) */}
       <WeddingCardSection onScrollToAction={scrollToActions} config={inviteConfig} />
-
-      {/* Music Player */}
-      <MusicPlayer youtubeUrl={inviteConfig?.youtubeUrl} defaultVolume={inviteConfig?.musicVolume || 30} />
 
       {/* Section 2: Dynamic Actions (Auth / Form / Dashboard) */}
       <div

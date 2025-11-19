@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Card, Avatar, Button, Space, Typography } from 'antd';
-import { ExpandAltOutlined, EnvironmentOutlined } from '@ant-design/icons';
+import { ExpandAltOutlined } from '@ant-design/icons';
 import { TableData, Guest } from '@/types';
 import { GRID_X_POSITIONS, findNearest, findNearestYSnap } from '@/constants/layout';
 
