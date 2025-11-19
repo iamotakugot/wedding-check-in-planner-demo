@@ -65,7 +65,7 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
       width={window.innerWidth > 768 ? 500 : '100%'}
       onClose={onClose}
       open={visible}
-      bodyStyle={{ paddingBottom: 80 }}
+      styles={{ body: { paddingBottom: 80 } }}
       extra={
         <Space>
           <Button onClick={onClose}>ยกเลิก</Button>

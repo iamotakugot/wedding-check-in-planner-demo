@@ -5,7 +5,6 @@ import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOu
 import { Guest, Zone, TableData, Side } from '@/types';
 
 const { Title, Text } = Typography;
-const { Search } = Input;
 
 interface CheckInPageProps {
   guests: Guest[];
@@ -244,15 +243,16 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
                 style={{ marginBottom: 8 }}
               />
 
-              <Search
-                placeholder="พิมพ์ชื่อ/ชื่อเล่น/ID → Enter"
-                value={quickCheck}
-                onChange={(e) => setQuickCheck(e.target.value)}
-                onSearch={handleQuickCheck}
-                onPressEnter={handleQuickCheck}
-                allowClear
-                enterButton={<CheckCircleOutlined />}
-              />
+              <Space.Compact style={{ width: '100%' }}>
+                <Input
+                  placeholder="พิมพ์ชื่อ/ชื่อเล่น/ID → Enter"
+                  value={quickCheck}
+                  onChange={(e) => setQuickCheck(e.target.value)}
+                  onPressEnter={handleQuickCheck}
+                  allowClear
+                />
+                <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleQuickCheck} />
+              </Space.Compact>
 
               <Divider style={{ margin: '8px 0' }} />
 

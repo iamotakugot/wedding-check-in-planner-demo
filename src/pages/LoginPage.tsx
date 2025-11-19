@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Card, Form, Input, Button, Typography, Alert, message } from 'antd';
+import { Layout, Card, Form, Input, Button, Typography, Alert, App } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 
 const { Content } = Layout;
@@ -17,6 +17,7 @@ interface LoginFieldType {
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { message } = App.useApp();
 
   const onFinish = (values: LoginFieldType) => {
     setLoading(true);

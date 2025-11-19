@@ -34,7 +34,7 @@ const DashboardTicket: React.FC<DashboardTicketProps> = ({
     <div className="w-full max-w-md mx-auto pt-6">
       <Card
         className="shadow-xl rounded-3xl overflow-hidden border-none mb-6"
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         {/* Status Header */}
         <div

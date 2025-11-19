@@ -94,11 +94,11 @@ const AuthGateSection: React.FC<AuthGateSectionProps> = ({ onAuthSuccess }) => {
           เข้าสู่ระบบด้วย Google
         </Button>
       </Space>
-      {authLoading && (
-        <div className="mt-8">
-          <Spin size="large" tip="กำลังดึงข้อมูล..." />
-        </div>
-      )}
+      <div className="mt-8">
+        <Spin spinning={authLoading} tip="กำลังดึงข้อมูล..." size="large">
+          <div style={{ width: 1, height: 1 }} />
+        </Spin>
+      </div>
     </Card>
   );
 };

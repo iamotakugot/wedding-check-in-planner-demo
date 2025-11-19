@@ -265,7 +265,6 @@ const RSVPFormSection: React.FC<RSVPFormSectionProps> = ({
                                 </Button>
                               </div>
                               <Form.Item
-                                {...field}
                                 name={[field.name, 'name']}
                                 rules={[{ required: true, message: 'ระบุชื่อ' }]}
                                 style={{ marginBottom: 8 }}
@@ -273,7 +272,6 @@ const RSVPFormSection: React.FC<RSVPFormSectionProps> = ({
                                 <Input placeholder="ชื่อผู้ติดตาม" />
                               </Form.Item>
                               <Form.Item
-                                {...field}
                                 name={[field.name, 'relationToMain']}
                                 rules={[{ required: true, message: 'ระบุความสัมพันธ์' }]}
                                 style={{ marginBottom: 0 }}
