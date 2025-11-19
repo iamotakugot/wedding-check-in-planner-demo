@@ -7,6 +7,8 @@ import {
   UsergroupAddOutlined,
 } from '@ant-design/icons';
 import { AuthUser } from '@/types';
+import { getFirebaseAuth, googleProvider, facebookProvider, lineProvider } from '@/firebase';
+import { signInWithPopup } from 'firebase/auth';
 
 const { Title, Text } = Typography;
 
@@ -44,6 +46,35 @@ const generateMockAuthUser = (provider: string): AuthUser => {
 const AuthGateSection: React.FC<AuthGateSectionProps> = ({ onAuthSuccess }) => {
   const [authLoading, setAuthLoading] = useState(false);
 
+  const handleFirebaseSignIn = async (provider: 'Google' | 'Facebook' | 'Line') => {
+    const auth = getFirebaseAuth();
+    if (!auth) return simulateAuth(provider);
+    setAuthLoading(true);
+    try {
+      const prov =
+        provider === 'Google' ? googleProvider :
+        provider === 'Facebook' ? facebookProvider :
+        lineProvider;
+      const cred = await signInWithPopup(auth, prov as any);
+      const user = cred.user;
+      const displayName = user.displayName || '';
+      const [firstName = '', lastName = ''] = displayName.split(' ');
+      const nickname = (user.email || '').split('@')[0] || firstName || 'Guest';
+      const authUser: AuthUser = {
+        id: user.uid,
+        firstName,
+        lastName,
+        nickname,
+      };
+      onAuthSuccess(authUser);
+    } catch {
+      // fallback to mock if sign-in fails
+      simulateAuth(provider);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const simulateAuth = (provider: string) => {
     setAuthLoading(true);
     const mockUser = generateMockAuthUser(provider);
@@ -67,7 +98,7 @@ const AuthGateSection: React.FC<AuthGateSectionProps> = ({ onAuthSuccess }) => {
           block
           size="large"
           disabled={authLoading}
-          onClick={() => simulateAuth('Facebook')}
+          onClick={() => handleFirebaseSignIn('Facebook')}
           icon={<FacebookFilled />}
           className="h-12 bg-[#1877f2] text-white border-none hover:bg-[#166fe5]"
         >
@@ -77,7 +108,7 @@ const AuthGateSection: React.FC<AuthGateSectionProps> = ({ onAuthSuccess }) => {
           block
           size="large"
           disabled={authLoading}
-          onClick={() => simulateAuth('Line')}
+          onClick={() => handleFirebaseSignIn('Line')}
           icon={<SmileOutlined />}
           className="h-12 bg-[#06c755] text-white border-none hover:bg-[#05b64d]"
         >
@@ -87,7 +118,7 @@ const AuthGateSection: React.FC<AuthGateSectionProps> = ({ onAuthSuccess }) => {
           block
           size="large"
           disabled={authLoading}
-          onClick={() => simulateAuth('Google')}
+          onClick={() => handleFirebaseSignIn('Google')}
           icon={<GoogleCircleFilled />}
           className="h-12 bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
         >

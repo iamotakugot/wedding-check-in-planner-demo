@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { AuthUser, RSVPData } from '@/types';
@@ -6,6 +6,7 @@ import WeddingCardSection from './WeddingCardSection';
 import AuthGateSection from './AuthGateSection';
 import RSVPFormSection from './RSVPFormSection';
 import DashboardTicket from './DashboardTicket';
+import { apiGetInviteConfig, apiGetRSVP, apiPostRSVP } from '@/services/api';
 
 interface GuestRSVPAppProps {
   onExitGuestMode: () => void;
@@ -14,27 +15,13 @@ interface GuestRSVPAppProps {
 const STORAGE_KEY = 'invitation_config_v1';
 const RSVP_STORAGE_KEY = 'rsvp_database';
 
-// Get RSVP database from localStorage
-const getRSVPDatabase = (): { [userId: string]: RSVPData } => {
-  try {
-    const saved = localStorage.getItem(RSVP_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : {};
-  } catch {
-    return {};
-  }
-};
-
-// Save RSVP database to localStorage
-const saveRSVPDatabase = (db: { [userId: string]: RSVPData }) => {
-  localStorage.setItem(RSVP_STORAGE_KEY, JSON.stringify(db));
-};
-
 const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
   const [mode, setMode] = useState<'auth' | 'form' | 'dashboard'>('auth');
   const [formSection, setFormSection] = useState<'all' | 'personal' | 'guests'>('all');
   const [loading, setLoading] = useState(false);
   const [authUserData, setAuthUserData] = useState<AuthUser | null>(null);
   const [currentUserRSVPData, setCurrentUserRSVPData] = useState<RSVPData | null>(null);
+  const [inviteConfig, setInviteConfig] = useState<any>(undefined);
 
   const actionSectionRef = useRef<HTMLDivElement>(null);
 
@@ -46,22 +33,39 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleAuthSuccess = (user: AuthUser) => {
+  const handleAuthSuccess = async (user: AuthUser) => {
     setAuthUserData(user);
-    const db = getRSVPDatabase();
-    const existingData = db[user.id] || null;
-
-    if (existingData) {
-      setCurrentUserRSVPData(existingData);
-      setMode('dashboard');
-    } else {
-      setFormSection('all');
-      setMode('form');
+    try {
+      const existing = await apiGetRSVP(user.id);
+      if (existing) {
+        setCurrentUserRSVPData(existing);
+        setMode('dashboard');
+      } else {
+        setFormSection('all');
+        setMode('form');
+      }
+    } catch {
+      // fallback localStorage
+      try {
+        const saved = localStorage.getItem(RSVP_STORAGE_KEY);
+        const db = saved ? JSON.parse(saved) : {};
+        const existingData = db[user.id] || null;
+        if (existingData) {
+          setCurrentUserRSVPData(existingData);
+          setMode('dashboard');
+        } else {
+          setFormSection('all');
+          setMode('form');
+        }
+      } catch {
+        setFormSection('all');
+        setMode('form');
+      }
     }
     scrollToActions();
   };
 
-  const handleFormFinish = (values: any) => {
+  const handleFormFinish = async (values: any) => {
     if (!authUserData) return;
     setLoading(true);
 
@@ -72,16 +76,22 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
       accompanyingGuests: accompanyingGuests,
     };
 
-    const db = getRSVPDatabase();
-    db[authUserData.id] = submittedData;
-    saveRSVPDatabase(db);
+    try {
+      await apiPostRSVP(authUserData.id, submittedData);
+    } catch {
+      // fallback localStorage
+      try {
+        const saved = localStorage.getItem(RSVP_STORAGE_KEY);
+        const db = saved ? JSON.parse(saved) : {};
+        db[authUserData.id] = submittedData;
+        localStorage.setItem(RSVP_STORAGE_KEY, JSON.stringify(db));
+      } catch {}
+    }
 
-    setTimeout(() => {
-      setLoading(false);
-      setCurrentUserRSVPData(submittedData);
-      setMode('dashboard');
-      scrollToActions();
-    }, 1000);
+    setLoading(false);
+    setCurrentUserRSVPData(submittedData);
+    setMode('dashboard');
+    scrollToActions();
   };
 
   const handleEditPersonal = () => {
@@ -123,12 +133,22 @@ const GuestRSVPApp: React.FC<GuestRSVPAppProps> = ({ onExitGuestMode }) => {
     return { isComing: 'yes', accompanyingGuestsCount: 0, accompanyingGuests: [] };
   };
 
-  // Load invitation config from admin localStorage
-  let inviteConfig: any = undefined;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) inviteConfig = JSON.parse(saved);
-  } catch {}
+  // Load invitation config (API first, fallback localStorage)
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiGetInviteConfig();
+        setInviteConfig(data);
+      } catch {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) setInviteConfig(JSON.parse(saved));
+        } catch {
+          setInviteConfig(undefined);
+        }
+      }
+    })();
+  }, []);
 
   return (
     <div className="bg-gray-50 min-h-screen pb-20">

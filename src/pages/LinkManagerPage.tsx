@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, Row, Col, Typography, Input, Button, Space, Statistic, List, Tag, Tooltip, message, Form, Divider, Select, InputNumber, Tabs, Alert, Badge, Slider } from 'antd';
 import {
   LinkOutlined,
@@ -26,15 +26,8 @@ interface ScheduleItem { time: string; title: string; desc?: string }
 const STORAGE_KEY = 'invitation_config_v1';
 const RSVP_STORAGE_KEY = 'rsvp_database';
 
-// Get RSVP data from localStorage (simulating backend)
-const getRSVPData = () => {
-  try {
-    const saved = localStorage.getItem(RSVP_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : {};
-  } catch {
-    return {};
-  }
-};
+// API (JSON DB) with fallback localStorage
+import { apiGetInviteConfig, apiSaveInviteConfig, apiGetRSVPs } from '@/services/api';
 
 const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, setGuests }) => {
   const [form] = Form.useForm();
@@ -42,67 +35,106 @@ const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, setGuests 
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [rsvpStats, setRsvpStats] = useState({ coming: 0, notComing: 0 });
   const inviteLink = 'https://wedding-planner.app/rsvp/jane-joe-2025';
+  const saveTimer = useRef<number | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(inviteLink);
     message.success('คัดลอกลิงค์แล้ว!');
   };
 
-  // Load initial data
+  // Load initial data (prefer API)
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    (async () => {
       try {
-        const data = JSON.parse(saved);
+        const data = await apiGetInviteConfig();
         form.setFieldsValue(data);
-      } catch {}
-    } else {
-      form.setFieldsValue({
-        eventTitle: "Jane & Joe's Wedding",
-        eventDate: '12 ธันวาคม 2025',
-        venueName: 'แกรนด์บอลรูม',
-        address: 'โรงแรมสุดหรู, กรุงเทพฯ',
-        bannerImage: 'https://images.unsplash.com/photo-1519225468359-69df3ef39f67?q=80&w=1200&auto=format&fit=crop',
-        bannerHeight: 220,
-        bannerObjectFit: 'cover',
-        youtubeUrl: '',
-        musicVolume: 30,
-        schedule: [
-          { time: '07:09', title: 'พิธีสงฆ์', desc: 'เจริญพระพุทธมนต์' },
-          { time: '09:09', title: 'พิธีขันหมาก', desc: 'ตั้งขบวนขันหมาก' },
-          { time: '18:30', title: 'งานฉลองมงคลสมรส', desc: 'เริ่มงานเลี้ยงภาคค่ำ' },
-        ],
-      });
-    }
+      } catch {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            form.setFieldsValue(data);
+          } catch {}
+        } else {
+          form.setFieldsValue({
+            eventTitle: "Jane & Joe's Wedding",
+            eventDate: '12 ธันวาคม 2025',
+            venueName: 'แกรนด์บอลรูม',
+            address: 'โรงแรมสุดหรู, กรุงเทพฯ',
+            bannerImage: 'https://images.unsplash.com/photo-1519225468359-69df3ef39f67?q=80&w=1200&auto=format&fit=crop',
+            bannerHeight: 220,
+            bannerObjectFit: 'cover',
+            youtubeUrl: '',
+            musicVolume: 30,
+            schedule: [
+              { time: '07:09', title: 'พิธีสงฆ์', desc: 'เจริญพระพุทธมนต์' },
+              { time: '09:09', title: 'พิธีขันหมาก', desc: 'ตั้งขบวนขันหมาก' },
+              { time: '18:30', title: 'งานฉลองมงคลสมรส', desc: 'เริ่มงานเลี้ยงภาคค่ำ' },
+            ],
+          });
+        }
+      }
+    })();
   }, [form]);
 
-  // Auto-save draft every 30 seconds
+  // Debounced auto-save to API (fallback localStorage)
+  const values = Form.useWatch([], form) || {};
   useEffect(() => {
-    const timer = setInterval(() => {
-      const data = form.getFieldsValue();
-      localStorage.setItem(`${STORAGE_KEY}_draft`, JSON.stringify(data));
-      setLastSaved(new Date());
-    }, 30000); // Every 30 seconds
-    return () => clearInterval(timer);
-  }, [form]);
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(async () => {
+      try {
+        await apiSaveInviteConfig(form.getFieldsValue());
+        setLastSaved(new Date());
+      } catch {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(form.getFieldsValue()));
+        setLastSaved(new Date());
+      }
+    }, 800);
+    return () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    };
+  }, [values, form]);
 
-  // Update RSVP stats
+  // Update RSVP stats (API first)
   useEffect(() => {
-    const rsvps = getRSVPData();
-    let coming = 0;
-    let notComing = 0;
-    Object.values(rsvps).forEach((rsvp: any) => {
-      if (rsvp.isComing === 'yes') coming++;
-      else if (rsvp.isComing === 'no') notComing++;
-    });
-    setRsvpStats({ coming, notComing });
+    (async () => {
+      try {
+        const rsvps = await apiGetRSVPs();
+        let coming = 0;
+        let notComing = 0;
+        Object.values(rsvps).forEach((rsvp: any) => {
+          if (rsvp.isComing === 'yes') coming++;
+          else if (rsvp.isComing === 'no') notComing++;
+        });
+        setRsvpStats({ coming, notComing });
+      } catch {
+        try {
+          const saved = localStorage.getItem(RSVP_STORAGE_KEY);
+          const rsvps = saved ? JSON.parse(saved) : {};
+          let coming = 0;
+          let notComing = 0;
+          Object.values(rsvps).forEach((rsvp: any) => {
+            if (rsvp.isComing === 'yes') coming++;
+            else if (rsvp.isComing === 'no') notComing++;
+          });
+          setRsvpStats({ coming, notComing });
+        } catch {
+          setRsvpStats({ coming: 0, notComing: 0 });
+        }
+      }
+    })();
   }, []);
 
-  const persist = () => {
-    const data = form.getFieldsValue();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    setLastSaved(new Date());
-    message.success('บันทึกข้อมูลการ์ดเชิญแล้ว');
+  const persist = async () => {
+    try {
+      await apiSaveInviteConfig(form.getFieldsValue());
+      setLastSaved(new Date());
+      message.success('บันทึกข้อมูลการ์ดเชิญแล้ว');
+    } catch {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(form.getFieldsValue()));
+      setLastSaved(new Date());
+      message.success('บันทึกข้อมูล (ออฟไลน์) แล้ว');
+    }
   };
 
   const handleImportRSVP = () => {
@@ -179,7 +211,6 @@ const LinkManagerPage: React.FC<LinkManagerPageProps> = ({ onPreview, setGuests 
     message.success(`Import ${importedGuests.length} แขกจาก RSVP เข้า Guest List แล้ว`);
   };
 
-  const values = Form.useWatch([], form) || {};
   const mapsQuery = encodeURIComponent(`${values.venueName || ''} ${values.address || ''}`.trim());
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
   const embedUrl = `https://www.google.com/maps?q=${mapsQuery}&output=embed`;

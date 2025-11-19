@@ -7,6 +7,11 @@ export default defineConfig({
   plugins: [react()],
   // Move Vite cache out of node_modules to avoid OneDrive/permission issues
   cacheDir: '.vite',
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3001',
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

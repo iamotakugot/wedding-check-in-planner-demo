@@ -150,6 +150,33 @@ sequenceDiagram
   - `docs/DATA_FLOW.md`, `docs/DATA_MODEL.md`
   - `docs/SECURITY.md`, `docs/THREAT_MODEL.md`, `docs/SECRETS.md`
 
+## โหมด Local: JSON Database API + Proxy
+
+- รัน API JSON DB (พอร์ต 3001):
+
+```bash
+npm run api
+```
+
+- Endpoint หลัก:
+  - GET/PUT `/api/invite-config` อ่าน/บันทึกการ์ดเชิญ
+  - GET `/api/rsvps` อ่าน RSVP ทั้งหมด
+  - GET `/api/rsvps/:id` อ่าน RSVP รายผู้ใช้
+  - POST `/api/rsvps` บันทึก `{ userId, data }`
+
+- Vite proxy ถูกตั้งค่าแล้วใน `vite.config.ts`:
+  - `/api` → `http://localhost:3001`
+
+## Firebase Authentication (Guest Login)
+
+- ใช้ได้กับ Google, Facebook และ LINE (ผ่าน OIDC)
+- ต้องตั้งค่าใน Firebase Console และกำหนด env ต่อไปนี้
+  - `VITE_FIREBASE_API_KEY`
+  - `VITE_FIREBASE_AUTH_DOMAIN`
+  - `VITE_FIREBASE_PROJECT_ID`
+  - `VITE_FIREBASE_APP_ID`
+- หากไม่ได้ตั้งค่า/เกิดข้อผิดพลาด ระบบจะ fallback เป็น mock login อัตโนมัติ
+
 ## Playbooks (Interactive สำหรับ AI)
 
 ### A) เพิ่ม/แก้ไขกำหนดการงานแต่ง (Schedule)
