@@ -5,9 +5,8 @@ import {
   signOut, 
   onAuthStateChanged, 
   User,
-  signInWithPopup,
-  signInWithRedirect, // Add this
-  getRedirectResult, // Add this
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   FacebookAuthProvider
 } from 'firebase/auth';
@@ -426,74 +425,25 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-facebookProvider.setCustomParameters({
-  display: 'popup'
-});
-
 // Add scopes if needed
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
 facebookProvider.addScope('email');
 
-// Mobile detection helper
-const isMobile = () => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-};
-
-// In-app browser detection (Facebook, Line, etc.)
-const isInAppBrowser = () => {
-  const ua = navigator.userAgent.toLowerCase();
-  return (
-    ua.includes('fban') || // Facebook Android
-    ua.includes('fbav') || // Facebook iOS
-    ua.includes('line/') || // Line
-    ua.includes('wv') || // WebView
-    (ua.includes('safari') && !ua.includes('chrome') && (window.navigator as unknown as Record<string, unknown>).standalone !== undefined) // iOS Safari standalone
-  );
-};
-
 export const signInWithGoogle = async (): Promise<User> => {
-  try {
-    // ถ้าเป็น in-app browser ให้ใช้ redirect เสมอ
-    if (isInAppBrowser() || isMobile()) {
-      await signInWithRedirect(auth, googleProvider);
-      // This promise will never resolve as page redirects
-      throw new Error('Redirecting to Google Login...');
-    }
-    
-    // Desktop: ลองใช้ popup ก่อน
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-    // Fallback to redirect if popup fails
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-      await signInWithRedirect(auth, googleProvider);
-      throw new Error('Redirecting to Google Login...');
-    }
-    throw error;
-  }
+  // ใช้ redirect เสมอเพื่อหลีกเลี่ยงปัญหา COOP (Cross-Origin-Opener-Policy)
+  // Popup จะถูกบล็อกโดย COOP policy ในบาง browser
+  await signInWithRedirect(auth, googleProvider);
+  // This promise will never resolve as page redirects
+  throw new Error('Redirecting to Google Login...');
 };
 
 export const signInWithFacebook = async (): Promise<User> => {
-  try {
-    // ถ้าเป็น in-app browser ให้ใช้ redirect เสมอ
-    if (isInAppBrowser() || isMobile()) {
-      await signInWithRedirect(auth, facebookProvider);
-      // This promise will never resolve as page redirects
-      throw new Error('Redirecting to Facebook Login...');
-    }
-    
-    // Desktop: ลองใช้ popup ก่อน
-    const result = await signInWithPopup(auth, facebookProvider);
-    return result.user;
-  } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-      // Fallback to redirect
-      await signInWithRedirect(auth, facebookProvider);
-      throw new Error('Redirecting to Facebook Login...');
-    }
-    throw error;
-  }
+  // ใช้ redirect เสมอเพื่อหลีกเลี่ยงปัญหา COOP (Cross-Origin-Opener-Policy)
+  // Popup จะถูกบล็อกโดย COOP policy ในบาง browser
+  await signInWithRedirect(auth, facebookProvider);
+  // This promise will never resolve as page redirects
+  throw new Error('Redirecting to Facebook Login...');
 };
 
 // Check for redirect result on page load
