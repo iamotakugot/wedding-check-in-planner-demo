@@ -19,6 +19,7 @@ export interface Guest {
   seatNumber?: number | null;
   isComing?: boolean;
   accompanyingGuestsCount?: number;
+  phoneNumber?: string; // For RSVP mapping
   // Check-in & grouping
   groupId?: string | null;
   groupName?: string | null;
@@ -50,28 +51,3 @@ export interface TableData {
   y: number; // Percent from top (0-100)
 }
 
-// RSVP-related types
-export interface AuthUser {
-  id: string;
-  firstName: string;
-  lastName: string;
-  nickname: string;
-}
-
-export interface AccompanyingGuest {
-  name: string;
-  relationToMain: string;
-  note?: string;
-}
-
-export interface RSVPData {
-  firstName: string;
-  lastName: string;
-  nickname: string;
-  isComing: 'yes' | 'no';
-  side: 'groom' | 'bride';
-  relation: string;
-  note: string;
-  accompanyingGuestsCount: number;
-  accompanyingGuests: AccompanyingGuest[];
-}

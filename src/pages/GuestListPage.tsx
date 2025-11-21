@@ -18,9 +18,11 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
+import { message } from 'antd';
 import { Guest, Zone, TableData, Side } from '@/types';
 import { MOCK_SIDE_OPTIONS } from '@/data/mockData';
 import GuestFormDrawer from '@/pages/GuestListPage/components/GuestFormDrawer';
+import { createGuest, updateGuest, deleteGuest } from '@/services/firebaseService';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -71,17 +73,33 @@ const GuestListPage: React.FC<GuestListPageProps> = ({
     setIsDrawerVisible(true);
   };
 
-  const handleFormSubmit = (guest: Guest) => {
-    if (editingGuest) {
-      setGuests(guests.map((g) => (g.id === guest.id ? guest : g)));
-    } else {
-      setGuests([...guests, guest]);
+  const handleFormSubmit = async (guest: Guest) => {
+    try {
+      if (editingGuest) {
+        await updateGuest(guest.id, guest);
+        setGuests(guests.map((g) => (g.id === guest.id ? guest : g)));
+        message.success('อัพเดทข้อมูลแขกเรียบร้อย');
+      } else {
+        await createGuest(guest);
+        setGuests([...guests, guest]);
+        message.success('เพิ่มแขกเรียบร้อย');
+      }
+      setIsDrawerVisible(false);
+    } catch (error) {
+      console.error('Error saving guest:', error);
+      message.error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
-    setIsDrawerVisible(false);
   };
 
-  const handleDelete = (id: string) => {
-    setGuests(guests.filter((g) => g.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteGuest(id);
+      setGuests(guests.filter((g) => g.id !== id));
+      message.success('ลบแขกเรียบร้อย');
+    } catch (error) {
+      console.error('Error deleting guest:', error);
+      message.error('เกิดข้อผิดพลาดในการลบข้อมูล');
+    }
   };
 
   const getSideTag = (side: Side) => {

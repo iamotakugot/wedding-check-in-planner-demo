@@ -36,6 +36,7 @@ import { Guest, Zone, TableData } from '@/types';
 import DraggableTable from '@/pages/SeatingManagementPage/components/DraggableTable';
 import ZoneModal from '@/pages/SeatingManagementPage/components/ZoneModal';
 import TableModal from '@/pages/SeatingManagementPage/components/TableModal';
+import { createZone, updateZone, deleteZone, createTable, updateTable, deleteTable, updateGuest } from '@/services/firebaseService';
 
 const { Title, Text } = Typography;
 
@@ -110,35 +111,53 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
   }, [unassignedGuests, unassignedSearchText]);
 
   // --- Handlers ---
-  const handleUnassignGuest = (guestId: string) => {
-    setGuests((prev) =>
-      prev.map((g) => (g.id === guestId ? { ...g, zoneId: null, tableId: null } : g)),
-    );
-    message.success('ย้ายออกจากโต๊ะแล้ว');
+  const handleUnassignGuest = async (guestId: string) => {
+    try {
+      await updateGuest(guestId, { zoneId: null, tableId: null });
+      setGuests((prev) =>
+        prev.map((g) => (g.id === guestId ? { ...g, zoneId: null, tableId: null } : g)),
+      );
+      message.success('ย้ายออกจากโต๊ะแล้ว');
+    } catch (error) {
+      console.error('Error unassigning guest:', error);
+      message.error('เกิดข้อผิดพลาด');
+    }
   };
 
-  const handleAddGuestToTable = (guestId: string) => {
+  const handleAddGuestToTable = async (guestId: string) => {
     if (!activeTable) return;
     const currentCount = (guestsByTable.get(activeTable.tableId) || []).length;
     if (currentCount >= activeTable.capacity) {
       message.error('โต๊ะเต็มแล้ว');
       return;
     }
-    setGuests((prev) =>
-      prev.map((g) =>
-        g.id === guestId
-          ? { ...g, zoneId: activeTable.zoneId, tableId: activeTable.tableId }
-          : g,
-      ),
-    );
-    message.success('เพิ่มเข้าโต๊ะสำเร็จ');
+    try {
+      await updateGuest(guestId, { zoneId: activeTable.zoneId, tableId: activeTable.tableId });
+      setGuests((prev) =>
+        prev.map((g) =>
+          g.id === guestId
+            ? { ...g, zoneId: activeTable.zoneId, tableId: activeTable.tableId }
+            : g,
+        ),
+      );
+      message.success('เพิ่มเข้าโต๊ะสำเร็จ');
+    } catch (error) {
+      console.error('Error adding guest to table:', error);
+      message.error('เกิดข้อผิดพลาด');
+    }
   };
 
   const handleTablePositionUpdate = useCallback(
-    (id: string, newX: number, newY: number) => {
-      setTables((prevTables) =>
-        prevTables.map((table) => (table.id === id ? { ...table, x: newX, y: newY } : table)),
-      );
+    async (id: string, newX: number, newY: number) => {
+      try {
+        await updateTable(id, { x: newX, y: newY });
+        setTables((prevTables) =>
+          prevTables.map((table) => (table.id === id ? { ...table, x: newX, y: newY } : table)),
+        );
+      } catch (error) {
+        console.error('Error updating table position:', error);
+        message.error('เกิดข้อผิดพลาดในการอัพเดทตำแหน่งโต๊ะ');
+      }
     },
     [setTables],
   );
@@ -150,71 +169,112 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
   };
 
   // Zone handlers
-  const handleZoneSubmit = (zone: Zone) => {
-    if (editingZone) {
-      setZones(zones.map((z) => (z.id === zone.id ? zone : z)));
-      message.success(`แก้ไขโซน ${zone.zoneName} สำเร็จ`);
-    } else {
-      if (zones.some((z) => z.zoneId === zone.zoneId)) {
-        message.error(`รหัสโซน ${zone.zoneId} ซ้ำกัน`);
-        return;
+  const handleZoneSubmit = async (zone: Zone) => {
+    try {
+      if (editingZone) {
+        await updateZone(zone.id, zone);
+        setZones(zones.map((z) => (z.id === zone.id ? zone : z)));
+        message.success(`แก้ไขโซน ${zone.zoneName} สำเร็จ`);
+      } else {
+        if (zones.some((z) => z.zoneId === zone.zoneId)) {
+          message.error(`รหัสโซน ${zone.zoneId} ซ้ำกัน`);
+          return;
+        }
+        await createZone(zone);
+        setZones([...zones, zone]);
+        setSelectedZoneId(zone.id);
+        message.success(`เพิ่มโซน ${zone.zoneName} สำเร็จ`);
       }
-      setZones([...zones, zone]);
-      setSelectedZoneId(zone.id);
-      message.success(`เพิ่มโซน ${zone.zoneName} สำเร็จ`);
+      setEditingZone(null);
+      setIsZoneModalVisible(false);
+    } catch (error) {
+      console.error('Error saving zone:', error);
+      message.error('เกิดข้อผิดพลาดในการบันทึกโซน');
     }
-    setEditingZone(null);
-    setIsZoneModalVisible(false);
   };
 
-  const handleZoneDelete = (id: string, name: string) => {
-    setZones(zones.filter((z) => z.id !== id));
-    setTables(
-      tables.filter((t) => {
-        const zone = zones.find((z) => z.id === id);
-        return t.zoneId !== zone?.zoneId;
-      }),
-    );
+  const handleZoneDelete = async (id: string, name: string) => {
+    try {
+      const zone = zones.find((z) => z.id === id);
+      if (!zone) return;
 
-    setGuests((prevGuests) =>
-      prevGuests.map((g) => {
-        const zone = zones.find((z) => z.id === id);
-        if (g.zoneId === zone?.zoneId) {
-          return { ...g, zoneId: null, tableId: null };
-        }
-        return g;
-      }),
-    );
+      // Delete zone
+      await deleteZone(id);
+      setZones(zones.filter((z) => z.id !== id));
 
-    if (selectedZoneId === id) {
-      setSelectedZoneId(zones.filter((z) => z.id !== id)[0]?.id || '');
+      // Delete tables in this zone
+      const tablesToDelete = tables.filter((t) => t.zoneId === zone.zoneId);
+      for (const table of tablesToDelete) {
+        await deleteTable(table.id);
+      }
+      setTables(tables.filter((t) => t.zoneId !== zone.zoneId));
+
+      // Unassign guests from this zone
+      const guestsToUpdate = guests.filter((g) => g.zoneId === zone.zoneId);
+      for (const guest of guestsToUpdate) {
+        await updateGuest(guest.id, { zoneId: null, tableId: null });
+      }
+      setGuests((prevGuests) =>
+        prevGuests.map((g) => {
+          if (g.zoneId === zone.zoneId) {
+            return { ...g, zoneId: null, tableId: null };
+          }
+          return g;
+        }),
+      );
+
+      if (selectedZoneId === id) {
+        setSelectedZoneId(zones.filter((z) => z.id !== id)[0]?.id || '');
+      }
+      message.success(`ลบโซน ${name} และโต๊ะทั้งหมดที่เกี่ยวข้องแล้ว`);
+    } catch (error) {
+      console.error('Error deleting zone:', error);
+      message.error('เกิดข้อผิดพลาดในการลบโซน');
     }
-    message.success(`ลบโซน ${name} และโต๊ะทั้งหมดที่เกี่ยวข้องแล้ว`);
   };
 
   // Table handlers
-  const handleTableSubmit = (table: TableData) => {
-    if (editingTable) {
-      setTables(tables.map((t) => (t.id === table.id ? table : t)));
-      message.success(`แก้ไขโต๊ะ ${table.tableName} สำเร็จ`);
-    } else {
-      if (tables.some((t) => t.tableId === table.tableId)) {
-        message.error(`รหัสโต๊ะ ${table.tableId} ซ้ำกัน`);
-        return;
+  const handleTableSubmit = async (table: TableData) => {
+    try {
+      if (editingTable) {
+        await updateTable(table.id, table);
+        setTables(tables.map((t) => (t.id === table.id ? table : t)));
+        message.success(`แก้ไขโต๊ะ ${table.tableName} สำเร็จ`);
+      } else {
+        if (tables.some((t) => t.tableId === table.tableId)) {
+          message.error(`รหัสโต๊ะ ${table.tableId} ซ้ำกัน`);
+          return;
+        }
+        await createTable(table);
+        setTables([...tables, table]);
+        message.success(`เพิ่มโต๊ะ ${table.tableName} สำเร็จ`);
       }
-      setTables([...tables, table]);
-      message.success(`เพิ่มโต๊ะ ${table.tableName} สำเร็จ`);
+      setEditingTable(null);
+      setIsTableModalVisible(false);
+    } catch (error) {
+      console.error('Error saving table:', error);
+      message.error('เกิดข้อผิดพลาดในการบันทึกโต๊ะ');
     }
-    setEditingTable(null);
-    setIsTableModalVisible(false);
   };
 
-  const handleTableDelete = (id: string, name: string) => {
-    setTables(tables.filter((t) => t.id !== id));
-    setGuests((prevGuests) =>
-      prevGuests.map((g) => (g.tableId === id ? { ...g, tableId: null, zoneId: null } : g)),
-    );
-    message.success(`ลบโต๊ะ ${name} แล้ว`);
+  const handleTableDelete = async (id: string, name: string) => {
+    try {
+      await deleteTable(id);
+      setTables(tables.filter((t) => t.id !== id));
+
+      // Unassign guests from this table
+      const guestsToUpdate = guests.filter((g) => g.tableId === id);
+      for (const guest of guestsToUpdate) {
+        await updateGuest(guest.id, { tableId: null, zoneId: null });
+      }
+      setGuests((prevGuests) =>
+        prevGuests.map((g) => (g.tableId === id ? { ...g, tableId: null, zoneId: null } : g)),
+      );
+      message.success(`ลบโต๊ะ ${name} แล้ว`);
+    } catch (error) {
+      console.error('Error deleting table:', error);
+      message.error('เกิดข้อผิดพลาดในการลบโต๊ะ');
+    }
   };
 
   // --- Sub-views ---

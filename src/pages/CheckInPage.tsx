@@ -3,6 +3,7 @@ import { Card, Row, Col, Typography, Input, Select, Table, Tag, Button, Space, S
 import type { ColumnsType } from 'antd/es/table';
 import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Guest, Zone, TableData, Side } from '@/types';
+import { updateGuest } from '@/services/firebaseService';
 
 const { Title, Text } = Typography;
 
@@ -106,30 +107,57 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
     });
   };
 
-  const toggleGuest = (guestId: string, value: boolean) => {
-    const now = new Date().toISOString();
-    setGuests(prev => prev.map(g => g.id === guestId ? ({
-      ...g,
-      checkedInAt: value ? now : null,
-      checkInMethod: value ? 'manual' : null,
-    }) : g));
-    if (value) {
-      message.success('เช็คอินสำเร็จ!');
-    }
-  };
-
-  const toggleGroup = (group: GroupRow, value: boolean) => {
-    const now = new Date().toISOString();
-    setGuests(prev => prev.map(g => {
-      const belongs = (group.groupId ? g.groupId === group.groupId : g.id === group.members[0]?.id);
-      if (!belongs) return g;
-      return {
+  const toggleGuest = async (guestId: string, value: boolean) => {
+    try {
+      const now = new Date().toISOString();
+      await updateGuest(guestId, {
+        checkedInAt: value ? now : null,
+        checkInMethod: value ? 'manual' : null,
+      });
+      setGuests(prev => prev.map(g => g.id === guestId ? ({
         ...g,
         checkedInAt: value ? now : null,
         checkInMethod: value ? 'manual' : null,
-      };
-    }));
-    message.success(value ? `เช็คอินกลุ่ม "${group.groupName}" แล้ว` : `ยกเลิกเช็คอินกลุ่ม "${group.groupName}"`);
+      }) : g));
+      if (value) {
+        message.success('เช็คอินสำเร็จ!');
+      }
+    } catch (error) {
+      console.error('Error updating check-in:', error);
+      message.error('เกิดข้อผิดพลาดในการเช็คอิน');
+    }
+  };
+
+  const toggleGroup = async (group: GroupRow, value: boolean) => {
+    try {
+      const now = new Date().toISOString();
+      const guestsToUpdate = guests.filter(g => {
+        const belongs = (group.groupId ? g.groupId === group.groupId : g.id === group.members[0]?.id);
+        return belongs;
+      });
+
+      // Update all guests in the group
+      for (const guest of guestsToUpdate) {
+        await updateGuest(guest.id, {
+          checkedInAt: value ? now : null,
+          checkInMethod: value ? 'manual' : null,
+        });
+      }
+
+      setGuests(prev => prev.map(g => {
+        const belongs = (group.groupId ? g.groupId === group.groupId : g.id === group.members[0]?.id);
+        if (!belongs) return g;
+        return {
+          ...g,
+          checkedInAt: value ? now : null,
+          checkInMethod: value ? 'manual' : null,
+        };
+      }));
+      message.success(value ? `เช็คอินกลุ่ม "${group.groupName}" แล้ว` : `ยกเลิกเช็คอินกลุ่ม "${group.groupName}"`);
+    } catch (error) {
+      console.error('Error updating group check-in:', error);
+      message.error('เกิดข้อผิดพลาดในการเช็คอินกลุ่ม');
+    }
   };
 
   // Quick check-in by name

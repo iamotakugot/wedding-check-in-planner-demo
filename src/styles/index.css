@@ -1,3 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400..700&family=Playwrite+CZ:wght@100..400&family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-en: 'Playwrite CZ', cursive;
+  --font-dancing: 'Dancing Script', cursive;
+  --font-th: 'Sarabun', sans-serif;
+  --font-serif: 'Cinzel', serif;
+  --color-primary: #5c3a58;
+  --color-gold: #d4af37;
+  --color-soft-pink: #d48c95;
+  --color-dark-text: #5c3a58;
+  --color-bg-cream: #fdfcf8;
+}
+
 /* Global Styles */
 * {
   margin: 0;
@@ -331,7 +350,7 @@ code {
   margin-left: 1rem;
 }
 
-.mt-[-6px] {
+.mt-\[-6px\] {
   margin-top: -0.375rem;
 }
 
@@ -510,13 +529,6 @@ code {
   background-color: #db2777;
 }
 
-.hover\:bg-\[#166fe5\]:hover {
-  background-color: #166fe5;
-}
-
-.hover\:bg-\[#05b64d\]:hover {
-  background-color: #05b64d;
-}
 
 .text-white {
   color: #fff;

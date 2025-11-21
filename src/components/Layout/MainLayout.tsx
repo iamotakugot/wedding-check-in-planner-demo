@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Avatar } from 'antd';
+import { Layout, Menu, Avatar, Button } from 'antd';
 import {
   DashboardOutlined,
   TeamOutlined,
   TableOutlined,
-  LinkOutlined,
   LogoutOutlined,
   UserOutlined,
   HeartOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 
@@ -46,13 +48,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     },
     {
       key: '4',
-      icon: <LinkOutlined />,
-      label: 'จัดการลิงค์ & RSVP',
+      icon: <TeamOutlined />,
+      label: 'เช็คอินหน้างาน',
     },
     {
       key: '5',
-      icon: <TeamOutlined />,
-      label: 'เช็คอินหน้างาน',
+      icon: <LinkOutlined />,
+      label: 'จัดการลิงค์เชิญ',
     },
     {
       type: 'divider',
@@ -75,7 +77,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         theme="light"
         className="shadow-md z-10"
         breakpoint="lg"
-        collapsedWidth="0"
+        collapsedWidth={0}
+        trigger={null}
       >
         <div className="h-16 flex items-center justify-center border-b border-gray-100">
           <HeartOutlined style={{ fontSize: '24px' }} className="text-pink-500 mr-2" />
@@ -91,7 +94,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         />
       </Sider>
       <Layout>
-        <Header className="bg-white p-0 flex justify-end items-center px-6 shadow-sm z-0">
+        <Header className="bg-white p-0 flex justify-between items-center px-6 shadow-sm z-0">
+          <div>
+            <Button
+              type="text"
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+            />
+          </div>
           <div
             className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
             onClick={onLogout}
