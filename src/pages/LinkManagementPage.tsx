@@ -114,9 +114,9 @@ const LinkManagementPage: React.FC<{ onPreview: () => void }> = ({ onPreview }) 
                     <Card title="🔗 ลิงค์เชิญแขก (Invitation Link)" bordered={false} className="shadow-sm rounded-xl" loading={loading}>
                         <div className="bg-gray-50 p-6 rounded-lg text-center mb-6 border border-gray-200">
                             <QrcodeOutlined style={{ fontSize: 64, color: '#5c3a58', marginBottom: 16 }} />
-                            <Title level={4} style={{ margin: 0, color: '#5c3a58', fontFamily: "'Playwrite CZ', cursive" }}>
-                                {config?.groomName || 'Got'} & {config?.brideName || 'Nan'}'s Wedding
-                            </Title>
+                        <Title level={4} style={{ margin: 0, color: '#5c3a58', fontFamily: "'Playwrite CZ', cursive" }}>
+                            {config?.groomName || 'Got'} & {config?.brideName || 'Nan'}&apos;s Wedding
+                        </Title>
                             <Text type="secondary">{config?.weddingDate || '31 มกราคม 2569'}</Text>
                         </div>
                         <div className="mb-4">

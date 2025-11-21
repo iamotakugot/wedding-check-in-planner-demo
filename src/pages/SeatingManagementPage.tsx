@@ -525,7 +525,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
                 dataSource={guestsByTable.get(activeTable.tableId) || []}
                 locale={{ emptyText: 'ยังไม่มีใครนั่งโต๊ะนี้' }}
                 renderItem={(guest) => (
-                  <List.Item actions={[<Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleUnassignGuest(guest.id)} />]}>
+                  <List.Item key={guest.id} actions={[<Button key="delete" type="text" danger icon={<DeleteOutlined />} onClick={() => handleUnassignGuest(guest.id)} />]}>
                     <List.Item.Meta
                       avatar={<Avatar style={{ backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96' }}>{guest.nickname ? guest.nickname[0] : guest.firstName[0]}</Avatar>}
                       title={`${guest.firstName} ${guest.lastName}${guest.nickname ? ` (${guest.nickname})` : ''}`}
@@ -548,8 +548,8 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
                 dataSource={filteredUnassignedGuests}
                 locale={{ emptyText: 'ไม่พบแขกที่ยังว่าง' }}
                 renderItem={(guest) => (
-                  <List.Item actions={[
-                    <Button type="primary" ghost size="small" icon={<ArrowRightOutlined />} onClick={() => handleAddGuestToTable(guest.id)} disabled={(guestsByTable.get(activeTable.tableId)?.length || 0) >= activeTable.capacity}>
+                  <List.Item key={guest.id} actions={[
+                    <Button key="select" type="primary" ghost size="small" icon={<ArrowRightOutlined />} onClick={() => handleAddGuestToTable(guest.id)} disabled={(guestsByTable.get(activeTable.tableId)?.length || 0) >= activeTable.capacity}>
                       เลือก
                     </Button>
                   ]}>

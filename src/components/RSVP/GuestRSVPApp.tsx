@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-object-injection */
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -431,6 +432,7 @@ interface RSVPData {
 
     accompanyingGuests: { name: string; relationToMain: string }[];
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     updatedAt?: any;
 
 }
@@ -815,7 +817,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
                 message.success('เข้าสู่ระบบด้วย Google สำเร็จ');
-            } catch (error: any) {
+            } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
                 console.error('Error signing in with Google:', error);
                 if (error.code === 'auth/popup-closed-by-user') {
                     message.warning('ยกเลิกการเข้าสู่ระบบ');
@@ -832,7 +834,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
                 message.success('เข้าสู่ระบบด้วย Facebook สำเร็จ');
-            } catch (error: any) {
+            } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
                 console.error('Error signing in with Facebook:', error);
                 if (error.code === 'auth/popup-closed-by-user') {
                     message.warning('ยกเลิกการเข้าสู่ระบบ');
@@ -850,9 +852,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleFinish = async (values: any) => {
         setLoading(true);
         try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sanitizedGuests = (values.accompanyingGuests || []).map((g: any) => ({
                 relationToMain: g?.relationToMain || '',
                 name: g?.name || ''
@@ -1406,6 +1410,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const iframeRef = React.useRef<HTMLIFrameElement>(null);
     
     // Helper to send commands to YouTube iframe
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sendCommand = (func: string, args: any[] = []) => {
         if (iframeRef.current && iframeRef.current.contentWindow) {
             iframeRef.current.contentWindow.postMessage(

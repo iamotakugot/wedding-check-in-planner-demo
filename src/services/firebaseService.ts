@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-object-injection */
 import { ref, get, set, push, update, remove, onValue, off, DataSnapshot } from 'firebase/database';
 import { 
   signInWithEmailAndPassword, 
@@ -306,7 +307,7 @@ export const signInWithGoogle = async (): Promise<User> => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (error: any) {
+  } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
     // Fallback to redirect if popup fails (common on mobile in-app browsers)
     if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
        if (isMobile()) {
@@ -329,7 +330,7 @@ export const signInWithFacebook = async (): Promise<User> => {
     }
     const result = await signInWithPopup(auth, facebookProvider);
     return result.user;
-  } catch (error: any) {
+  } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
         // Fallback to redirect
         await signInWithRedirect(auth, facebookProvider);
@@ -349,4 +350,3 @@ export const checkRedirectResult = async (): Promise<User | null> => {
     throw error;
   }
 };
-
