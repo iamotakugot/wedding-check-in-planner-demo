@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Drawer, Form, Input, InputNumber, Select, Space, Button, Row, Col, Typography } from 'antd';
 import { Guest, Zone, TableData } from '@/types';
-import { MOCK_GENDER_OPTIONS, MOCK_SIDE_OPTIONS } from '@/data/mockData';
+import { GENDER_OPTIONS, SIDE_OPTIONS } from '@/data/formOptions';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -119,7 +119,7 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
           label="เพศ"
           rules={[{ required: true, message: 'กรุณาเลือกเพศ' }]}
         >
-          <Select placeholder="เลือกเพศ" options={MOCK_GENDER_OPTIONS} />
+          <Select placeholder="เลือกเพศ" options={GENDER_OPTIONS} />
         </Form.Item>
         <Form.Item
           name="relationToCouple"
@@ -133,7 +133,7 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
           label="ฝ่ายที่เกี่ยวข้อง"
           rules={[{ required: true, message: 'กรุณาเลือกฝ่าย' }]}
         >
-          <Select placeholder="เลือกฝ่าย" options={MOCK_SIDE_OPTIONS} />
+          <Select placeholder="เลือกฝ่าย" options={SIDE_OPTIONS} />
         </Form.Item>
         <Row gutter={16}>
           <Col span={12}>

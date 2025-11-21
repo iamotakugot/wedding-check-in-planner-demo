@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Modal, Form, Input, AutoComplete, InputNumber, Row, Col } from 'antd';
 import { TableData, Zone } from '@/types';
-import { TABLE_NAME_OPTIONS } from '@/data/mockData';
+import { TABLE_NAME_OPTIONS } from '@/data/formOptions';
 import { GRID_X_POSITIONS, GRID_Y_START } from '@/constants/layout';
 
 interface TableModalProps {

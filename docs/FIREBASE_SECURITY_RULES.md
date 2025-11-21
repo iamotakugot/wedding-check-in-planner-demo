@@ -1,100 +1,83 @@
 # Firebase Security Rules
 
-## ⚠️ คำเตือน: Rules ปัจจุบันเป็น Public (ไม่ปลอดภัย)
+## ⚠️ สำคัญ: ใช้ Security Rules นี้สำหรับ Production
 
-Rules ปัจจุบันใน Firebase Console แจ้งว่า:
-> "Your security rules are defined as public, so anyone can steal, modify, or delete data in your database"
+**⚠️ คำเตือน:** Rules เก่าเป็น Public (ไม่ปลอดภัย) - **ต้องเปลี่ยนเป็น Rules ใหม่ทันที**
 
-## Security Rules ที่แนะนำ
+## Security Rules สำหรับ Production (แนะนำ)
 
-### สำหรับ Development/Testing (ชั่วคราว - ใช้ได้ทันที)
-
-**⚠️ หมายเหตุ:** Rules นี้เปิดให้ทุกคนอ่าน/เขียนได้ทั้งหมด ใช้สำหรับทดสอบเท่านั้น
-
-```json
-{
-  "rules": {
-    ".read": true,
-    ".write": true
-  }
-}
-```
-
-### สำหรับ Production (แนะนำ - ต้องมี Authentication)
-
-**⚠️ หมายเหตุ:** Rules นี้ยังเปิดให้ทุกคนอ่าน/เขียนได้ เพราะระบบยังไม่มี Authentication
+**Rules นี้จะป้องกันการเข้าถึงข้อมูลโดยไม่ได้รับอนุญาต**
 
 ```json
 {
   "rules": {
     "guests": {
-      ".read": true,
-      ".write": true
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      "$guestId": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || data.child('rsvpUid').val() === auth.uid)",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (data.exists() && data.child('rsvpUid').val() === auth.uid && newData.child('rsvpUid').val() === auth.uid) || (!data.exists() && newData.child('rsvpUid').val() === auth.uid))",
+        ".validate": "!newData.exists() || root.child('admins').child(auth.uid).exists() || newData.child('rsvpUid').val() === auth.uid"
+      }
     },
     "zones": {
-      ".read": true,
-      ".write": true
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
     },
     "tables": {
-      ".read": true,
-      ".write": true
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
     },
     "rsvps": {
-      ".read": true,
-      ".write": true
+      ".read": "auth != null",
+      ".write": "auth != null"
     },
     "config": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+    },
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      },
+      ".read": false,
+      ".write": false
     }
   }
 }
 ```
 
-### สำหรับ Production (ปลอดภัยที่สุด - ต้องมี Firebase Authentication)
+### อธิบาย Rules
 
-**⚠️ หมายเหตุ:** Rules นี้ต้องมี Firebase Authentication ก่อน ถึงจะใช้ได้
-
-```json
-{
-  "rules": {
-    "guests": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "zones": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "tables": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "rsvps": {
-      ".read": "auth != null",
-      ".write": true
-    },
-    "config": {
-      ".read": true,
-      ".write": "auth != null"
-    }
-  }
-}
-```
+- **guests**: 
+  - **อ่าน**: Admin หรือแขกที่สร้าง Guest เอง (ตรวจสอบจาก `rsvpUid`)
+  - **เขียน**: 
+    - Admin สามารถทำทุกอย่างได้
+    - แขกสามารถสร้าง Guest ใหม่ได้ (ต้องมี `rsvpUid === auth.uid`)
+    - แขกสามารถแก้ไข Guest ที่ตัวเองสร้างได้ (ต้องมี `rsvpUid === auth.uid`)
+    - แขกไม่สามารถลบ Guest ได้ (ให้ Admin เป็นคนลบ)
+- **zones, tables**: เฉพาะ Admin เท่านั้นที่อ่าน/เขียนได้ (ตรวจสอบจาก `/admins/{uid}`)
+- **rsvps**: User ที่ login แล้วสามารถอ่าน/เขียนได้ (แขกสามารถกรอก RSVP ได้)
+- **config**: ทุกคนอ่านได้, เฉพาะ Admin เท่านั้นที่เขียนได้
+- **admins**: 
+  - User สามารถอ่าน `/admins/{uid}` ของตัวเองได้ (เพื่อตรวจสอบ admin status)
+  - ไม่สามารถอ่าน `/admins` ทั้งหมดหรือ UID ของคนอื่นได้
+  - ไม่มีใครสามารถเขียนได้ (ป้องกันการแก้ไขสิทธิ์)
 
 ## วิธีตั้งค่า Security Rules
+
+**⚠️ สำคัญ:** ต้องทำตามขั้นตอนใน `docs/SECURITY_SETUP_GUIDE.md` ก่อน
 
 1. ไปที่ Firebase Console: https://console.firebase.google.com
 2. เลือกโปรเจกต์: `got-nan-wedding`
 3. ไปที่ **Realtime Database** > **Rules**
-4. Copy rules ด้านบน (เลือกตามต้องการ)
+4. Copy rules ด้านบน (Production Rules)
 5. คลิก **Publish**
 
 ## หมายเหตุ
 
-- **Public rules** (read/write = true) ใช้ได้สำหรับทดสอบเท่านั้น
-- สำหรับ production ควรใช้ Firebase Authentication และจำกัดสิทธิ์
-- ตอนนี้ระบบยังไม่มี Authentication ดังนั้นใช้ public rules ชั่วคราว
+- **Rules นี้ต้องมี Admin Account และ Admin UID ใน Database ก่อน**
+- ดูคู่มือการตั้งค่า: `docs/SECURITY_SETUP_GUIDE.md`
+- หลังจากตั้งค่า Rules แล้ว ระบบจะบล็อกการเข้าถึงข้อมูลทั้งหมดจนกว่าจะเพิ่ม Admin UID
 
 ## ✅ Real-time Sync
 

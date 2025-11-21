@@ -15,8 +15,8 @@
   - ESLint + security plugin
 
 ### บทบาทผู้ใช้
-- Admin: จัดการรายชื่อ, ผังโต๊ะ/โซน, เช็คอิน, ตั้งค่าการ์ดเชิญ/RSVP
-- Guest: เข้าสู่ระบบ (mock), กรอกแบบฟอร์ม RSVP, รับ ticket สรุป
+- Admin: ล็อคอินด้วย AdminLoginPage (username: `admin`, password: `1150`), จัดการรายชื่อ, ผังโต๊ะ/โซน, เช็คอิน, ตั้งค่าการ์ดเชิญ/RSVP, ดูรายการตอบรับ RSVP
+- Guest: เข้าสู่ระบบด้วย Firebase Authentication (Google/Facebook), กรอกแบบฟอร์ม RSVP, รับ ticket สรุป
 
 ## แผนภาพสถาปัตยกรรม (Mermaid)
 
@@ -40,16 +40,18 @@ flowchart TD
   - 1: Dashboard
   - 2: รายชื่อแขก (Guest List)
   - 3: จัดการผังโต๊ะ & โซน (Seating)
-  - 4: จัดการลิงค์ & RSVP (Link Manager)
-  - 5: เช็คอินหน้างาน (Check-in)
+  - 4: เช็คอินหน้างาน (Check-in)
+  - 5: จัดการลิงค์เชิญ (Link Manager)
+  - 6: รายการตอบรับ RSVP (RSVP List)
 
 ```mermaid
 flowchart LR
-  L[Login] --> D(Dashboard)
+  L[Admin Login] --> D(Dashboard)
   D <--> G(Guest List)
   D <--> Z(Seating Management)
-  D <--> R(Link Manager)
   D <--> C(Check-in)
+  D <--> R(Link Manager)
+  D <--> RSVP(RSVP List)
   R -->|Open Preview| P(Guest RSVP App)
 ```
 
@@ -167,15 +169,20 @@ npm run api
 - Vite proxy ถูกตั้งค่าแล้วใน `vite.config.ts`:
   - `/api` → `http://localhost:3001`
 
-## Firebase Authentication (Guest Login)
+## Firebase Authentication
 
-- ใช้ได้กับ Google, Facebook และ LINE (ผ่าน OIDC)
-- ต้องตั้งค่าใน Firebase Console และกำหนด env ต่อไปนี้
-  - `VITE_FIREBASE_API_KEY`
-  - `VITE_FIREBASE_AUTH_DOMAIN`
-  - `VITE_FIREBASE_PROJECT_ID`
-  - `VITE_FIREBASE_APP_ID`
-- หากไม่ได้ตั้งค่า/เกิดข้อผิดพลาด ระบบจะ fallback เป็น mock login อัตโนมัติ
+### Guest Login (Guest RSVP App)
+- ใช้ได้กับ Google และ Facebook
+- ต้องตั้งค่าใน Firebase Console
+- Config อยู่ใน `src/firebase/config.ts`
+- แสดงภาพผู้ใช้ (photoURL) และชื่อ (displayName) เมื่อล็อคอินสำเร็จ
+- หากไม่ได้ตั้งค่า/เกิดข้อผิดพลาด ระบบจะแสดง error message
+
+### Admin Login (Admin Panel)
+- ใช้ Mock Authentication (ไม่ใช่ Firebase)
+- Location: `src/pages/AdminLoginPage.tsx`
+- Username: `admin`, Password: `1150`
+- Admin Panel ต้องล็อคอินก่อนใช้งาน
 
 ## Playbooks (Interactive สำหรับ AI)
 

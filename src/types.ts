@@ -19,12 +19,12 @@ export interface Guest {
   seatNumber?: number | null;
   isComing?: boolean;
   accompanyingGuestsCount?: number;
-  phoneNumber?: string; // For RSVP mapping
   // Check-in & grouping
   groupId?: string | null;
   groupName?: string | null;
   checkedInAt?: string | null;
   checkInMethod?: 'manual' | 'qr' | null;
+  rsvpUid?: string | null; // UID ของผู้สร้าง Guest ผ่าน RSVP (สำหรับตรวจสอบสิทธิ์)
   createdAt: string;
   updatedAt: string;
 }

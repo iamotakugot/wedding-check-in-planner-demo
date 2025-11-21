@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Modal, Form, Input, AutoComplete, InputNumber } from 'antd';
 import { Zone } from '@/types';
-import { ZONE_NAME_OPTIONS } from '@/data/mockData';
+import { ZONE_NAME_OPTIONS } from '@/data/formOptions';
 
 interface ZoneModalProps {
   visible: boolean;

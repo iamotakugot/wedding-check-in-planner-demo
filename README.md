@@ -17,6 +17,8 @@
 - **UI Framework**: Ant Design 5
 - **State Management**: React Hooks (useState, useMemo, useCallback)
 - **Styling**: Tailwind CSS (via className utilities)
+- **Database**: Firebase Realtime Database
+- **Authentication**: Firebase Authentication (สำหรับ Guest RSVP เท่านั้น)
 
 ## 📦 Installation
 
@@ -56,11 +58,15 @@ npm run dev
 ```
 
 4. Open browser at `http://localhost:5173`
+   - **Admin Panel**: ไปที่ `http://localhost:5173/admin` (ต้องล็อคอิน)
+   - **Guest RSVP**: ไปที่ `http://localhost:5173/` (ไม่ต้องล็อคอิน)
 
 ## 🔐 Admin Login
 
 - **Username**: `admin`
 - **Password**: `1150`
+- **Location**: `src/pages/AdminLoginPage.tsx`
+- **หมายเหตุ**: Admin Panel ต้องล็อคอินก่อนใช้งาน
 
 ## 📁 Project Structure
 
@@ -74,10 +80,13 @@ wedding-check-in-planner-demo/
 │   │   ├── DashboardPage.tsx
 │   │   ├── GuestListPage.tsx
 │   │   ├── SeatingManagementPage.tsx
-│   │   ├── LinkManagerPage.tsx
+│   │   ├── LinkManagementPage.tsx
 │   │   ├── CheckInPage.tsx
-│   │   └── LoginPage.tsx
-│   ├── data/                # Mock data
+│   │   ├── RSVPListPage.tsx
+│   │   └── AdminLoginPage.tsx
+│   ├── data/                # Mock data (สำหรับ migration ครั้งแรก)
+│   ├── firebase/            # Firebase configuration
+│   ├── services/            # Firebase service functions
 │   ├── types.ts             # TypeScript type definitions
 │   ├── App.tsx              # Root component
 │   └── main.tsx             # Entry point
@@ -95,8 +104,13 @@ wedding-check-in-planner-demo/
 - **API Specification**: OpenAPI YAML in `api/openapi.yaml`
 - **Documentation**: 
   - `docs/DATA_FLOW.md` - Data flow documentation
+  - `docs/DATA_MODEL.md` - Data model documentation
   - `docs/SECURITY.md` - Security practices
   - `docs/THREAT_MODEL.md` - Threat modeling
+  - `docs/FIREBASE_SETUP.md` - Firebase setup guide
+  - `docs/FIREBASE_SECURITY_RULES.md` - Firebase security rules
+  - `docs/PRODUCTION.md` - Production deployment guide
+  - `docs/SYSTEM_FLOW_INTERACTIVE.md` - System flow และ interactive guide
 
 ## 📝 License
 

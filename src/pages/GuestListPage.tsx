@@ -20,7 +20,7 @@ import {
 import type { TableProps } from 'antd';
 import { message } from 'antd';
 import { Guest, Zone, TableData, Side } from '@/types';
-import { MOCK_SIDE_OPTIONS } from '@/data/mockData';
+import { SIDE_OPTIONS } from '@/data/formOptions';
 import GuestFormDrawer from '@/pages/GuestListPage/components/GuestFormDrawer';
 import { createGuest, updateGuest, deleteGuest } from '@/services/firebaseService';
 
@@ -230,7 +230,7 @@ const GuestListPage: React.FC<GuestListPageProps> = ({
             style={{ width: 150 }}
             size="large"
             onChange={(value: Side | 'all') => setSelectedSide(value)}
-            options={[{ value: 'all', label: '--- ทุกฝ่าย ---' }, ...MOCK_SIDE_OPTIONS]}
+            options={[{ value: 'all', label: '--- ทุกฝ่าย ---' }, ...SIDE_OPTIONS]}
           />
           <Select
             defaultValue="all"

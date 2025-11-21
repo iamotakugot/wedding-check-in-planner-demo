@@ -12,6 +12,7 @@ import {
   Radio,
   Tag,
   Select,
+  Spin,
 } from 'antd';
 import {
   UsergroupAddOutlined,
@@ -31,15 +32,27 @@ import {
   CheckOutlined,
   StepBackwardOutlined,
   StepForwardOutlined,
+  UserOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
+import { Avatar } from 'antd';
 import { 
   createRSVP, 
   onAuthStateChange,
   signInWithGoogle,
   signInWithFacebook,
-  checkRedirectResult // Import new function
+  checkRedirectResult, // Import new function
+  logout, // Import logout
+  getRSVPByUid, // Import getRSVPByUid
+  updateRSVP, // Import updateRSVP
+  createGuestFromRSVP, // Import createGuestFromRSVP
+  getGuest, // Import getGuest
+  updateGuestFromRSVP // Import updateGuestFromRSVP
 } from '@/services/firebaseService';
 import type { RSVPData as FirebaseRSVPData } from '@/services/firebaseService';
+import type { User } from 'firebase/auth';
+import { Guest, Side } from '@/types';
+import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formOptions';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -336,39 +349,7 @@ const weddingSchedule = [
 
 
 
-const relationOptions = [
-
-    { value: 'ญาติ' }, 
-
-    { value: 'เพื่อนสมัยเรียน' }, 
-
-    { value: 'เพื่อนร่วมงาน (สายโรงงาน/ก่อสร้าง)' },
-
-    { value: 'เพื่อนร่วมงาน (พยาบาล/สาธารณสุข)' },
-
-    { value: 'คู่ค้า/พาร์ทเนอร์ทางธุรกิจ' },
-
-    { value: 'คนรู้จักทั่วไป' }
-
-];
-
-
-
-const guestRelationOptions = [
-
-    { value: 'แฟน/คู่รัก', label: 'แฟน/คู่รัก' },
-
-    { value: 'พ่อ/แม่', label: 'พ่อ/แม่' },
-
-    { value: 'พี่/น้อง', label: 'พี่/น้อง' },
-
-    { value: 'ลูก/หลาน', label: 'ลูก/หลาน' },
-
-    { value: 'เพื่อน', label: 'เพื่อน' },
-
-    { value: 'ผู้ติดตามอื่นๆ', label: 'อื่น ๆ' }
-
-];
+// ใช้ options จาก formOptions.ts แทน
 
 
 
@@ -378,37 +359,13 @@ const PLAYLIST = [
 
     { 
 
-        id: '7fKN5KWuAAQ', // Main requested song: Until I Found You
+        id: '7fKN5KWuAAQ', // รักนาน ๆ - พัด Vorapat x Dome Jaruwat
 
-        title: 'Until I Found You', 
+        title: 'รักนาน ๆ', 
 
-        artist: 'Stephen Sanchez',
+        artist: 'พัด Vorapat x Dome Jaruwat',
 
         cover: 'https://img.youtube.com/vi/7fKN5KWuAAQ/0.jpg'
-
-    },
-
-    { 
-
-        id: '6R2S6V731aM', 
-
-        title: "Can't Help Falling in Love", 
-
-        artist: 'Kina Grannis',
-
-        cover: 'https://img.youtube.com/vi/6R2S6V731aM/0.jpg'
-
-    },
-
-    { 
-
-        id: '2Vv-BfVoq4g', 
-
-        title: 'Perfect', 
-
-        artist: 'Ed Sheeran',
-
-        cover: 'https://img.youtube.com/vi/2Vv-BfVoq4g/0.jpg'
 
     }
 
@@ -422,9 +379,10 @@ interface RSVPData {
 
     uid?: string;
 
-    phoneNumber?: string;
-
-    firstName: string; lastName: string; nickname: string;
+    firstName: string; lastName: string; 
+    fullName?: string; // เพิ่ม field สำหรับเก็บชื่อ-นามสกุลรวมกัน
+    photoURL?: string | null; // เพิ่ม field สำหรับเก็บ URL ภาพจาก Facebook/Google
+    nickname: string;
 
     isComing: 'yes' | 'no'; side: 'groom' | 'bride'; relation: string;
 
@@ -710,7 +668,9 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                       <div className="flex items-center gap-1">
 
-                          <Button type="text" shape="circle" size="small" icon={<StepBackwardOutlined />} onClick={(e) => {e.stopPropagation(); onPrev();}} className="text-[#5c3a58] hover:bg-[#5c3a58]/10" />
+                          {PLAYLIST.length > 1 && (
+                              <Button type="text" shape="circle" size="small" icon={<StepBackwardOutlined />} onClick={(e) => {e.stopPropagation(); onPrev();}} className="text-[#5c3a58] hover:bg-[#5c3a58]/10" />
+                          )}
 
                           <Button 
 
@@ -728,7 +688,9 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                           />
 
-                          <Button type="text" shape="circle" size="small" icon={<StepForwardOutlined />} onClick={(e) => {e.stopPropagation(); onNext();}} className="text-[#5c3a58] hover:bg-[#5c3a58]/10" />
+                          {PLAYLIST.length > 1 && (
+                              <Button type="text" shape="circle" size="small" icon={<StepForwardOutlined />} onClick={(e) => {e.stopPropagation(); onNext();}} className="text-[#5c3a58] hover:bg-[#5c3a58]/10" />
+                          )}
 
                       </div>
 
@@ -772,39 +734,122 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     const isComing = Form.useWatch('isComing', form);
     const accompanyingGuests = Form.useWatch('accompanyingGuests', form);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
+    const [userInfo, setUserInfo] = useState<User | null>(null);
+    // เพิ่ม state สำหรับเช็คสถานะเริ่มต้น
+    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+    const [isLoadingRSVP, setIsLoadingRSVP] = useState(false);
 
     // Check persistent login on mount
     useEffect(() => {
-        // Check if returning from redirect login
+        let isMounted = true;
+        let redirectHandled = false;
+        
+        setIsCheckingAuth(true);
+        
+        // Check if returning from redirect login (priority check)
         checkRedirectResult()
             .then((user) => {
-                if (user) {
+                if (user && isMounted) {
+                    redirectHandled = true;
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
+                    setUserInfo(user);
                     message.success('เข้าสู่ระบบสำเร็จ');
                 }
             })
             .catch((error) => {
-                 // Handle specific error cases if needed
-                 if (error.code !== 'auth/popup-closed-by-user') {
-                    console.error("Redirect result error:", error);
-                 }
+                if (isMounted) {
+                    // Handle specific error cases if needed
+                    if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+                        console.error("Redirect result error:", error);
+                    }
+                }
+            })
+            .finally(() => {
+                if (isMounted) {
+                    setIsCheckingAuth(false);
+                }
             });
 
+        // Subscribe to auth state changes (for persistent login and faster redirect detection)
         const unsubscribe = onAuthStateChange((user) => {
+            if (!isMounted) return;
+            
             if (user) {
-                setIsLoggedIn(true);
-                setCurrentUser(user.uid);
+                // ถ้ายังไม่ได้ handle redirect result ให้ set state ทันที
+                if (!redirectHandled) {
+                    redirectHandled = true;
+                    setIsLoggedIn(true);
+                    setCurrentUser(user.uid);
+                    setUserInfo(user);
+                } else {
+                    // Update state if already handled
+                    setIsLoggedIn(true);
+                    setCurrentUser(user.uid);
+                    setUserInfo(user);
+                }
             } else {
                 setIsLoggedIn(false);
                 setCurrentUser(null);
+                setUserInfo(null);
+            }
+            
+            // เมื่อ auth state เปลี่ยนแล้ว ให้หยุด checking
+            if (isMounted) {
+                setIsCheckingAuth(false);
             }
         });
 
-        return () => unsubscribe();
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, []);
 
-
+    // ดึงข้อมูล RSVP เมื่อ login หรือเมื่อ currentUser เปลี่ยน
+    useEffect(() => {
+        const loadUserRSVP = async () => {
+            if (currentUser && isLoggedIn) {
+                setIsLoadingRSVP(true);
+                try {
+                    const existingRSVP = await getRSVPByUid(currentUser);
+                    if (existingRSVP) {
+                        setSubmittedData(existingRSVP);
+                        // เติมข้อมูลลง form เพื่อให้แก้ไขได้
+                        // ใช้ fullName ถ้ามี หรือสร้างจาก firstName + lastName
+                        const fullName = existingRSVP.fullName || 
+                            (existingRSVP.firstName && existingRSVP.lastName 
+                                ? `${existingRSVP.firstName} ${existingRSVP.lastName}` 
+                                : existingRSVP.firstName || '');
+                        
+                        form.setFieldsValue({
+                            isComing: existingRSVP.isComing,
+                            side: existingRSVP.side,
+                            relation: existingRSVP.relation,
+                            fullName: fullName,
+                            note: existingRSVP.note,
+                            accompanyingGuests: existingRSVP.accompanyingGuests || [],
+                        });
+                    } else if (userInfo) {
+                        // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
+                        form.setFieldsValue({
+                            fullName: userInfo.displayName || '',
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading RSVP:', error);
+                } finally {
+                    setIsLoadingRSVP(false);
+                }
+            } else {
+                // ถ้า logout ให้ clear ข้อมูล
+                setSubmittedData(null);
+                form.resetFields();
+                setIsLoadingRSVP(false);
+            }
+        };
+        loadUserRSVP();
+    }, [currentUser, isLoggedIn, form, userInfo]);
 
     const handleLogin = async (provider: string) => {
         // Prevent multiple clicks
@@ -816,16 +861,24 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 const user = await signInWithGoogle();
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
+                setUserInfo(user);
+                setLoading(false); // Reset loading after successful login
                 message.success('เข้าสู่ระบบด้วย Google สำเร็จ');
             } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
                 console.error('Error signing in with Google:', error);
+                // ถ้าเป็น redirect error ไม่ต้องแสดง error (เพราะมันจะ redirect ไป)
+                if (error.message?.includes('Redirecting')) {
+                    message.loading('กำลังเปลี่ยนหน้า...', 0);
+                    // Don't reset loading here, let redirect happen
+                    return;
+                }
                 if (error.code === 'auth/popup-closed-by-user') {
                     message.warning('ยกเลิกการเข้าสู่ระบบ');
+                    setLoading(false);
                 } else {
                     message.error(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google');
+                    setLoading(false);
                 }
-            } finally {
-                setLoading(false);
             }
         } else if (provider === 'facebook') {
             try {
@@ -833,18 +886,27 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 const user = await signInWithFacebook();
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
+                setUserInfo(user);
+                setLoading(false); // Reset loading after successful login
                 message.success('เข้าสู่ระบบด้วย Facebook สำเร็จ');
             } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
                 console.error('Error signing in with Facebook:', error);
+                // ถ้าเป็น redirect error ไม่ต้องแสดง error
+                if (error.message?.includes('Redirecting')) {
+                    message.loading('กำลังเปลี่ยนหน้า...', 0);
+                    // Don't reset loading here, let redirect happen
+                    return;
+                }
                 if (error.code === 'auth/popup-closed-by-user') {
                     message.warning('ยกเลิกการเข้าสู่ระบบ');
+                    setLoading(false);
                 } else if (error.code === 'auth/account-exists-with-different-credential') {
                     message.error('อีเมลนี้ถูกใช้งานด้วยวิธีอื่นแล้ว');
+                    setLoading(false);
                 } else {
                     message.error(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Facebook');
+                    setLoading(false);
                 }
-            } finally {
-                setLoading(false);
             }
         }
     };
@@ -852,42 +914,236 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
 
+    const handleLogout = async () => {
+        try {
+            setLoading(false); // Reset loading before logout
+            await logout();
+            setIsLoggedIn(false);
+            setCurrentUser(null);
+            setUserInfo(null);
+            setSubmittedData(null);
+            form.resetFields();
+            setLoading(false); // Ensure loading is reset after logout
+            message.success('ออกจากระบบสำเร็จ');
+        } catch (error) {
+            console.error('Error logging out:', error);
+            message.error('เกิดข้อผิดพลาดในการออกจากระบบ');
+            setLoading(false); // Reset loading state ในกรณี error
+        }
+    };
+
+    const getAvatarUrl = (user: User) => {
+        if (!user.photoURL) return undefined;
+        // ใช้ URL ตรงๆ จาก Firebase Auth (Firebase จะจัดการ Facebook photo URL ให้แล้ว)
+        // ไม่ต้องเพิ่ม parameter เพราะอาจทำให้เกิด Permission denied
+        // Facebook photo URL จาก Firebase Auth จะใช้งานได้โดยตรง
+        return user.photoURL;
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleFinish = async (values: any) => {
+        // ตรวจสอบว่ามี currentUser หรือไม่
+        if (!currentUser) {
+            message.error('กรุณาเข้าสู่ระบบก่อนยืนยันการลงทะเบียน');
+            setLoading(false); // Ensure loading is reset
+            return;
+        }
+
+        // Prevent double submission
+        if (loading) {
+            return;
+        }
+
         setLoading(true);
         try {
+            // ตรวจสอบข้อมูลที่จำเป็น
+            if (!values.isComing) {
+                message.error('กรุณาเลือกสถานะการร่วมงาน');
+                setLoading(false);
+                return;
+            }
+
+            if (values.isComing === 'yes' && !values.side) {
+                message.error('กรุณาเลือกฝั่ง (เจ้าบ่าว/เจ้าสาว)');
+                setLoading(false);
+                return;
+            }
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sanitizedGuests = (values.accompanyingGuests || []).map((g: any) => ({
                 relationToMain: g?.relationToMain || '',
                 name: g?.name || ''
             }));
 
+            // จัดการ fullName: ใช้จาก form หรือจาก userInfo.displayName
+            const fullName = values.fullName || userInfo?.displayName || '';
+            
+            // แยกชื่อและนามสกุลจาก fullName สำหรับ backward compatibility
+            let firstName = '';
+            let lastName = '';
+            if (fullName) {
+                const nameParts = fullName.trim().split(/\s+/);
+                firstName = nameParts[0] || '';
+                lastName = nameParts.slice(1).join(' ') || '';
+            }
+
             const rsvpData: Omit<FirebaseRSVPData, 'id' | 'createdAt' | 'updatedAt'> = {
-                uid: currentUser || 'anonymous',
-                phoneNumber: undefined,
+                uid: currentUser,
                 isComing: values.isComing,
-                firstName: values.firstName || '',
-                lastName: values.lastName || '',
+                firstName: firstName,
+                lastName: lastName,
+                fullName: fullName, // เก็บ fullName เพิ่มด้วย
+                photoURL: userInfo?.photoURL || null, // เก็บภาพ profile จาก Facebook/Google
                 nickname: values.nickname || '',
                 side: values.side || 'groom',
                 relation: values.relation || '',
                 note: values.note || '',
                 accompanyingGuests: values.isComing === 'yes' ? sanitizedGuests : [],
                 accompanyingGuestsCount: values.isComing === 'yes' ? sanitizedGuests.length : 0,
-                guestId: null, // TODO: Map with existing guest by phone
+                guestId: null,
             };
 
-            // Create new RSVP
-            const newId = await createRSVP(rsvpData);
-            setSubmittedData({ ...rsvpData, id: newId } as FirebaseRSVPData);
+            // Remove undefined fields to prevent Firebase error
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            Object.keys(rsvpData).forEach(key => (rsvpData as any)[key] === undefined && delete (rsvpData as any)[key]);
+
+            // ตรวจสอบว่ามี RSVP อยู่แล้วหรือไม่
+            let existingRSVP: FirebaseRSVPData | null = null;
+            try {
+                existingRSVP = await getRSVPByUid(currentUser);
+            } catch (error) {
+                console.error('Error fetching existing RSVP:', error);
+                // ยังคงดำเนินการต่อแม้ว่าจะดึงข้อมูลไม่ได้
+            }
+            
+            let rsvpId: string;
+            if (existingRSVP && existingRSVP.id) {
+                // Update RSVP ที่มีอยู่แล้ว
+                await updateRSVP(existingRSVP.id, rsvpData);
+                rsvpId = existingRSVP.id;
+                setSubmittedData({ 
+                    ...rsvpData, 
+                    id: existingRSVP.id, 
+                    createdAt: existingRSVP.createdAt, 
+                    updatedAt: new Date().toISOString() 
+                } as FirebaseRSVPData);
+                message.success('อัพเดทข้อมูลเรียบร้อย');
+            } else {
+                // Create RSVP ใหม่
+                rsvpId = await createRSVP(rsvpData);
+                setSubmittedData({ ...rsvpData, id: rsvpId } as FirebaseRSVPData);
+                message.success('บันทึกข้อมูลเรียบร้อย');
+            }
+
+            // ถ้า isComing === 'yes' ให้สร้างหรืออัพเดท Guest อัตโนมัติ
+            if (values.isComing === 'yes') {
+                try {
+                    const existingGuest = existingRSVP?.guestId ? await getGuest(existingRSVP.guestId) : null;
+                    
+                    if (existingGuest) {
+                        // Update Guest ที่มีอยู่แล้ว - ใช้ฟังก์ชันสำหรับ RSVP
+                        const updatedGuest: Partial<Guest> = {
+                            firstName: rsvpData.firstName || existingGuest.firstName,
+                            lastName: rsvpData.lastName || existingGuest.lastName,
+                            nickname: rsvpData.nickname || existingGuest.nickname,
+                            relationToCouple: rsvpData.relation || existingGuest.relationToCouple,
+                            side: rsvpData.side as Side,
+                            note: rsvpData.note || existingGuest.note,
+                            isComing: true,
+                            accompanyingGuestsCount: rsvpData.accompanyingGuestsCount || 0,
+                            updatedAt: new Date().toISOString(),
+                        };
+                        
+                        // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
+                        Object.keys(updatedGuest).forEach(key => {
+                            const value = (updatedGuest as any)[key];
+                            if (value === undefined) {
+                                delete (updatedGuest as any)[key];
+                            }
+                        });
+                        
+                        // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
+                        await updateGuestFromRSVP(existingGuest.id, updatedGuest, currentUser);
+                        
+                        // Update RSVP ให้ link กับ Guest
+                        await updateRSVP(rsvpId, { guestId: existingGuest.id });
+                    } else {
+                        // Create Guest ใหม่ - ใช้ timestamp + random เพื่อป้องกัน ID ซ้ำ
+                        const timestamp = Date.now();
+                        const random = Math.floor(Math.random() * 1000);
+                        const newGuestId = `G${timestamp}${random}`;
+                        
+                        const newGuest: Guest = {
+                            id: newGuestId,
+                            firstName: rsvpData.firstName || 'ไม่ระบุชื่อ',
+                            lastName: rsvpData.lastName || '',
+                            nickname: rsvpData.nickname || '',
+                            age: null,
+                            gender: 'other',
+                            relationToCouple: rsvpData.relation || '',
+                            side: rsvpData.side as Side,
+                            zoneId: null,
+                            tableId: null,
+                            note: rsvpData.note || '',
+                            isComing: true,
+                            accompanyingGuestsCount: rsvpData.accompanyingGuestsCount || 0,
+                            groupId: null,
+                            groupName: null,
+                            checkedInAt: null,
+                            checkInMethod: null,
+                            rsvpUid: currentUser, // เพิ่ม rsvpUid เพื่อติดตามว่า Guest ถูกสร้างจาก RSVP
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                        };
+                        
+                        // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
+                        Object.keys(newGuest).forEach(key => {
+                            const value = (newGuest as any)[key];
+                            if (value === undefined) {
+                                delete (newGuest as any)[key];
+                            }
+                        });
+                        
+                        // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
+                        // createGuestFromRSVP จะเติม rsvpUid ให้อีกครั้งเพื่อความปลอดภัย
+                        await createGuestFromRSVP(newGuest, currentUser);
+                        
+                        // Update RSVP ให้ link กับ Guest
+                        await updateRSVP(rsvpId, { guestId: newGuestId });
+                    }
+                } catch (guestError: any) {
+                    console.error('Error creating/updating guest:', guestError);
+                    const errorMessage = guestError?.message || guestError?.toString() || 'Unknown error';
+                    // แสดง error message ที่ชัดเจนขึ้น
+                    message.warning(`บันทึก RSVP สำเร็จ แต่เกิดปัญหาในการสร้างข้อมูล Guest: ${errorMessage}`);
+                }
+            } else if (existingRSVP?.guestId) {
+                // ถ้าเปลี่ยนจาก yes เป็น no ให้ update Guest.isComing = false
+                try {
+                    const existingGuest = await getGuest(existingRSVP.guestId);
+                    if (existingGuest && existingGuest.rsvpUid === currentUser) {
+                        // ใช้ฟังก์ชันสำหรับ RSVP ถ้า Guest ถูกสร้างโดย RSVP
+                        await updateGuestFromRSVP(existingGuest.id, { 
+                            isComing: false,
+                            updatedAt: new Date().toISOString(),
+                        }, currentUser);
+                    } else if (existingGuest && !existingGuest.rsvpUid) {
+                        // ถ้า Guest ถูกสร้างโดย admin ให้ข้าม (ไม่สามารถแก้ไขได้)
+                        console.log('Guest ถูกสร้างโดย Admin ไม่สามารถแก้ไขได้');
+                    }
+                } catch (guestError) {
+                    console.error('Error updating guest isComing:', guestError);
+                    // ไม่ throw error เพื่อไม่ให้กระทบการบันทึก RSVP
+                }
+            }
 
             setIsEditing(false);
             setLoading(false);
-            message.success('บันทึกข้อมูลเรียบร้อย');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving RSVP:', error);
             setLoading(false);
-            message.error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+            const errorMessage = error?.message || error?.toString() || 'Unknown error';
+            message.error(`เกิดข้อผิดพลาดในการบันทึกข้อมูล: ${errorMessage}`);
         }
     };
 
@@ -898,6 +1154,14 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
     const renderContent = () => {
+        // แสดง loading ขณะเช็ค auth หรือ load RSVP
+        if (isCheckingAuth || (isLoggedIn && isLoadingRSVP)) {
+            return (
+                <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
+                    <Spin size="large" tip="กำลังตรวจสอบข้อมูล..." />
+                </div>
+            );
+        }
 
         if (!isLoggedIn) {
 
@@ -932,13 +1196,25 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 <div className="text-center w-full max-w-sm mx-auto animate-fade-in pt-10">
 
                     <div className="mb-6 relative">
-
-                         <div className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center bg-white shadow-sm border-4 ${submittedData.isComing === 'yes' ? 'border-green-100' : 'border-gray-100'}`}>
-
-                            {submittedData.isComing === 'yes' ? <CheckCircleFilled style={{ fontSize: 48, color: '#52c41a' }} /> : <CloseCircleFilled style={{ fontSize: 48, color: '#8c8c8c' }} />}
-
-                        </div>
-
+                        {userInfo ? (
+                            <div className="flex flex-col items-center gap-3">
+                                <Avatar 
+                                    size={80} 
+                                    src={getAvatarUrl(userInfo)}
+                                    icon={!userInfo.photoURL && <UserOutlined />}
+                                    className={`border-4 ${submittedData.isComing === 'yes' ? 'border-green-100' : 'border-gray-100'}`}
+                                />
+                                <div className="text-center">
+                                    <div className="font-medium text-[#5c3a58]">{userInfo.displayName || 'ผู้ใช้'}</div>
+                                    <div className="text-xs text-gray-500">{userInfo.email}</div>
+                                    <Button type="link" size="small" danger icon={<LogoutOutlined />} onClick={handleLogout}>ออกจากระบบ</Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center bg-white shadow-sm border-4 ${submittedData.isComing === 'yes' ? 'border-green-100' : 'border-gray-100'}`}>
+                                {submittedData.isComing === 'yes' ? <CheckCircleFilled style={{ fontSize: 48, color: '#52c41a' }} /> : <CloseCircleFilled style={{ fontSize: 48, color: '#8c8c8c' }} />}
+                            </div>
+                        )}
                     </div>
 
                     <Title level={4} style={{margin: '0 0 4px', fontFamily: 'Cinzel', color: '#5c3a58'}}>{submittedData.isComing === 'yes' ? 'ขอบคุณที่มาร่วมงาน' : 'รับทราบการแจ้ง'}</Title>
@@ -951,7 +1227,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                 <Text className="block text-gray-800 text-lg mb-1">
 
-                                    {submittedData.firstName && submittedData.firstName !== 'ไม่ระบุชื่อ' ? `คุณ ${submittedData.firstName}` : 'ผู้ลงทะเบียน'}
+                                    {submittedData.fullName || 
+                                     (submittedData.firstName && submittedData.lastName 
+                                         ? `${submittedData.firstName} ${submittedData.lastName}` 
+                                         : submittedData.firstName) || 
+                                     'ผู้ลงทะเบียน'}
 
                                 </Text>
 
@@ -1020,11 +1300,23 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
                 <div className="text-center mb-6 relative z-10">
-
+                    {userInfo && (
+                        <div className="flex items-center justify-center gap-3 mb-4">
+                            <Avatar 
+                                size={48} 
+                                src={getAvatarUrl(userInfo)}
+                                icon={!userInfo.photoURL && <UserOutlined />}
+                                className="border-2 border-[#5c3a58]"
+                            />
+                            <div className="text-left">
+                                <div className="font-medium text-[#5c3a58]">{userInfo.displayName || 'ผู้ใช้'}</div>
+                                <div className="text-xs text-gray-500">{userInfo.email}</div>
+                                <Button type="link" size="small" danger icon={<LogoutOutlined />} onClick={handleLogout} className="p-0 h-auto">ออกจากระบบ</Button>
+                            </div>
+                        </div>
+                    )}
                     <Title level={3} className="font-cinzel text-[#5c3a58] m-0">ลงทะเบียนร่วมงาน</Title>
-
                     <Text type="secondary" className="text-xs">งานแต่งงาน ก๊อต & แนน</Text>
-
                 </div>
 
                 
@@ -1111,7 +1403,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                                     <AutoComplete 
 
-                                                        options={relationOptions} 
+                                                        options={RSVP_RELATION_OPTIONS} 
 
                                                         placeholder="เลือกหรือพิมพ์ (เช่น ญาติ, เพื่อน)" 
 
@@ -1155,7 +1447,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                                                         <Form.Item name={[field.name, 'relationToMain']} className="mb-0 flex-1" rules={[{ required: true, message: 'เลือกความสัมพันธ์' }]}>
 
-                                                                             <Select placeholder="เลือกความสัมพันธ์ *" className="clean-input w-full" options={guestRelationOptions} />
+                                                                             <Select placeholder="เลือกความสัมพันธ์ *" className="clean-input w-full" options={RSVP_GUEST_RELATION_OPTIONS} />
 
                                                                         </Form.Item>
 
@@ -1221,21 +1513,35 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-3 opacity-70 hover:opacity-100 transition-opacity">
+                                                {/* แสดงภาพและชื่อจาก Facebook/Google */}
+                                                {userInfo && (
+                                                    <div className="flex items-center gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                                        <Avatar 
+                                                            size={48} 
+                                                            src={getAvatarUrl(userInfo)}
+                                                            icon={!userInfo.photoURL && <UserOutlined />}
+                                                            className="border-2 border-[#5c3a58]/20"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="text-xs text-gray-500 mb-1">
+                                                                ข้อมูลจาก {userInfo.providerData?.[0]?.providerId === 'facebook.com' ? 'Facebook' : userInfo.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'บัญชี'}
+                                                            </div>
+                                                            <Form.Item name="fullName" className="mb-0">
+                                                                <Input 
+                                                                    placeholder={userInfo.displayName || "ชื่อ-นามสกุล"} 
+                                                                    className="clean-input text-sm" 
+                                                                />
+                                                            </Form.Item>
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                                    <Form.Item name="firstName" className="mb-0">
-
-                                                        <Input placeholder="ชื่อผู้แจ้ง (ถ้าต้องการระบุ)" className="clean-input text-sm" />
-
+                                                {/* ถ้ายังไม่ล็อกอิน หรือไม่มีข้อมูล ให้แสดงช่องกรอก */}
+                                                {!userInfo && (
+                                                    <Form.Item name="fullName" className="mb-0">
+                                                        <Input placeholder="ชื่อ-นามสกุล (ไม่บังคับกรอก)" className="clean-input text-sm" />
                                                     </Form.Item>
-
-                                                    <Form.Item name="lastName" className="mb-0">
-
-                                                        <Input placeholder="นามสกุล" className="clean-input text-sm" />
-
-                                                    </Form.Item>
-
-                                                </div>
+                                                )}
 
                                             </div>
 
@@ -1288,10 +1594,23 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                 const status = getFieldValue('isComing');
 
                                 const text = status === 'yes' ? 'ยืนยันการลงทะเบียน' : status === 'no' ? 'ส่งคำตอบ' : 'กรุณาเลือกสถานะ';
+                                
+                                // Disable button if no status, loading, or no current user
+                                const isDisabled = !status || loading || !currentUser;
 
                                 return (
 
-                                    <Button type="primary" htmlType="submit" block loading={loading} size="large" className="bg-[#5c3a58] hover:bg-[#4a2e46] border-none h-12 text-lg shadow-md rounded-lg font-medium" disabled={!status}>{text}</Button>
+                                    <Button 
+                                        type="primary" 
+                                        htmlType="submit" 
+                                        block 
+                                        loading={loading} 
+                                        size="large" 
+                                        className="bg-[#5c3a58] hover:bg-[#4a2e46] border-none h-12 text-lg shadow-md rounded-lg font-medium" 
+                                        disabled={isDisabled}
+                                    >
+                                        {text}
+                                    </Button>
 
                                 );
 
@@ -1397,41 +1716,98 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     // Given instruction is just to remove button, we keep the prop but acknowledge it's unused.
     void onExitGuestMode; 
 
-    const [isFlipped, setIsFlipped] = useState(false);
+    // Restore state from sessionStorage if available
+    const [isFlipped, setIsFlipped] = useState(() => {
+        try {
+            return sessionStorage.getItem('wedding_is_flipped') === 'true';
+        } catch {
+            return false;
+        }
+    });
 
-    const [musicPlaying, setMusicPlaying] = useState(false);
+    const [musicPlaying, setMusicPlaying] = useState(() => {
+        try {
+            // Restore music playing state from sessionStorage
+            return sessionStorage.getItem('wedding_music_playing') === 'true';
+        } catch {
+            return false;
+        }
+    });
 
-    const [showIntro, setShowIntro] = useState(true); // Start with intro
+    const [showIntro, setShowIntro] = useState(() => {
+        try {
+            // If we have started before, skip intro
+            return sessionStorage.getItem('wedding_has_started') !== 'true';
+        } catch {
+            return true;
+        }
+    });
+
+    // Save state changes
+    useEffect(() => {
+        try {
+            sessionStorage.setItem('wedding_is_flipped', String(isFlipped));
+        } catch (e) {
+            console.error('Error saving state', e);
+        }
+    }, [isFlipped]);
+
+    // Save music playing state to sessionStorage
+    useEffect(() => {
+        try {
+            sessionStorage.setItem('wedding_music_playing', String(musicPlaying));
+        } catch (e) {
+            console.error('Error saving music state', e);
+        }
+    }, [musicPlaying]);
 
     const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
 
     const currentTrack = PLAYLIST[currentTrackIndex];
 
     const iframeRef = React.useRef<HTMLIFrameElement>(null);
+    const [iframeReady, setIframeReady] = useState(false);
     
     // Helper to send commands to YouTube iframe
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sendCommand = (func: string, args: any[] = []) => {
+    const sendCommand = (func: string, args: any[] = [], requireReady = false) => {
+        // For auto-play after refresh, require iframe to be ready
+        // For manual controls, try to send even if not ready yet
         if (iframeRef.current && iframeRef.current.contentWindow) {
-            iframeRef.current.contentWindow.postMessage(
-                JSON.stringify({ event: 'command', func, args }), 
-                '*'
-            );
+            if (!requireReady || iframeReady) {
+                iframeRef.current.contentWindow.postMessage(
+                    JSON.stringify({ event: 'command', func, args }), 
+                    '*'
+                );
+            }
         }
+    };
+
+    // Handle iframe load event
+    const handleIframeLoad = () => {
+        // Wait for YouTube API to be ready (YouTube iframe needs time to initialize)
+        setTimeout(() => {
+            setIframeReady(true);
+        }, 1500); // Increased delay to ensure YouTube API is ready
     };
 
     const handleStart = () => {
         setShowIntro(false);
+        try {
+            sessionStorage.setItem('wedding_has_started', 'true');
+        } catch (e) {
+            console.error('Error saving state', e);
+        }
         setMusicPlaying(true);
-        // Attempt to play immediately
-        setTimeout(() => sendCommand('playVideo'), 100);
+        // Attempt to play immediately (don't require ready for initial start)
+        setTimeout(() => sendCommand('playVideo', [], false), 100);
     };
 
     const onToggleMusic = () => {
         if (musicPlaying) {
-            sendCommand('pauseVideo');
+            sendCommand('pauseVideo', [], false); // Don't require ready for manual control
         } else {
-            sendCommand('playVideo');
+            sendCommand('playVideo', [], false); // Don't require ready for manual control
         }
         setMusicPlaying(!musicPlaying);
     };
@@ -1439,7 +1815,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const handleNext = () => {
         const nextIndex = (currentTrackIndex + 1) % PLAYLIST.length;
         setCurrentTrackIndex(nextIndex);
-        sendCommand('loadVideoById', [PLAYLIST[nextIndex].id]);
+        sendCommand('loadVideoById', [PLAYLIST[nextIndex].id], false); // Don't require ready for manual control
         // Keep playing state true if we change track
         if (!musicPlaying) setMusicPlaying(true);
     };
@@ -1447,20 +1823,91 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const handlePrev = () => {
         const prevIndex = (currentTrackIndex - 1 + PLAYLIST.length) % PLAYLIST.length;
         setCurrentTrackIndex(prevIndex);
-        sendCommand('loadVideoById', [PLAYLIST[prevIndex].id]);
+        sendCommand('loadVideoById', [PLAYLIST[prevIndex].id], false); // Don't require ready for manual control
         if (!musicPlaying) setMusicPlaying(true);
     };
     
     // Sync Play/Pause state with iframe (backup for external changes or initial state)
     useEffect(() => {
-        if (!showIntro) {
+        if (!showIntro && iframeReady) {
             if (musicPlaying) {
-                sendCommand('playVideo');
+                sendCommand('playVideo', [], false); // Don't require ready for sync
             } else {
-                sendCommand('pauseVideo');
+                sendCommand('pauseVideo', [], false); // Don't require ready for sync
             }
         }
-    }, [musicPlaying, showIntro]);
+    }, [musicPlaying, showIntro, iframeReady]);
+
+    // Retry play after redirect (for in-app browsers like Facebook/Line)
+    useEffect(() => {
+        if (!showIntro && musicPlaying && iframeRef.current) {
+            // Retry play after a delay (for in-app browsers that may have stopped playback)
+            const retryPlay = () => {
+                setTimeout(() => {
+                    if (iframeRef.current) {
+                        sendCommand('playVideo', [], false); // Don't require ready for retry
+                    }
+                }, 1000);
+            };
+            retryPlay();
+        }
+    }, [showIntro, musicPlaying]);
+
+    // Auto-play music when restored from sessionStorage after refresh
+    useEffect(() => {
+        if (!showIntro && musicPlaying && iframeReady && iframeRef.current) {
+            // Retry mechanism with multiple attempts to ensure playback starts
+            let attempts = 0;
+            const maxAttempts = 8; // More attempts for better reliability
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            
+            const tryPlay = () => {
+                attempts++;
+                if (attempts <= maxAttempts && iframeRef.current && iframeReady) {
+                    sendCommand('playVideo', [], true); // Require ready for auto-play
+                    if (attempts < maxAttempts) {
+                        // Retry with increasing delay
+                        timeoutId = setTimeout(tryPlay, 300 + (attempts * 100));
+                    }
+                }
+            };
+            
+            // Start trying after iframe is ready
+            timeoutId = setTimeout(() => {
+                tryPlay();
+            }, 500);
+            
+            return () => {
+                if (timeoutId) clearTimeout(timeoutId);
+            };
+        }
+    }, [showIntro, musicPlaying, iframeReady]);
+
+    // Listen for YouTube player state changes to sync UI
+    useEffect(() => {
+        if (!showIntro && iframeRef.current) {
+            const handleMessage = (event: MessageEvent) => {
+                if (event.origin !== 'https://www.youtube.com') return;
+                
+                try {
+                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                    if (data.event === 'onStateChange') {
+                        // 0 = ended, 1 = playing, 2 = paused, 3 = buffering
+                        if (data.info === 1) {
+                            setMusicPlaying(true);
+                        } else if (data.info === 2) {
+                            setMusicPlaying(false);
+                        }
+                    }
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            };
+            
+            window.addEventListener('message', handleMessage);
+            return () => window.removeEventListener('message', handleMessage);
+        }
+    }, [showIntro]);
 
     return (
 
@@ -1483,11 +1930,12 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                    width="100%"
                    height="100%"
                    // Initial load with first track
-                   src={`https://www.youtube.com/embed/${PLAYLIST[0].id}?enablejsapi=1&controls=0&playsinline=1&origin=${window.location.origin}`}
+                   src={`https://www.youtube.com/embed/${PLAYLIST[0].id}?enablejsapi=1&controls=0&playsinline=1&autoplay=0&origin=${window.location.origin}`}
                    title="Wedding Music"
                    frameBorder="0"
                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                    allowFullScreen
+                   onLoad={handleIframeLoad}
                  />
             </div>
 

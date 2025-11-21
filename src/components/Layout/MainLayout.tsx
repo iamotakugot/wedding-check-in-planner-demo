@@ -10,6 +10,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LinkOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 
@@ -55,6 +56,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
       key: '5',
       icon: <LinkOutlined />,
       label: 'จัดการลิงค์เชิญ',
+    },
+    {
+      key: '6',
+      icon: <CheckCircleOutlined />,
+      label: 'รายการตอบรับ',
     },
     {
       type: 'divider',

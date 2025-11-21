@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Layout, Card, Form, Input, Button, Typography, Alert, App } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { loginWithEmail, checkIsAdmin, logout } from '@/services/firebaseService';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -20,56 +19,22 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { message } = App.useApp();
 
-  const onFinish = async (values: LoginFieldType) => {
+  const onFinish = (values: LoginFieldType) => {
     setLoading(true);
     setErrorMsg(null);
 
-    try {
-      // ใช้ Firebase Authentication
-      const email = values.username || '';
-      const password = values.password || '';
-
-      if (!email || !password) {
-        setErrorMsg('กรุณากรอกอีเมลและรหัสผ่าน');
+    // Mock authentication
+    if (values.username === 'admin' && values.password === '1150') {
+      setTimeout(() => {
+        message.success('เข้าสู่ระบบสำเร็จ (Mock) กำลังนำไปยัง Dashboard...');
         setLoading(false);
-        return;
-      }
-
-      // Login ด้วย Firebase
-      const user = await loginWithEmail(email, password);
-
-      // ตรวจสอบว่าเป็น admin หรือไม่
-      const isAdmin = await checkIsAdmin(user.uid);
-      
-      if (!isAdmin) {
-        // ถ้าไม่ใช่ admin ให้ logout และแสดง error
-        await logout();
-        setErrorMsg('บัญชีนี้ไม่มีสิทธิ์เข้าถึง Admin Panel');
+        onLoginSuccess();
+      }, 500);
+    } else {
+      setTimeout(() => {
+        setErrorMsg('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
         setLoading(false);
-        return;
-      }
-
-      // Login สำเร็จ
-      message.success('เข้าสู่ระบบสำเร็จ กำลังนำไปยัง Dashboard...');
-      setLoading(false);
-      onLoginSuccess();
-    } catch (error: any) {
-      console.error('Login error:', error);
-      
-      // แสดง error message ที่เข้าใจง่าย
-      let errorMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = 'ไม่พบผู้ใช้นี้ในระบบ';
-      } else if (error.code === 'auth/wrong-password') {
-        errorMessage = 'รหัสผ่านไม่ถูกต้อง';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'รูปแบบอีเมลไม่ถูกต้อง';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      setErrorMsg(errorMessage);
-      setLoading(false);
+      }, 500);
     }
   };
 
@@ -91,18 +56,15 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
             layout="vertical"
             onFinish={onFinish}
             size="large"
+            initialValues={{ username: 'admin', password: '1150' }}
           >
             <Form.Item
               name="username"
-              rules={[
-                { required: true, message: 'กรุณากรอกอีเมล' },
-                { type: 'email', message: 'รูปแบบอีเมลไม่ถูกต้อง' }
-              ]}
+              rules={[{ required: true, message: 'กรุณากรอกชื่อผู้ใช้' }]}
             >
               <Input
                 prefix={<UserOutlined className="text-gray-400" />}
-                placeholder="อีเมล (Email)"
-                type="email"
+                placeholder="Username (admin)"
               />
             </Form.Item>
             <Form.Item
@@ -111,7 +73,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
             >
               <Input.Password
                 prefix={<LockOutlined className="text-gray-400" />}
-                placeholder="รหัสผ่าน (Password)"
+                placeholder="Password (1150)"
               />
             </Form.Item>
             <Form.Item>
