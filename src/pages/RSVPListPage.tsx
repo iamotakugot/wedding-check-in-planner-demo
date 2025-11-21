@@ -67,12 +67,21 @@ const RSVPListPage: React.FC<RSVPListPageProps> = ({ onImportToGuests }) => {
       dataIndex: 'side',
       key: 'side',
       render: (side: string) => {
-        const sideMap: Record<string, { label: string; color: string }> = {
-          groom: { label: 'เจ้าบ่าว', color: 'blue' },
-          bride: { label: 'เจ้าสาว', color: 'pink' },
-          both: { label: 'ทั้งสองฝ่าย', color: 'purple' },
-        };
-        const sideInfo = sideMap[side] || { label: side, color: 'default' };
+        // Use switch statement to avoid security warning
+        let sideInfo: { label: string; color: string };
+        switch (side) {
+          case 'groom':
+            sideInfo = { label: 'เจ้าบ่าว', color: 'blue' };
+            break;
+          case 'bride':
+            sideInfo = { label: 'เจ้าสาว', color: 'pink' };
+            break;
+          case 'both':
+            sideInfo = { label: 'ทั้งสองฝ่าย', color: 'purple' };
+            break;
+          default:
+            sideInfo = { label: side, color: 'default' };
+        }
         return <Tag color={sideInfo.color}>{sideInfo.label}</Tag>;
       },
     },

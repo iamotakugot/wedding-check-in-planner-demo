@@ -242,7 +242,7 @@ export const getRSVPs = async (): Promise<RSVPData[]> => {
     const rsvp = { id: key, ...data[key] };
     // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
     if ('phoneNumber' in rsvp) {
-      delete (rsvp as any).phoneNumber;
+      delete (rsvp as Record<string, unknown>).phoneNumber;
     }
     return rsvp;
   });
@@ -264,7 +264,7 @@ export const getRSVPByUid = async (uid: string): Promise<RSVPData | null> => {
   })[0];
   // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
   if ('phoneNumber' in mostRecent) {
-    delete (mostRecent as any).phoneNumber;
+    delete (mostRecent as Record<string, unknown>).phoneNumber;
   }
   return mostRecent;
 };
@@ -280,7 +280,7 @@ export const subscribeRSVPs = (callback: (rsvps: RSVPData[]) => void): () => voi
       const rsvp = { id: key, ...data[key] };
       // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
       if ('phoneNumber' in rsvp) {
-        delete (rsvp as any).phoneNumber;
+        delete (rsvp as Record<string, unknown>).phoneNumber;
       }
       return rsvp;
     });
@@ -448,7 +448,7 @@ const isInAppBrowser = () => {
     ua.includes('fbav') || // Facebook iOS
     ua.includes('line/') || // Line
     ua.includes('wv') || // WebView
-    (ua.includes('safari') && !ua.includes('chrome') && (window.navigator as any).standalone !== undefined) // iOS Safari standalone
+    (ua.includes('safari') && !ua.includes('chrome') && (window.navigator as unknown as Record<string, unknown>).standalone !== undefined) // iOS Safari standalone
   );
 };
 

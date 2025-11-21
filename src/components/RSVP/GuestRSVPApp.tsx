@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-object-injection */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Typography,
@@ -1056,9 +1056,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
                         Object.keys(updatedGuest).forEach(key => {
-                            const value = (updatedGuest as any)[key];
+                            const value = (updatedGuest as Record<string, unknown>)[key];
                             if (value === undefined) {
-                                delete (updatedGuest as any)[key];
+                                delete (updatedGuest as Record<string, unknown>)[key];
                             }
                         });
                         
@@ -1098,9 +1098,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
                         Object.keys(newGuest).forEach(key => {
-                            const value = (newGuest as any)[key];
+                            const value = (newGuest as unknown as Record<string, unknown>)[key];
                             if (value === undefined) {
-                                delete (newGuest as any)[key];
+                                delete (newGuest as unknown as Record<string, unknown>)[key];
                             }
                         });
                         
@@ -1111,9 +1111,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         // Update RSVP ให้ link กับ Guest
                         await updateRSVP(rsvpId, { guestId: newGuestId });
                     }
-                } catch (guestError: any) {
+                } catch (guestError: unknown) {
                     console.error('Error creating/updating guest:', guestError);
-                    const errorMessage = guestError?.message || guestError?.toString() || 'Unknown error';
+                    const errorMessage = guestError instanceof Error ? guestError.message : String(guestError || 'Unknown error');
                     // แสดง error message ที่ชัดเจนขึ้น
                     message.warning(`บันทึก RSVP สำเร็จ แต่เกิดปัญหาในการสร้างข้อมูล Guest: ${errorMessage}`);
                 }
@@ -1139,10 +1139,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
             setIsEditing(false);
             setLoading(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error saving RSVP:', error);
             setLoading(false);
-            const errorMessage = error?.message || error?.toString() || 'Unknown error';
+            const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
             message.error(`เกิดข้อผิดพลาดในการบันทึกข้อมูล: ${errorMessage}`);
         }
     };
@@ -1710,11 +1710,12 @@ const IntroOverlay: React.FC<{ onStart: () => void }> = ({ onStart }) => {
 
 
 
-const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMode }) => {
+const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMode: _onExitGuestMode }) => {
     // Keep onExitGuestMode in props to avoid changing interface, but ignore usage for now
     // or remove it from props if the parent component is also updated.
     // Given instruction is just to remove button, we keep the prop but acknowledge it's unused.
-    void onExitGuestMode; 
+    // Parameter renamed to _onExitGuestMode to indicate it's intentionally unused
+    void _onExitGuestMode; 
 
     // Restore state from sessionStorage if available
     const [isFlipped, setIsFlipped] = useState(() => {
@@ -1769,8 +1770,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const [iframeReady, setIframeReady] = useState(false);
     
     // Helper to send commands to YouTube iframe
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sendCommand = (func: string, args: any[] = [], requireReady = false) => {
+    const sendCommand = useCallback((func: string, args: unknown[] = [], requireReady = false) => {
         // For auto-play after refresh, require iframe to be ready
         // For manual controls, try to send even if not ready yet
         if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -1781,7 +1781,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 );
             }
         }
-    };
+    }, [iframeReady]);
 
     // Handle iframe load event
     const handleIframeLoad = () => {
@@ -1836,7 +1836,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 sendCommand('pauseVideo', [], false); // Don't require ready for sync
             }
         }
-    }, [musicPlaying, showIntro, iframeReady]);
+    }, [musicPlaying, showIntro, iframeReady, sendCommand]);
 
     // Retry play after redirect (for in-app browsers like Facebook/Line)
     useEffect(() => {
@@ -1851,7 +1851,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
             };
             retryPlay();
         }
-    }, [showIntro, musicPlaying]);
+    }, [showIntro, musicPlaying, sendCommand]);
 
     // Auto-play music when restored from sessionStorage after refresh
     useEffect(() => {
@@ -1881,7 +1881,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 if (timeoutId) clearTimeout(timeoutId);
             };
         }
-    }, [showIntro, musicPlaying, iframeReady]);
+    }, [showIntro, musicPlaying, iframeReady, sendCommand]);
 
     // Listen for YouTube player state changes to sync UI
     useEffect(() => {
