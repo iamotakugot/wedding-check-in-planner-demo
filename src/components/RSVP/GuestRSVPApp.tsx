@@ -979,12 +979,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // เมื่อ login สำเร็จ จะ redirect กลับมาที่หน้าเดิม และ checkRedirectResult() จะได้รับผลลัพธ์
             if (provider === 'google') {
                 await signInWithGoogle();
-                // ถ้าโค้ดมาถึงบรรทัดนี้ (ไม่น่าจะเกิดขึ้น) แสดงว่า redirect ไม่สำเร็จ
-                message.loading('กำลังเปลี่ยนหน้าไปยัง Google Login...', 0);
             } else if (provider === 'facebook') {
                 await signInWithFacebook();
-                // ถ้าโค้ดมาถึงบรรทัดนี้ (ไม่น่าจะเกิดขึ้น) แสดงว่า redirect ไม่สำเร็จ
-                message.loading('กำลังเปลี่ยนหน้าไปยัง Facebook Login...', 0);
             }
             
             // ไม่ควร reset loading เพราะหน้าจะ redirect ไป
@@ -1002,10 +998,20 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             } else if (error.code === 'auth/network-request-failed') {
                 message.error('เกิดข้อผิดพลาดเกี่ยวกับเครือข่าย กรุณาลองใหม่');
                 setLoading(false);
+            } else if (error.code === 'auth/unauthorized-domain') {
+                message.error('โดเมนนี้ไม่ได้รับอนุญาตใน Firebase Auth. กรุณาเพิ่มโดเมนใน Authorized domains');
+                setLoading(false);
+            } else if (error.code === 'auth/operation-not-allowed') {
+                message.error('ยังไม่ได้เปิดใช้งานผู้ให้บริการเข้าสู่ระบบ โปรดเปิด Facebook/Google ใน Firebase Console');
+                setLoading(false);
+            } else if (error.code === 'auth/account-exists-with-different-credential') {
+                message.error('อีเมลนี้ถูกเชื่อมกับผู้ให้บริการอื่นอยู่แล้ว กรุณาเข้าสู่ระบบด้วยผู้ให้บริการเดิม');
+                setLoading(false);
             } else {
-                // For redirect, the error might not be caught because page redirects
-                message.warning('กำลังเปลี่ยนหน้า...');
-                // Don't reset loading for redirect cases
+                // ไม่ทราบสาเหตุ → แสดงข้อความผิดพลาดและเคลียร์ loading
+                const msg = typeof error?.message === 'string' ? error.message : 'ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่';
+                message.error(msg);
+                setLoading(false);
             }
         }
     };
