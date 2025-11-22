@@ -72,9 +72,9 @@ export const defaultWeddingCardConfig: WeddingCardConfig = {
   nameOrder: 'bride-first',
   // แสดงชื่อบิดามารดาที่ด้านบนสุด
   showParentsAtTop: true,
-  // Dress Code colors (ตามตัวอย่าง: สีทอง, ส้ม, น้ำตาล, เขียว)
+  // Dress Code colors (สีเหลือง สีชมพู สีฟ้า สีเขียว พาสเทล)
   dressCode: {
-    colors: ['#d4af37', '#F5BC8D', '#8d6e63', '#D8E6C1'], // สีทอง, ส้ม, น้ำตาล, เขียว
+    colors: ['#FFE082', '#F8BBD0', '#B3E5FC', '#C8E6C9'], // สีเหลืองพาสเทล, สีชมพูพาสเทล, สีฟ้าพาสเทล, สีเขียวพาสเทล
     label: 'Dress Code:',
   },
 };

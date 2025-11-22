@@ -47,7 +47,8 @@ import {
   updateRSVP, // Import updateRSVP
   createGuestFromRSVP, // Import createGuestFromRSVP
   getGuest, // Import getGuest
-  updateGuestFromRSVP // Import updateGuestFromRSVP
+  updateGuestFromRSVP, // Import updateGuestFromRSVP
+  getCurrentUser // Import getCurrentUser for fallback
 } from '@/services/firebaseService';
 import type { RSVPData as FirebaseRSVPData } from '@/services/firebaseService';
 import type { User } from 'firebase/auth';
@@ -551,7 +552,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
             {/* Left: Names & Countdown */}
 
-            <div className="w-full md:w-5/12 bg-[#fdfcf8] relative min-h-[30vh] md:min-h-full flex flex-col items-center justify-center md:justify-start pt-4 md:pt-20 overflow-hidden border-b md:border-b-0 md:border-r border-gray-100 shrink-0">
+            <div className="w-full md:w-5/12 bg-[#fdfcf8] relative min-h-[30vh] md:min-h-full flex flex-col items-center justify-start pt-6 md:pt-12 overflow-y-auto border-b md:border-b-0 md:border-r border-gray-100 shrink-0">
 
                  <div className="absolute inset-0 opacity-100 pointer-events-none" style={{
 
@@ -569,13 +570,13 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                 <div className="relative z-10 text-center px-2 md:px-4 w-full max-w-full overflow-hidden">
+                 <div className="relative z-10 text-center px-4 md:px-6 w-full max-w-md mx-auto pb-8">
 
-                     <Text className="uppercase tracking-[0.15em] text-[#8d6e63] text-[8px] md:text-[10px] font-cinzel mb-1 block">Together with their families</Text>
+                     <Text className="uppercase tracking-[0.15em] text-[#8d6e63] text-[8px] md:text-[10px] font-cinzel mb-3 md:mb-4 block">Together with their families</Text>
 
                      {/* UPDATED: แสดงชื่อตามลำดับที่กำหนด (เจ้าสาวก่อนเจ้าบ่าว) - ปรับให้ fit หน้าจอ */}
                      <div 
-                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-0 drop-shadow-sm break-words overflow-wrap-anywhere"
+                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-1 md:mb-2 drop-shadow-sm break-words overflow-wrap-anywhere"
                          style={{ 
                              fontSize: 'clamp(2rem, 8vw, 4.5rem)',
                              wordBreak: 'break-word',
@@ -586,14 +587,14 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                      </div>
 
                      <Text 
-                         className="font-dancing text-[var(--color-soft-pink)] mb-0 md:mb-2 block"
+                         className="font-dancing text-[var(--color-soft-pink)] mb-1 md:mb-2 block"
                          style={{ fontSize: 'clamp(1.25rem, 4vw, 2.5rem)' }}
                      >
                          &amp;
                      </Text>
 
                      <div 
-                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-2 drop-shadow-sm break-words overflow-wrap-anywhere"
+                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-4 md:mb-6 drop-shadow-sm break-words overflow-wrap-anywhere"
                          style={{ 
                              fontSize: 'clamp(2rem, 8vw, 4.5rem)',
                              wordBreak: 'break-word',
@@ -603,9 +604,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                          {orderedNames.second.firstName}
                      </div>
 
-                     
-
-                     <div className="flex items-center justify-center gap-3 md:gap-4 text-[var(--color-dark-text)] font-cinzel my-2 md:my-6 w-full max-w-[200px] md:max-w-[240px] mx-auto">
+                     <div className="flex items-center justify-center gap-3 md:gap-4 text-[var(--color-dark-text)] font-cinzel my-3 md:my-5 w-full max-w-[200px] md:max-w-[240px] mx-auto">
 
                         <div className="flex-1 text-right border-b border-[var(--color-dark-text)] pb-1"><span className="text-[8px] md:text-[10px] uppercase tracking-widest block">Saturday</span></div>
 
@@ -615,9 +614,46 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                      </div>
 
-                     <div className="font-cinzel text-[var(--color-dark-text)] text-base md:text-lg tracking-[0.2em] mb-1">2569</div>
+                     <div className="font-cinzel text-[var(--color-dark-text)] text-base md:text-lg tracking-[0.2em] mb-3 md:mb-4">2569</div>
 
-                     <CountdownTimer />
+                     <div className="mb-4 md:mb-6">
+                         <CountdownTimer />
+                     </div>
+
+                     {/* Dress Code แบบวงกลม */}
+                     {config.dressCode && config.dressCode.colors && config.dressCode.colors.length > 0 && (
+                         <div className="w-full mt-4 md:mt-6 px-0 md:px-2 relative z-10 flex flex-col items-center">
+                             <div className="flex items-center gap-2 mb-3 md:mb-4">
+                                 {config.dressCode.label && (
+                                     <Text className="text-[#5c3a58] text-[10px] md:text-xs font-cinzel">
+                                         {config.dressCode.label}
+                                     </Text>
+                                 )}
+                                 <div className="flex items-center gap-2">
+                                     {config.dressCode.colors.map((color, idx) => (
+                                         <div
+                                             key={idx}
+                                             className="w-6 h-6 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm"
+                                             style={{ backgroundColor: color }}
+                                         />
+                                     ))}
+                                 </div>
+                             </div>
+                             
+                             {/* ที่อยู่ */}
+                             <a 
+                                 href="https://maps.app.goo.gl/zi9XTyNu9tQfmHkv9" 
+                                 target="_blank" 
+                                 rel="noopener noreferrer" 
+                                 className="mt-2 md:mt-3 flex items-center justify-center gap-2 hover:opacity-80 transition-opacity cursor-pointer no-underline"
+                             >
+                                 <EnvironmentOutlined className="text-[#d4af37] text-base md:text-lg" />
+                                 <Text className="text-[#5c3a58] text-sm md:text-base font-semibold font-cinzel tracking-wide">
+                                     ณ เรือนชมมณี นครราชสีมา
+                                 </Text>
+                             </a>
+                         </div>
+                     )}
 
                  </div>
 
@@ -635,7 +671,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
             {/* Right: Details */}
 
-            <div className="w-full md:w-7/12 p-4 md:p-10 flex flex-col items-center justify-center text-center relative bg-[#fffdf9] grow">
+            <div className="w-full md:w-7/12 p-4 md:p-10 flex flex-col items-center justify-start text-center relative bg-[#fffdf9] grow overflow-y-auto">
 
                 <div className="absolute inset-0 opacity-30 pointer-events-none" style={{
 
@@ -653,10 +689,12 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                 {/* UPDATED: Reduced vertical margins */}
 
-                <div className="mb-2 mt-1 md:mt-2 relative z-10">
+                <div className="w-full max-w-2xl mb-4 md:mb-6 mt-4 md:mt-6 relative z-10">
+
+                    <Text className="text-[#8d6e63] uppercase tracking-[0.15em] text-[8px] md:text-[10px] block mb-3 md:mb-4 font-cinzel">We Invite You To The Wedding Of</Text>
 
                     {/* แสดงชื่อบิดามารดาที่ด้านบนสุด (ก่อนข้อความเชิญ) - ปรับให้ fit หน้าจอ */}
-                    <div className="w-full mb-3 md:mb-4 relative z-10 max-w-full overflow-hidden">
+                    <div className="w-full mb-4 md:mb-6 relative z-10 max-w-full overflow-hidden">
                         <div className="flex justify-center items-center gap-2 md:gap-4 text-[9px] md:text-xs text-gray-500 mb-1 px-1 md:px-2">
                             <div className="text-right flex-1 min-w-0 break-words">
                                 <div className="font-bold text-[#5c3a58] mb-1 text-[10px] md:text-xs">ฝ่ายเจ้าสาว</div>
@@ -674,10 +712,8 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                         </div>
                     </div>
 
-                    <Text className="text-[#8d6e63] uppercase tracking-[0.15em] text-[8px] md:text-[10px] block mb-1 font-cinzel">We Invite You To The Wedding Of</Text>
-
                     <h1 
-                        className="text-[#5c3a58] m-0 leading-snug font-script my-1 drop-shadow-sm break-words overflow-wrap-anywhere" 
+                        className="text-[#5c3a58] m-0 leading-snug font-script my-2 md:my-3 drop-shadow-sm break-words overflow-wrap-anywhere" 
                         style={{ 
                             fontSize: 'clamp(1.5rem, 5vw, 3rem)', 
                             fontStyle: 'normal',
@@ -689,7 +725,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                     </h1>
 
                     <Text 
-                        className="text-[#8d6e63] mt-1 md:mt-3 block font-light break-words overflow-wrap-anywhere px-2" 
+                        className="text-[#8d6e63] mt-4 md:mt-6 block font-light break-words overflow-wrap-anywhere px-2" 
                         style={{ 
                             fontSize: 'clamp(0.625rem, 2vw, 1rem)',
                             wordBreak: 'break-word',
@@ -699,7 +735,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                         ({orderedNames.first.fullNameThai} &amp; {orderedNames.second.fullNameThai})
                     </Text>
 
-                    <Text className="text-[#8d6e63] mt-2 md:mt-6 block text-[10px] md:text-sm px-2 md:px-4 leading-relaxed font-light">
+                    <Text className="text-[#8d6e63] mt-4 md:mt-6 block text-[10px] md:text-sm px-2 md:px-4 leading-relaxed font-light">
 
                         มีความยินดีขอเรียนเชิญท่านเพื่อเป็นเกียรติและร่วมรับประทานอาหาร<br className="hidden md:block"/>เนื่องในพิธีมงคลสมรส
 
@@ -709,7 +745,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                <Divider className="border-[#d4af37] opacity-30 my-1 md:my-4 w-1/2 min-w-[80px] mx-auto relative z-10"><span className="text-[#d4af37] text-sm md:text-lg">✤</span></Divider>
+                <Divider className="border-[#d4af37] opacity-30 my-3 md:my-5 w-1/2 min-w-[80px] mx-auto relative z-10"><span className="text-[#d4af37] text-sm md:text-lg">✤</span></Divider>
 
 
 
@@ -730,30 +766,6 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                     ))}
 
                 </div>
-
-                {/* Dress Code แบบวงกลม */}
-                {config.dressCode && config.dressCode.colors && config.dressCode.colors.length > 0 && (
-                    <div className="w-full mb-2 md:mb-4 px-0 md:px-2 relative z-10 flex flex-col items-center">
-                        <div className="flex items-center gap-2 mb-2">
-                            {config.dressCode.label && (
-                                <Text className="text-[#5c3a58] text-[10px] md:text-xs font-cinzel">
-                                    {config.dressCode.label}
-                                </Text>
-                            )}
-                            <div className="flex items-center gap-2">
-                                {config.dressCode.colors.map((color, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="w-6 h-6 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm"
-                                        style={{ backgroundColor: color }}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                
 
                 {/* Custom Music Player UI */}
 
@@ -811,15 +823,9 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                 {/* UPDATED: Added pb-8 for bottom spacing */}
 
-                <div className="mt-auto pb-8 relative z-10 pt-3 md:pt-4">
+                <div className="mt-auto pb-8 relative z-10 pt-4 md:pt-6">
 
                     <Button type="primary" size="large" onClick={onFlip} className="h-10 md:h-12 px-8 md:px-10 text-sm md:text-base font-medium shadow-lg bg-[#5c3a58] hover:bg-[#4a2e46] border-none rounded-sm tracking-wide hover:scale-105 transition-transform">ลงทะเบียนร่วมงาน</Button>
-
-                     <a href="https://maps.app.goo.gl/VT1SNFGHSdY7kW9UA" target="_blank" rel="noopener noreferrer" className="mt-2 md:mt-4 flex items-center justify-center gap-2 text-gray-500 text-[10px] md:text-xs hover:text-[#5c3a58] transition-colors cursor-pointer no-underline">
-
-                        <EnvironmentOutlined className="text-[#d4af37]" /> ณ เรือนชมมณี นครราชสีมา
-
-                    </a>
 
                 </div>
 
@@ -865,6 +871,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 if (user) {
                     // User successfully signed in via redirect
                     redirectResultHandled = true; // Mark ว่าจัดการ redirect result แล้ว
+                    console.log('✅ Redirect login successful, user:', user.uid);
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
                     setUserInfo(user);
@@ -873,6 +880,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 } else {
                     // No redirect result, continue with auth state check
                     // onAuthStateChanged จะจัดการต่อ
+                    console.log('No redirect result, checking auth state...');
                 }
             })
             .catch((err) => {
@@ -888,33 +896,46 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             });
 
         // 2. Subscribe to auth state changes (สำหรับ persistent login และ logout)
-        // ใช้ setTimeout เพื่อให้ checkRedirectResult() มีโอกาสทำงานก่อน
+        // ไม่ใช้ setTimeout เพื่อให้ state อัปเดตทันที
         const unsubscribe = onAuthStateChange((user) => {
             if (!isMounted) return;
             
-            // ใช้ setTimeout เพื่อให้ redirect result handler มีโอกาสทำงานก่อน
-            setTimeout(() => {
-                if (!isMounted) return;
+            // ถ้า redirect result จัดการแล้ว ให้เช็คว่า user เปลี่ยนหรือไม่ (เช่น logout แล้ว login ใหม่)
+            if (redirectResultHandled && user) {
+                // แต่ถ้า user เปลี่ยน (เช่น logout แล้ว login ใหม่) ให้อัปเดต
+                const currentUid = user.uid;
+                const existingUid = currentUser;
                 
-                // ถ้า redirect result จัดการแล้ว ไม่ต้อง set state อีก (ป้องกัน race condition)
-                if (redirectResultHandled && user) {
-                    // Redirect result จัดการแล้ว ไม่ต้องทำอะไร
-                    return;
-                }
-                
-                // ถ้าไม่มี redirect result และ auth state เปลี่ยน
-                if (user) {
+                // ถ้า UID เปลี่ยน หรือยังไม่มี currentUser ให้อัปเดต
+                if (currentUid !== existingUid || !existingUid) {
+                    console.log('✅ Auth state changed, updating user:', currentUid);
+                    redirectResultHandled = false; // Reset flag เพื่อให้สามารถอัปเดตได้
                     setIsLoggedIn(true);
-                    setCurrentUser(user.uid);
+                    setCurrentUser(currentUid);
                     setUserInfo(user);
-                } else {
-                    setIsLoggedIn(false);
-                    setCurrentUser(null);
-                    setUserInfo(null);
+                    setIsCheckingAuth(false);
+                    setLoading(false); // ปลดล็อกปุ่มในกรณี popup สำเร็จ
                 }
-                
-                setIsCheckingAuth(false);
-            }, 100); // Delay เล็กน้อยเพื่อให้ redirect result handler ทำงานก่อน
+                return;
+            }
+            
+            // ถ้าไม่มี redirect result และ auth state เปลี่ยน
+            if (user) {
+                console.log('✅ Auth state detected, user:', user.uid);
+                setIsLoggedIn(true);
+                setCurrentUser(user.uid);
+                setUserInfo(user);
+            } else {
+                console.log('User logged out');
+                setIsLoggedIn(false);
+                setCurrentUser(null);
+                setUserInfo(null);
+                // Reset flag เมื่อ logout
+                redirectResultHandled = false;
+            }
+            
+            setIsCheckingAuth(false);
+            setLoading(false); // เผื่อกรณี state loading ค้าง
         });
 
         return () => {
@@ -975,16 +996,27 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         try {
             setLoading(true);
             
-            // signInWithGoogle/Facebook จะ redirect หน้าไปยัง provider login page
-            // เมื่อ login สำเร็จ จะ redirect กลับมาที่หน้าเดิม และ checkRedirectResult() จะได้รับผลลัพธ์
+            // ถ้า popup สำเร็จ ฟังก์ชันจะ resolve และไม่ redirect
+            // ถ้า fallback เป็น redirect หน้าเพจจะเปลี่ยนทันที
             if (provider === 'google') {
                 await signInWithGoogle();
             } else if (provider === 'facebook') {
                 await signInWithFacebook();
             }
-            
-            // ไม่ควร reset loading เพราะหน้าจะ redirect ไป
-            // เมื่อ redirect กลับมา checkRedirectResult() จะจัดการต่อ
+
+            // หลังจาก login สำเร็จ ให้ดึง user จาก Firebase Auth โดยตรง
+            // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
+            const firebaseUser = getCurrentUser();
+            if (firebaseUser) {
+                console.log('✅ Login successful, setting user state:', firebaseUser.uid);
+                setCurrentUser(firebaseUser.uid);
+                setUserInfo(firebaseUser);
+                setIsLoggedIn(true);
+            }
+
+            // กรณี popup สำเร็จ → ปลดล็อกปุ่ม submit ได้เลย
+            // กรณี redirect → จะถูกเพิกเฉยเพราะหน้าเพจจะย้ายออก
+            setLoading(false);
         } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
             console.error(`Error initiating ${provider} login:`, error);
             
@@ -1047,8 +1079,23 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleFinish = async (values: any) => {
-        // ตรวจสอบว่ามี currentUser หรือไม่
-        if (!currentUser) {
+        // ตรวจสอบว่ามี currentUser หรือไม่ - ใช้ getCurrentUser() จาก Firebase ถ้า state ยังไม่อัปเดต
+        let effectiveUserId = currentUser;
+        
+        // ถ้า currentUser ยังไม่มี ให้ลองดึงจาก Firebase Auth โดยตรง (กรณีที่ state ยังไม่อัปเดต)
+        if (!effectiveUserId) {
+            const firebaseUser = getCurrentUser();
+            if (firebaseUser) {
+                effectiveUserId = firebaseUser.uid;
+                // อัปเดต state ทันที
+                setCurrentUser(effectiveUserId);
+                setUserInfo(firebaseUser);
+                setIsLoggedIn(true);
+                console.log('✅ Got user from Firebase Auth directly:', effectiveUserId);
+            }
+        }
+        
+        if (!effectiveUserId) {
             message.error('กรุณาเข้าสู่ระบบก่อนยืนยันการลงทะเบียน');
             setLoading(false); // Ensure loading is reset
             return;
@@ -1093,7 +1140,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             }
 
             const rsvpData: Omit<FirebaseRSVPData, 'id' | 'createdAt' | 'updatedAt'> = {
-                uid: currentUser,
+                uid: effectiveUserId, // ใช้ effectiveUserId แทน currentUser
                 isComing: values.isComing,
                 firstName: firstName,
                 lastName: lastName,
@@ -1112,10 +1159,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             Object.keys(rsvpData).forEach(key => (rsvpData as any)[key] === undefined && delete (rsvpData as any)[key]);
 
-            // ตรวจสอบว่ามี RSVP อยู่แล้วหรือไม่
+            // ตรวจสอบว่ามี RSVP อยู่แล้วหรือไม่ - ใช้ effectiveUserId
             let existingRSVP: FirebaseRSVPData | null = null;
             try {
-                existingRSVP = await getRSVPByUid(currentUser);
+                existingRSVP = await getRSVPByUid(effectiveUserId);
             } catch (error) {
                 console.error('Error fetching existing RSVP:', error);
                 // ยังคงดำเนินการต่อแม้ว่าจะดึงข้อมูลไม่ได้
@@ -1193,7 +1240,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         });
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
-                        await updateGuestFromRSVP(existingGuest.id, updatedGuest, currentUser);
+                        await updateGuestFromRSVP(existingGuest.id, updatedGuest, effectiveUserId);
                         
                         // Update RSVP ให้ link กับ Guest
                         await updateRSVP(rsvpId, { guestId: existingGuest.id });
@@ -1221,7 +1268,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                             groupName: null,
                             checkedInAt: null,
                             checkInMethod: null,
-                            rsvpUid: currentUser, // เพิ่ม rsvpUid เพื่อติดตามว่า Guest ถูกสร้างจาก RSVP
+                            rsvpUid: effectiveUserId, // เพิ่ม rsvpUid เพื่อติดตามว่า Guest ถูกสร้างจาก RSVP
                             createdAt: new Date().toISOString(),
                             updatedAt: new Date().toISOString(),
                         };
@@ -1236,7 +1283,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
                         // createGuestFromRSVP จะเติม rsvpUid ให้อีกครั้งเพื่อความปลอดภัย
-                        await createGuestFromRSVP(newGuest, currentUser);
+                        await createGuestFromRSVP(newGuest, effectiveUserId);
                         
                         // Update RSVP ให้ link กับ Guest
                         await updateRSVP(rsvpId, { guestId: newGuestId });
@@ -1251,12 +1298,12 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 // ถ้าเปลี่ยนจาก yes เป็น no ให้ update Guest.isComing = false
                 try {
                     const existingGuest = await getGuest(existingRSVP.guestId);
-                    if (existingGuest && existingGuest.rsvpUid === currentUser) {
+                    if (existingGuest && existingGuest.rsvpUid === effectiveUserId) {
                         // ใช้ฟังก์ชันสำหรับ RSVP ถ้า Guest ถูกสร้างโดย RSVP
                         await updateGuestFromRSVP(existingGuest.id, { 
                             isComing: false,
                             updatedAt: new Date().toISOString(),
-                        }, currentUser);
+                        }, effectiveUserId);
                     } else if (existingGuest && !existingGuest.rsvpUid) {
                         // ถ้า Guest ถูกสร้างโดย admin ให้ข้าม (ไม่สามารถแก้ไขได้)
                     }
@@ -1724,8 +1771,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                 const text = status === 'yes' ? 'ยืนยันการลงทะเบียน' : status === 'no' ? 'ส่งคำตอบ' : 'กรุณาเลือกสถานะ';
                                 
-                                // Disable button if no status, loading, or no current user
-                                const isDisabled = !status || loading || !currentUser;
+                                // Disable button if no status or loading
+                                // ใช้ getCurrentUser() เป็น fallback ถ้า currentUser state ยังไม่อัปเดต
+                                const effectiveUser = currentUser || getCurrentUser()?.uid || null;
+                                const isDisabled = !status || loading || !effectiveUser;
 
                                 return (
 
