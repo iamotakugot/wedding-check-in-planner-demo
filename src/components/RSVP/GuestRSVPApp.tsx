@@ -499,17 +499,17 @@ const CountdownTimer: React.FC = () => {
 
     return (
 
-        <div className="flex justify-center gap-3 mt-2 md:mt-3 font-cinzel text-[#5c3a58] opacity-80">
+        <div className="flex justify-center gap-2 md:gap-3 mt-0 md:mt-3 font-cinzel text-[#5c3a58] opacity-80">
 
-            <div className="text-center"><div className="text-lg md:text-2xl font-bold">{timeLeft.days}</div><div className="text-[8px] uppercase tracking-wider">Days</div></div>
+            <div className="text-center"><div className="text-base md:text-2xl font-bold">{timeLeft.days}</div><div className="text-[7px] md:text-[8px] uppercase tracking-wider">Days</div></div>
 
-            <div className="text-center"><div className="text-lg md:text-2xl font-bold font-sans">:</div></div>
+            <div className="text-center"><div className="text-base md:text-2xl font-bold font-sans">:</div></div>
 
-            <div className="text-center"><div className="text-lg md:text-2xl font-bold">{timeLeft.hours}</div><div className="text-[8px] uppercase tracking-wider">Hours</div></div>
+            <div className="text-center"><div className="text-base md:text-2xl font-bold">{timeLeft.hours}</div><div className="text-[7px] md:text-[8px] uppercase tracking-wider">Hours</div></div>
 
-            <div className="text-center"><div className="text-lg md:text-2xl font-bold font-sans">:</div></div>
+            <div className="text-center"><div className="text-base md:text-2xl font-bold font-sans">:</div></div>
 
-            <div className="text-center"><div className="text-lg md:text-2xl font-bold">{timeLeft.minutes}</div><div className="text-[8px] uppercase tracking-wider">Mins</div></div>
+            <div className="text-center"><div className="text-base md:text-2xl font-bold">{timeLeft.minutes}</div><div className="text-[7px] md:text-[8px] uppercase tracking-wider">Mins</div></div>
 
         </div>
 
@@ -552,7 +552,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
             {/* Left: Names & Countdown */}
 
-            <div className="w-full md:w-5/12 bg-[#fdfcf8] relative min-h-[30vh] md:min-h-full flex flex-col items-center justify-start pt-6 md:pt-12 overflow-y-auto border-b md:border-b-0 md:border-r border-gray-100 shrink-0">
+            <div className="w-full md:w-5/12 bg-[#fdfcf8] relative min-h-[30vh] md:min-h-full flex flex-col items-center justify-center md:justify-start pt-3 md:pt-12 overflow-y-auto no-scrollbar border-b md:border-b-0 md:border-r border-gray-100 shrink-0">
 
                  <div className="absolute inset-0 opacity-100 pointer-events-none" style={{
 
@@ -570,15 +570,15 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                 <div className="relative z-10 text-center px-4 md:px-6 w-full max-w-md mx-auto pb-8">
+                 <div className="relative z-10 text-center px-3 md:px-6 w-full max-w-md mx-auto pb-2 md:pb-8">
 
-                     <Text className="uppercase tracking-[0.15em] text-[#8d6e63] text-[8px] md:text-[10px] font-cinzel mb-3 md:mb-4 block">Together with their families</Text>
+                     <Text className="uppercase tracking-[0.15em] text-[#8d6e63] text-[7px] md:text-[10px] font-cinzel mb-1 md:mb-4 block">Together with their families</Text>
 
                      {/* UPDATED: แสดงชื่อตามลำดับที่กำหนด (เจ้าสาวก่อนเจ้าบ่าว) - ปรับให้ fit หน้าจอ */}
                      <div 
-                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-1 md:mb-2 drop-shadow-sm break-words overflow-wrap-anywhere"
+                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-0.5 md:mb-2 drop-shadow-sm break-words overflow-wrap-anywhere"
                          style={{ 
-                             fontSize: 'clamp(2rem, 8vw, 4.5rem)',
+                             fontSize: 'clamp(1.5rem, 6vw, 4.5rem)',
                              wordBreak: 'break-word',
                              overflowWrap: 'anywhere'
                          }}
@@ -587,16 +587,16 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                      </div>
 
                      <Text 
-                         className="font-dancing text-[var(--color-soft-pink)] mb-1 md:mb-2 block"
-                         style={{ fontSize: 'clamp(1.25rem, 4vw, 2.5rem)' }}
+                         className="font-dancing text-[var(--color-soft-pink)] mb-0.5 md:mb-2 block"
+                         style={{ fontSize: 'clamp(1rem, 3vw, 2.5rem)' }}
                      >
                          &amp;
                      </Text>
 
                      <div 
-                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-4 md:mb-6 drop-shadow-sm break-words overflow-wrap-anywhere"
+                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-2 md:mb-6 drop-shadow-sm break-words overflow-wrap-anywhere"
                          style={{ 
-                             fontSize: 'clamp(2rem, 8vw, 4.5rem)',
+                             fontSize: 'clamp(1.5rem, 6vw, 4.5rem)',
                              wordBreak: 'break-word',
                              overflowWrap: 'anywhere'
                          }}
@@ -604,36 +604,36 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                          {orderedNames.second.firstName}
                      </div>
 
-                     <div className="flex items-center justify-center gap-3 md:gap-4 text-[var(--color-dark-text)] font-cinzel my-3 md:my-5 w-full max-w-[200px] md:max-w-[240px] mx-auto">
+                     <div className="flex items-center justify-center gap-2 md:gap-4 text-[var(--color-dark-text)] font-cinzel my-1 md:my-5 w-full max-w-[180px] md:max-w-[240px] mx-auto">
 
-                        <div className="flex-1 text-right border-b border-[var(--color-dark-text)] pb-1"><span className="text-[8px] md:text-[10px] uppercase tracking-widest block">Saturday</span></div>
+                        <div className="flex-1 text-right border-b border-[var(--color-dark-text)] pb-1"><span className="text-[7px] md:text-[10px] uppercase tracking-widest block">Saturday</span></div>
 
-                        <div className="text-3xl md:text-4xl font-medium mx-1 leading-none">31</div>
+                        <div className="text-2xl md:text-4xl font-medium mx-1 leading-none">31</div>
 
-                        <div className="flex-1 text-left border-b border-[var(--color-dark-text)] pb-1"><span className="text-[8px] md:text-[10px] uppercase tracking-widest block">January</span></div>
+                        <div className="flex-1 text-left border-b border-[var(--color-dark-text)] pb-1"><span className="text-[7px] md:text-[10px] uppercase tracking-widest block">January</span></div>
 
                      </div>
 
-                     <div className="font-cinzel text-[var(--color-dark-text)] text-base md:text-lg tracking-[0.2em] mb-3 md:mb-4">2569</div>
+                     <div className="font-cinzel text-[var(--color-dark-text)] text-sm md:text-lg tracking-[0.2em] mb-1 md:mb-4">2569</div>
 
-                     <div className="mb-4 md:mb-6">
+                     <div className="mb-2 md:mb-6">
                          <CountdownTimer />
                      </div>
 
                      {/* Dress Code แบบวงกลม */}
                      {config.dressCode && config.dressCode.colors && config.dressCode.colors.length > 0 && (
-                         <div className="w-full mt-4 md:mt-6 px-0 md:px-2 relative z-10 flex flex-col items-center">
-                             <div className="flex items-center gap-2 mb-3 md:mb-4">
+                         <div className="w-full mt-2 md:mt-6 px-0 md:px-2 relative z-10 flex flex-col items-center">
+                             <div className="flex items-center gap-1.5 md:gap-2 mb-2 md:mb-4">
                                  {config.dressCode.label && (
-                                     <Text className="text-[#5c3a58] text-[10px] md:text-xs font-cinzel">
+                                     <Text className="text-[#5c3a58] text-[9px] md:text-xs font-cinzel">
                                          {config.dressCode.label}
                                      </Text>
                                  )}
-                                 <div className="flex items-center gap-2">
+                                 <div className="flex items-center gap-1.5 md:gap-2">
                                      {config.dressCode.colors.map((color, idx) => (
                                          <div
                                              key={idx}
-                                             className="w-6 h-6 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm"
+                                             className="w-5 h-5 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm"
                                              style={{ backgroundColor: color }}
                                          />
                                      ))}
@@ -645,23 +645,23 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                                  href="https://maps.app.goo.gl/zi9XTyNu9tQfmHkv9" 
                                  target="_blank" 
                                  rel="noopener noreferrer" 
-                                 className="mt-2 md:mt-3 flex items-center justify-center gap-2 hover:opacity-80 transition-opacity cursor-pointer no-underline"
+                                 className="mt-1 md:mt-3 flex items-center justify-center gap-1.5 md:gap-2 hover:opacity-80 transition-opacity cursor-pointer no-underline"
                              >
-                                 <EnvironmentOutlined className="text-[#d4af37] text-base md:text-lg" />
-                                 <Text className="text-[#5c3a58] text-sm md:text-base font-semibold font-cinzel tracking-wide">
+                                 <EnvironmentOutlined 
+                                     className="text-[#d4af37]" 
+                                     style={{ fontSize: 'clamp(0.75rem, 2vw, 1.125rem)' }}
+                                 />
+                                 <Text 
+                                     className="text-[#5c3a58] font-semibold font-cinzel tracking-wide"
+                                     style={{ 
+                                         fontSize: 'clamp(0.625rem, 1.8vw, 1rem)'
+                                     }}
+                                 >
                                      ณ เรือนชมมณี นครราชสีมา
                                  </Text>
                              </a>
                          </div>
                      )}
-
-                 </div>
-
-                 {/* UPDATED: Reduce image height on mobile to 25% to allow more space for text */}
-
-                 <div className="absolute bottom-0 left-0 w-full h-[20%] md:h-[45%] z-0">
-
-                     <img src="https://images.unsplash.com/photo-1528459801411-802c6034157a?q=80&w=1975&auto=format&fit=crop" alt="" className="w-full h-full object-cover opacity-90" style={{ maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 50%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 50%, transparent 100%)' }} />
 
                  </div>
 
@@ -671,7 +671,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
             {/* Right: Details */}
 
-            <div className="w-full md:w-7/12 p-4 md:p-10 flex flex-col items-center justify-start text-center relative bg-[#fffdf9] grow overflow-y-auto">
+            <div className="w-full md:w-7/12 p-2 md:p-10 flex flex-col items-center justify-center md:justify-start text-center relative bg-[#fffdf9] grow overflow-y-auto no-scrollbar">
 
                 <div className="absolute inset-0 opacity-30 pointer-events-none" style={{
 
@@ -689,45 +689,45 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                 {/* UPDATED: Reduced vertical margins */}
 
-                <div className="w-full max-w-2xl mb-4 md:mb-6 mt-4 md:mt-6 relative z-10">
+                <div className="w-full max-w-2xl mb-2 md:mb-6 mt-2 md:mt-6 relative z-10">
 
-                    <Text className="text-[#8d6e63] uppercase tracking-[0.15em] text-[8px] md:text-[10px] block mb-3 md:mb-4 font-cinzel">We Invite You To The Wedding Of</Text>
+                    <Text className="text-[#8d6e63] uppercase tracking-[0.15em] text-[7px] md:text-[10px] block mb-1 md:mb-4 font-cinzel">We Invite You To The Wedding Of</Text>
 
                     {/* แสดงชื่อบิดามารดาที่ด้านบนสุด (ก่อนข้อความเชิญ) - ปรับให้ fit หน้าจอ */}
-                    <div className="w-full mb-4 md:mb-6 relative z-10 max-w-full overflow-hidden">
-                        <div className="flex justify-center items-center gap-2 md:gap-4 text-[9px] md:text-xs text-gray-500 mb-1 px-1 md:px-2">
+                    <div className="w-full mb-2 md:mb-6 relative z-10 max-w-full overflow-hidden">
+                        <div className="flex justify-center items-center gap-1.5 md:gap-4 text-[8px] md:text-xs text-gray-500 mb-0.5 px-1 md:px-2">
                             <div className="text-right flex-1 min-w-0 break-words">
-                                <div className="font-bold text-[#5c3a58] mb-1 text-[10px] md:text-xs">ฝ่ายเจ้าสาว</div>
-                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.bride.father}</div>
-                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.bride.mother}</div>
+                                <div className="font-bold text-[#5c3a58] mb-0.5 text-[9px] md:text-xs">ฝ่ายเจ้าสาว</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word', fontSize: 'clamp(0.5rem, 1.5vw, 0.75rem)' }}>{config.parents.bride.father}</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word', fontSize: 'clamp(0.5rem, 1.5vw, 0.75rem)' }}>{config.parents.bride.mother}</div>
                             </div>
                             <div className="flex items-center px-1 md:px-2 shrink-0">
-                                <Text className="text-[#8d6e63] text-[10px] md:text-sm whitespace-nowrap">และ</Text>
+                                <Text className="text-[#8d6e63] text-[9px] md:text-sm whitespace-nowrap">และ</Text>
                             </div>
                             <div className="text-left flex-1 min-w-0 break-words">
-                                <div className="font-bold text-[#5c3a58] mb-1 text-[10px] md:text-xs">ฝ่ายเจ้าบ่าว</div>
-                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.groom.father}</div>
-                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.groom.mother}</div>
+                                <div className="font-bold text-[#5c3a58] mb-0.5 text-[9px] md:text-xs">ฝ่ายเจ้าบ่าว</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word', fontSize: 'clamp(0.5rem, 1.5vw, 0.75rem)' }}>{config.parents.groom.father}</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word', fontSize: 'clamp(0.5rem, 1.5vw, 0.75rem)' }}>{config.parents.groom.mother}</div>
                             </div>
                         </div>
                     </div>
 
                     <h1 
-                        className="text-[#5c3a58] m-0 leading-snug font-script my-2 md:my-3 drop-shadow-sm break-words overflow-wrap-anywhere" 
+                        className="text-[#5c3a58] m-0 leading-snug font-script my-1 md:my-3 drop-shadow-sm break-words overflow-wrap-anywhere" 
                         style={{ 
-                            fontSize: 'clamp(1.5rem, 5vw, 3rem)', 
+                            fontSize: 'clamp(1.25rem, 4vw, 3rem)', 
                             fontStyle: 'normal',
                             wordBreak: 'break-word',
                             overflowWrap: 'anywhere'
                         }}
                     >
-                        {orderedNames.first.nickname} <span className="text-[#d4af37]" style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)' }}>&amp;</span> {orderedNames.second.nickname}
+                        {orderedNames.first.nickname} <span className="text-[#d4af37]" style={{ fontSize: 'clamp(1.25rem, 3.5vw, 2.5rem)' }}>&amp;</span> {orderedNames.second.nickname}
                     </h1>
 
                     <Text 
-                        className="text-[#8d6e63] mt-4 md:mt-6 block font-light break-words overflow-wrap-anywhere px-2" 
+                        className="text-[#8d6e63] mt-2 md:mt-6 block font-light break-words overflow-wrap-anywhere px-2" 
                         style={{ 
-                            fontSize: 'clamp(0.625rem, 2vw, 1rem)',
+                            fontSize: 'clamp(0.5rem, 1.5vw, 1rem)',
                             wordBreak: 'break-word',
                             overflowWrap: 'anywhere'
                         }}
@@ -735,7 +735,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                         ({orderedNames.first.fullNameThai} &amp; {orderedNames.second.fullNameThai})
                     </Text>
 
-                    <Text className="text-[#8d6e63] mt-4 md:mt-6 block text-[10px] md:text-sm px-2 md:px-4 leading-relaxed font-light">
+                    <Text className="text-[#8d6e63] mt-2 md:mt-6 block text-[9px] md:text-sm px-2 md:px-4 leading-tight md:leading-relaxed font-light">
 
                         มีความยินดีขอเรียนเชิญท่านเพื่อเป็นเกียรติและร่วมรับประทานอาหาร<br className="hidden md:block"/>เนื่องในพิธีมงคลสมรส
 
@@ -745,21 +745,21 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                <Divider className="border-[#d4af37] opacity-30 my-3 md:my-5 w-1/2 min-w-[80px] mx-auto relative z-10"><span className="text-[#d4af37] text-sm md:text-lg">✤</span></Divider>
+                <Divider className="border-[#d4af37] opacity-30 my-1 md:my-5 w-1/2 min-w-[80px] mx-auto relative z-10"><span className="text-[#d4af37] text-xs md:text-lg">✤</span></Divider>
 
 
 
-                <div className="w-full grid grid-cols-4 gap-1 md:gap-2 mb-2 md:mb-4 px-0 md:px-2 relative z-10">
+                <div className="w-full grid grid-cols-4 gap-1 md:gap-2 mb-1 md:mb-4 px-0 md:px-2 relative z-10">
 
                     {weddingSchedule.map((item, idx) => (
 
                         <div key={idx} className="flex flex-col items-center">
 
-                            <div className="w-7 h-7 md:w-10 md:h-10 rounded-full bg-white border border-[#d4af37] flex items-center justify-center text-xs md:text-lg mb-1 md:mb-2 shadow-sm text-[#5c3a58]">{item.icon}</div>
+                            <div className="w-6 h-6 md:w-10 md:h-10 rounded-full bg-white border border-[#d4af37] flex items-center justify-center text-[10px] md:text-lg mb-0.5 md:mb-2 shadow-sm text-[#5c3a58]">{item.icon}</div>
 
-                            <div className="text-[#5c3a58] font-bold text-[9px] md:text-xs whitespace-nowrap">{item.time}</div>
+                            <div className="text-[#5c3a58] font-bold text-[8px] md:text-xs whitespace-nowrap">{item.time}</div>
 
-                            <div className="text-gray-400 text-[8px] md:text-[10px] hidden sm:block">{item.title}</div>
+                            <div className="text-gray-400 text-[7px] md:text-[10px] hidden sm:block">{item.title}</div>
 
                         </div>
 
@@ -769,11 +769,11 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                 {/* Custom Music Player UI */}
 
-                <div className="relative z-20 flex flex-col items-center justify-center mt-2 md:mt-4 animate-fade-in bg-[#5c3a58]/5 p-2 rounded-xl border border-[#5c3a58]/10 backdrop-blur-sm w-[90%] max-w-[300px] mx-auto">
+                <div className="relative z-20 flex flex-col items-center justify-center mt-1 md:mt-4 animate-fade-in bg-[#5c3a58]/5 p-1.5 md:p-2 rounded-xl border border-[#5c3a58]/10 backdrop-blur-sm w-[90%] max-w-[300px] mx-auto">
 
-                   <div className="flex items-center gap-3 w-full">
+                   <div className="flex items-center gap-2 md:gap-3 w-full">
 
-                      <div className={`w-10 h-10 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-sm shrink-0 ${isPlaying ? 'animate-spin-slow' : 'paused-spin'}`}>
+                      <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-sm shrink-0 ${isPlaying ? 'animate-spin-slow' : 'paused-spin'}`}>
 
                          <img src={currentTrack.cover} className="w-full h-full object-cover" alt="Cover" />
 
@@ -781,13 +781,13 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                       <div className="flex-1 min-w-0 text-left">
 
-                          <div className="text-[10px] font-bold text-[#5c3a58] truncate">{currentTrack.title}</div>
+                          <div className="text-[9px] md:text-[10px] font-bold text-[#5c3a58] truncate">{currentTrack.title}</div>
 
-                          <div className="text-[9px] text-gray-500 truncate">{currentTrack.artist}</div>
+                          <div className="text-[8px] md:text-[9px] text-gray-500 truncate">{currentTrack.artist}</div>
 
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 md:gap-1">
 
                           {PLAYLIST.length > 1 && (
                               <Button type="text" shape="circle" size="small" icon={<StepBackwardOutlined />} onClick={(e) => {e.stopPropagation(); onPrev();}} className="text-[#5c3a58] hover:bg-[#5c3a58]/10" />
@@ -821,11 +821,11 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                {/* UPDATED: Added pb-8 for bottom spacing */}
+                {/* UPDATED: Added pb-4 for bottom spacing on mobile */}
 
-                <div className="mt-auto pb-8 relative z-10 pt-4 md:pt-6">
+                <div className="mt-auto pb-2 md:pb-8 relative z-10 pt-2 md:pt-6">
 
-                    <Button type="primary" size="large" onClick={onFlip} className="h-10 md:h-12 px-8 md:px-10 text-sm md:text-base font-medium shadow-lg bg-[#5c3a58] hover:bg-[#4a2e46] border-none rounded-sm tracking-wide hover:scale-105 transition-transform">ลงทะเบียนร่วมงาน</Button>
+                    <Button type="primary" size="large" onClick={onFlip} className="h-9 md:h-12 px-6 md:px-10 text-xs md:text-base font-medium shadow-lg bg-[#5c3a58] hover:bg-[#4a2e46] border-none rounded-sm tracking-wide hover:scale-105 transition-transform">ลงทะเบียนร่วมงาน</Button>
 
                 </div>
 
