@@ -698,6 +698,7 @@ export const signInWithFacebook = async (): Promise<void> => {
 // Check for redirect result on page load
 // ต้องเรียกฟังก์ชันนี้ทันทีหลังจาก page load เพื่อเช็คว่าการ redirect สำเร็จหรือไม่
 // ควรเรียกก่อน onAuthStateChanged เพื่อให้ได้รับผลลัพธ์จาก redirect
+// ตามมาตรฐาน Firebase Auth: https://firebase.google.com/docs/auth/web/facebook-login
 export const checkRedirectResult = async (): Promise<User | null> => {
   try {
     const result = await getRedirectResult(auth);
@@ -708,26 +709,28 @@ export const checkRedirectResult = async (): Promise<User | null> => {
     // No redirect result - user didn't come from a redirect
     return null;
   } catch (error: any) {
-    // Handle specific error codes
+    // 🔧 IMPORTANT: Handle critical errors - re-throw เพื่อให้ component จัดการ
     if (error.code === 'auth/account-exists-with-different-credential') {
       console.error('An account already exists with the same email address but different sign-in credentials');
-      throw error;
+      throw error; // Re-throw เพื่อให้ component จัดการ
     }
     if (error.code === 'auth/email-already-in-use') {
       console.error('The email address is already in use by another account');
-      throw error;
+      throw error; // Re-throw เพื่อให้ component จัดการ
     }
     
-    // Handle sessionStorage error - ไม่ throw error เพื่อให้ระบบทำงานต่อ
+    // 🔧 สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
+    // ไม่ควร throw error เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการ)
     if (error.message?.includes('sessionStorage') || 
         error.message?.includes('initial state') ||
         error.message?.includes('missing initial state')) {
-      console.warn('SessionStorage error during redirect - this may happen in webview');
-      // Return null เพื่อให้ระบบทำงานต่อ (user อาจจะ login ด้วยวิธีอื่น)
+      console.warn('SessionStorage error during redirect - this may happen in webview, continuing...');
+      // Return null เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการต่อ)
       return null;
     }
     
-    // Ignore other errors that might occur when checking redirect result
+    // 🔧 สำหรับ error อื่นๆ - return null แทน throw เพื่อไม่ให้ block UI
+    // onAuthStateChanged จะจัดการต่อ
     console.warn('Error checking redirect result:', error);
     return null;
   }

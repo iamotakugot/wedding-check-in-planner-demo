@@ -875,16 +875,28 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     // Check persistent login on mount
     // สำคัญ: ต้องเรียก checkRedirectResult() ก่อน onAuthStateChanged
     // เพื่อให้ได้รับผลลัพธ์จาก redirect login ก่อนที่ auth state จะเปลี่ยน
+    // ตามมาตรฐาน Firebase Auth: https://firebase.google.com/docs/auth/web/facebook-login
     useEffect(() => {
         let isMounted = true;
         let redirectResultHandled = false; // Flag เพื่อป้องกัน race condition
         
         setIsCheckingAuth(true);
 
+        // 🔧 เพิ่ม timeout เพื่อป้องกัน loading ค้าง (10 วินาที)
+        const authTimeout = setTimeout(() => {
+            if (isMounted) {
+                console.warn('Auth check timeout - clearing loading state');
+                setIsCheckingAuth(false);
+            }
+        }, 10000); // 10 seconds timeout
+
         // 1. เช็ค redirect result ก่อน (ถ้ามี redirect result จะได้ผลลัพธ์ทันที)
         checkRedirectResult()
             .then((user) => {
                 if (!isMounted) return;
+                
+                // Clear timeout เมื่อได้ผลลัพธ์แล้ว
+                clearTimeout(authTimeout);
                 
                 if (user) {
                     // User successfully signed in via redirect
@@ -934,13 +946,28 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             .catch((err) => {
                 if (!isMounted) return;
                 
+                // 🔧 IMPORTANT: Clear timeout และ loading state เสมอแม้จะ error
+                clearTimeout(authTimeout);
+                setIsCheckingAuth(false);
+                
                 // Handle specific errors
                 if (err.code === 'auth/account-exists-with-different-credential') {
                     message.error('อีเมลนี้ถูกใช้งานด้วยวิธีอื่นแล้ว กรุณาใช้วิธีเข้าสู่ระบบอื่น');
                 } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-                    console.error('Redirect login error:', err);
+                    // 🔧 สำหรับ Messenger WebView: sessionStorage error ไม่ควรแสดง error message
+                    if (err.message?.includes('sessionStorage') || 
+                        err.message?.includes('initial state') ||
+                        err.message?.includes('missing initial state')) {
+                        console.warn('SessionStorage error in webview - continuing with auth state check');
+                        // ไม่แสดง error message เพื่อไม่ให้ผู้ใช้สับสน
+                    } else {
+                        console.error('Redirect login error:', err);
+                        // แสดง error เฉพาะเมื่อไม่ใช่ sessionStorage error
+                        message.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ กรุณาลองใหม่');
+                    }
                 }
                 // Continue with auth state check even if redirect check fails
+                // onAuthStateChanged จะจัดการต่อ
             });
 
         // 2. Subscribe to auth state changes (สำหรับ persistent login และ logout)
@@ -1040,6 +1067,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
         return () => {
             isMounted = false;
+            clearTimeout(authTimeout); // Clear timeout เมื่อ component unmount
             unsubscribe();
         };
     }, []);
