@@ -21,6 +21,10 @@ import {
   onAuthStateChange,
   checkIsAdmin,
   logout,
+  getAdminAppState,
+  updateAdminAppState,
+  subscribeAdminAppState,
+  getCurrentUser,
 } from '@/services/firebaseService';
 
 const App: React.FC = () => {
@@ -34,15 +38,12 @@ const App: React.FC = () => {
   // Authentication state - ใช้ Firebase Auth แทน sessionStorage
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [appMode, setAppMode] = useState<'admin' | 'guest'>(isGuestPath ? 'guest' : 'admin');
-  const [currentView, setCurrentView] = useState(() => {
-    try {
-      return sessionStorage.getItem('admin_current_view') || '1';
-    } catch {
-      return '1';
-    }
-  });
+  const [currentView, setCurrentView] = useState('1');
   const [isLoading, setIsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
+  
+  // Track ว่า initial state โหลดเสร็จแล้วหรือยัง (ป้องกัน race condition ระหว่าง load และ save)
+  const isInitialStateLoadedRef = useRef(false);
 
   // Also check URL path on mount (for navigation)
   useEffect(() => {
@@ -56,39 +57,102 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // ตรวจสอบ Firebase Authentication state
+  // ตรวจสอบ Firebase Authentication state และ load admin app state
   useEffect(() => {
-    const unsubscribe = onAuthStateChange(async (user) => {
+    let unsubscribeState: (() => void) | null = null;
+    
+    const unsubscribe = onAuthStateChange((user) => {
       setAuthLoading(true);
+      
+      // Reset flag เมื่อเริ่ม auth state ใหม่
+      isInitialStateLoadedRef.current = false;
+      
+      // Unsubscribe จาก subscription เก่าก่อน (ป้องกัน memory leak เมื่อ token refresh)
+      if (unsubscribeState) {
+        unsubscribeState();
+        unsubscribeState = null;
+      }
       
       if (user) {
         // มี user login แล้ว - ตรวจสอบว่าเป็น admin หรือไม่
-        try {
-          const adminStatus = await checkIsAdmin(user.uid);
-          setIsAuthenticated(adminStatus);
-        } catch (error) {
-          console.error('Error checking admin status:', error);
-          setIsAuthenticated(false);
-        }
+        // ใช้ promise chain แทน async/await เพราะ Firebase Auth callback ไม่รองรับ async
+        checkIsAdmin(user.uid)
+          .then((adminStatus) => {
+            setIsAuthenticated(adminStatus);
+            
+            // ถ้าเป็น admin ให้ load และ subscribe app state
+            if (adminStatus) {
+              // Load initial state จาก Firebase
+              getAdminAppState(user.uid)
+                .then((state) => {
+                  if (state?.currentView) {
+                    setCurrentView(state.currentView);
+                  }
+                  // Mark ว่า initial state โหลดเสร็จแล้ว (แม้จะไม่มี state ก็ถือว่าโหลดเสร็จ)
+                  isInitialStateLoadedRef.current = true;
+                })
+                .catch((error) => {
+                  console.error('Error loading admin app state:', error);
+                  // Mark ว่าโหลดเสร็จแล้วแม้จะ error (เพื่อไม่ให้ block การบันทึกถัดไป)
+                  isInitialStateLoadedRef.current = true;
+                });
+
+              // Subscribe to state changes จาก Firebase (sync ระหว่างแท็บ/อุปกรณ์)
+              unsubscribeState = subscribeAdminAppState(user.uid, (state) => {
+                if (state?.currentView) {
+                  setCurrentView(state.currentView);
+                }
+              });
+            } else {
+              // ไม่ใช่ admin - mark ว่าโหลดเสร็จแล้ว
+              isInitialStateLoadedRef.current = true;
+            }
+            
+            setAuthLoading(false);
+          })
+          .catch((error) => {
+            console.error('Error checking admin status:', error);
+            setIsAuthenticated(false);
+            isInitialStateLoadedRef.current = true; // Mark ว่าเสร็จแล้วแม้จะ error
+            setAuthLoading(false);
+          });
       } else {
-        // ไม่มี user login
+        // ไม่มี user login - reset state
         setIsAuthenticated(false);
+        setCurrentView('1');
+        isInitialStateLoadedRef.current = true; // Mark ว่าเสร็จแล้ว
+        setAuthLoading(false);
       }
-      
-      setAuthLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeState) {
+        unsubscribeState();
+      }
+    };
   }, []);
 
-  // Save currentView to sessionStorage
+  // Save currentView ไปยัง Firebase Realtime Database
   useEffect(() => {
-    try {
-      sessionStorage.setItem('admin_current_view', currentView);
-    } catch (e) {
-      console.error('Error saving current view', e);
-    }
-  }, [currentView]);
+    if (!isAuthenticated) return;
+    
+    // Skip การบันทึกถ้ายังไม่โหลด initial state เสร็จ (ป้องกัน race condition)
+    if (!isInitialStateLoadedRef.current) return;
+    
+    const user = getCurrentUser();
+    if (!user) return;
+    
+    // Debounce เพื่อป้องกันการ update บ่อยเกินไป
+    const timeoutId = setTimeout(() => {
+      updateAdminAppState(user.uid, { currentView })
+        .catch((error) => {
+          console.error('Error saving admin app state:', error);
+        });
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [currentView, isAuthenticated]);
 
   // Central State Management
   const [guests, setGuests] = useState<Guest[]>([]);

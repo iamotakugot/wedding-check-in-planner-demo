@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-object-injection */
-import { ref, get, set, push, update, remove, onValue, off, DataSnapshot } from 'firebase/database';
+import { ref, get, set, push, update, remove, onValue, DataSnapshot, onDisconnect } from 'firebase/database';
 import { 
   signInWithEmailAndPassword, 
   signOut, 
@@ -111,7 +111,7 @@ export const subscribeGuests = (callback: (guests: Guest[]) => void): () => void
     const guests = Object.keys(data).map(key => ({ id: key, ...data[key] }));
     callback(guests);
   });
-  return () => off(guestsRef(), 'value', unsubscribe);
+  return unsubscribe;
 };
 
 // ============================================================================
@@ -152,7 +152,7 @@ export const subscribeZones = (callback: (zones: Zone[]) => void): () => void =>
     const zones = Object.keys(data).map(key => ({ id: key, ...data[key] }));
     callback(zones);
   });
-  return () => off(zonesRef(), 'value', unsubscribe);
+  return unsubscribe;
 };
 
 // ============================================================================
@@ -193,7 +193,7 @@ export const subscribeTables = (callback: (tables: TableData[]) => void): () => 
     const tables = Object.keys(data).map(key => ({ id: key, ...data[key] }));
     callback(tables);
   });
-  return () => off(tablesRef(), 'value', unsubscribe);
+  return unsubscribe;
 };
 
 // ============================================================================
@@ -375,7 +375,7 @@ export const subscribeRSVPs = (callback: (rsvps: RSVPData[]) => void): () => voi
     });
     callback(rsvps);
   });
-  return () => off(rsvpsRef(), 'value', unsubscribe);
+  return unsubscribe;
 };
 
 export const updateRSVP = async (id: string, updates: Partial<RSVPData>): Promise<void> => {
@@ -560,6 +560,45 @@ export const onAuthStateChange = (callback: (user: User | null) => void): (() =>
   return onAuthStateChanged(auth, callback);
 };
 
+// ============================================================================
+// HELPER FUNCTIONS - WebView Detection
+// ============================================================================
+
+/**
+ * ตรวจสอบว่าอยู่ใน webview environment หรือไม่
+ * เช่น LINE, Facebook Messenger, Instagram, Twitter ฯลฯ
+ */
+const isInWebView = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  
+  const userAgent = window.navigator.userAgent || '';
+  const webViewPatterns = [
+    /FBAN|FBAV/i,           // Facebook
+    /Line/i,                // LINE
+    /Instagram/i,           // Instagram
+    /Twitter/i,             // Twitter/X
+    /LinkedInApp/i,         // LinkedIn
+    /wv/i,                  // Android WebView
+    /Mobile.*Safari/i       // iOS WebView (บางกรณี)
+  ];
+  
+  return webViewPatterns.some(pattern => pattern.test(userAgent));
+};
+
+/**
+ * ตรวจสอบว่า sessionStorage สามารถใช้งานได้หรือไม่
+ */
+const isSessionStorageAvailable = (): boolean => {
+  try {
+    const testKey = '__sessionStorage_test__';
+    sessionStorage.setItem(testKey, 'test');
+    sessionStorage.removeItem(testKey);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 // Social Authentication
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider();
@@ -578,10 +617,55 @@ facebookProvider.setCustomParameters({
 });
 
 export const signInWithGoogle = async (): Promise<void> => {
-  // พยายามใช้ Popup ก่อนเพื่อ UX ที่ดีกว่า ถ้าถูกบล็อก/ไม่รองรับ ค่อย fallback เป็น Redirect
+  // Google: ใช้ redirect เลยเพื่อให้เด้งออกไป browser ภายนอก
+  // เพราะ Google popup มักมีปัญหาใน webview (LINE, Messenger ฯลฯ)
+  // และ redirect จะทำให้เด้งออกไป browser ที่ใช้งานได้ดีกว่า
   try {
-    await signInWithPopup(auth, googleProvider);
-    // สำเร็จด้วย popup → onAuthStateChanged จะ trigger ต่อเอง
+    // ใช้ redirect โดยตรง - จะเด้งออกไป browser ภายนอก
+    await signInWithRedirect(auth, googleProvider);
+    // หน้าเพจจะ redirect ไป Google และกลับมาหลัง login สำเร็จ
+    return;
+  } catch (error: any) {
+    // ถ้า redirect ล้มเหลวเพราะ sessionStorage ให้ลอง popup
+    if (error.message?.includes('sessionStorage') || 
+        error.message?.includes('initial state') ||
+        error.message?.includes('missing initial state')) {
+      console.warn('Redirect failed, trying popup instead...');
+      try {
+        await signInWithPopup(auth, googleProvider);
+        return;
+      } catch (popupError: any) {
+        // ถ้า popup ก็ไม่ได้ ให้ throw error
+        throw new Error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองเปิดในเบราว์เซอร์ภายนอก (Chrome, Safari)');
+      }
+    }
+    throw error;
+  }
+};
+
+export const signInWithFacebook = async (): Promise<void> => {
+  // Facebook: พยายามใช้ popup ก่อน (ทำงานได้ดีใน Messenger)
+  // ถ้าไม่ได้ค่อย fallback เป็น redirect (จะเด้งออกไป browser)
+  const inWebView = isInWebView();
+  const sessionStorageAvailable = isSessionStorageAvailable();
+  
+  // ถ้า sessionStorage ไม่ได้และอยู่ใน webview ให้ใช้ popup เท่านั้น
+  if (!sessionStorageAvailable && inWebView) {
+    try {
+      await signInWithPopup(auth, facebookProvider);
+      return;
+    } catch (error: any) {
+      // ถ้า popup ถูกบล็อก ให้แนะนำผู้ใช้
+      if (error.code === 'auth/popup-blocked') {
+        throw new Error('กรุณาอนุญาตป๊อปอัป หรือกดปุ่ม "เปิดในเบราว์เซอร์" เพื่อเข้าสู่ระบบ');
+      }
+      throw error;
+    }
+  }
+  
+  // ถ้า sessionStorage ได้ ให้ลอง popup ก่อน
+  try {
+    await signInWithPopup(auth, facebookProvider);
     return;
   } catch (error: any) {
     // Fallback เป็น redirect สำหรับกรณี popup ถูกบล็อกหรือ environment ไม่รองรับ
@@ -591,29 +675,21 @@ export const signInWithGoogle = async (): Promise<void> => {
       'auth/cancelled-popup-request',
       'auth/operation-not-supported-in-this-environment',
     ]);
+    
     if (error && error.code && fallbackCodes.has(error.code)) {
-      await signInWithRedirect(auth, googleProvider);
-      return;
-    }
-    throw error;
-  }
-};
-
-export const signInWithFacebook = async (): Promise<void> => {
-  // พยายามใช้ Popup ก่อน ถ้าถูกบล็อก/ไม่รองรับ ค่อย fallback เป็น Redirect
-  try {
-    await signInWithPopup(auth, facebookProvider);
-    return;
-  } catch (error: any) {
-    const fallbackCodes = new Set([
-      'auth/popup-blocked',
-      'auth/popup-closed-by-user',
-      'auth/cancelled-popup-request',
-      'auth/operation-not-supported-in-this-environment',
-    ]);
-    if (error && error.code && fallbackCodes.has(error.code)) {
-      await signInWithRedirect(auth, facebookProvider);
-      return;
+      try {
+        // ใช้ redirect - จะเด้งออกไป browser ภายนอก
+        await signInWithRedirect(auth, facebookProvider);
+        return;
+      } catch (redirectError: any) {
+        // ถ้า redirect ล้มเหลวเพราะ sessionStorage
+        if (redirectError.message?.includes('sessionStorage') || 
+            redirectError.message?.includes('initial state') ||
+            redirectError.message?.includes('missing initial state')) {
+          throw new Error('กรุณากดปุ่ม "เปิดในเบราว์เซอร์" เพื่อเข้าสู่ระบบ (Chrome, Safari)');
+        }
+        throw redirectError;
+      }
     }
     throw error;
   }
@@ -641,8 +717,321 @@ export const checkRedirectResult = async (): Promise<User | null> => {
       console.error('The email address is already in use by another account');
       throw error;
     }
+    
+    // Handle sessionStorage error - ไม่ throw error เพื่อให้ระบบทำงานต่อ
+    if (error.message?.includes('sessionStorage') || 
+        error.message?.includes('initial state') ||
+        error.message?.includes('missing initial state')) {
+      console.warn('SessionStorage error during redirect - this may happen in webview');
+      // Return null เพื่อให้ระบบทำงานต่อ (user อาจจะ login ด้วยวิธีอื่น)
+      return null;
+    }
+    
     // Ignore other errors that might occur when checking redirect result
     console.warn('Error checking redirect result:', error);
     return null;
   }
 };
+
+// ============================================================================
+// SESSION MANAGEMENT
+// ============================================================================
+
+export const userSessionsRef = (uid: string) => ref(database, `userSessions/${uid}`);
+export const userSessionIsOnlineRef = (uid: string) => ref(database, `userSessions/${uid}/isOnline`);
+export const userSessionStartedAtRef = (uid: string) => ref(database, `userSessions/${uid}/startedAt`);
+
+/**
+ * สร้าง session ใหม่หลังจาก login สำเร็จ
+ * จะเช็คว่ามี session อื่น active อยู่หรือไม่ (เช็ค isOnline === 1)
+ */
+export const registerSession = async (user: User): Promise<{ hasOtherActiveSession: boolean; otherSessionStartedAt?: string; startedAt: string }> => {
+  const uid = user.uid;
+  const startedAt = new Date().toISOString();
+  
+  // เช็คว่ามี session อื่น active อยู่หรือไม่ (isOnline === 1)
+  const isOnline = await getIsOnline(uid);
+  let otherSessionStartedAt: string | undefined;
+  
+  if (isOnline) {
+    // มี session อื่น active อยู่ - ดึงเวลาเริ่มต้นของ session อื่น
+    const sessionInfo = await getSessionInfo(uid);
+    otherSessionStartedAt = sessionInfo?.startedAt;
+    
+    // ใช้ atomic update เพื่อ set ทั้ง isOnline และ startedAt พร้อมกัน
+    // ไม่ต้อง set isOnline = 0 ก่อน เพื่อป้องกัน session อื่น logout โดยไม่ตั้งใจ
+    // Session listener จะเช็ค startedAt เปลี่ยนหรือไม่เพื่อตรวจจับการยึด session
+    const sessionRef = userSessionsRef(uid);
+    await update(sessionRef, {
+      isOnline: 1,
+      startedAt: startedAt,
+    });
+    
+    // ตั้งค่า onDisconnect เพื่อ set isOnline = 0 เมื่อแท็บปิด
+    // await เพื่อให้แน่ใจว่า server ได้รับการยืนยันและจัดการ error ได้
+    const isOnlineRef = userSessionIsOnlineRef(uid);
+    await onDisconnect(isOnlineRef).set(0);
+    
+    return {
+      hasOtherActiveSession: true,
+      otherSessionStartedAt,
+      startedAt,
+    };
+  }
+  
+  // ไม่มี session อื่น active อยู่ - ใช้ atomic update เพื่อ set ทั้ง isOnline และ startedAt พร้อมกัน
+  const sessionRef = userSessionsRef(uid);
+  await update(sessionRef, {
+    isOnline: 1,
+    startedAt: startedAt,
+  });
+  
+  // ตั้งค่า onDisconnect เพื่อ set isOnline = 0 เมื่อแท็บปิด
+  // await เพื่อให้แน่ใจว่า server ได้รับการยืนยันและจัดการ error ได้
+  const isOnlineRef = userSessionIsOnlineRef(uid);
+  await onDisconnect(isOnlineRef).set(0);
+  
+  return {
+    hasOtherActiveSession: false,
+    startedAt,
+  };
+};
+
+/**
+ * เช็คว่ามี session active อยู่หรือไม่ (isOnline === 1)
+ */
+export const getIsOnline = async (uid: string): Promise<boolean> => {
+  try {
+    const snapshot = await get(userSessionIsOnlineRef(uid));
+    if (!snapshot.exists()) return false;
+    return snapshot.val() === 1;
+  } catch (error) {
+    console.error('Error getting isOnline:', error);
+    return false;
+  }
+};
+
+/**
+ * ดึงข้อมูล session (isOnline และ startedAt)
+ */
+export const getSessionInfo = async (uid: string): Promise<{ isOnline: boolean; startedAt?: string } | null> => {
+  try {
+    const [isOnlineSnapshot, startedAtSnapshot] = await Promise.all([
+      get(userSessionIsOnlineRef(uid)),
+      get(userSessionStartedAtRef(uid)),
+    ]);
+    
+    if (!isOnlineSnapshot.exists()) return null;
+    
+    return {
+      isOnline: isOnlineSnapshot.val() === 1,
+      startedAt: startedAtSnapshot.exists() ? startedAtSnapshot.val() : undefined,
+    };
+  } catch (error) {
+    console.error('Error getting session info:', error);
+    return null;
+  }
+};
+
+/**
+ * ปิด session (set isOnline = 0)
+ * ใช้เมื่อ logout หรือเมื่อต้องการปิด session
+ */
+export const endSession = async (uid: string): Promise<void> => {
+  const isOnlineRef = userSessionIsOnlineRef(uid);
+  await set(isOnlineRef, 0);
+  // ไม่ต้องลบ startedAt เพื่อเก็บประวัติ
+};
+
+/**
+ * เตะ session อื่นออก (set isOnline = 0)
+ */
+export const forceEndSession = async (uid: string): Promise<void> => {
+  await endSession(uid);
+};
+
+/**
+ * Subscribe เพื่อเช็คว่า session ถูกปิดหรือไม่ (ถูกเตะออก)
+ * จะ subscribe ทั้ง isOnline และ startedAt เพื่อตรวจจับการยึด session
+ * - ถ้า isOnline === 0 → logout (logout จริงๆ)
+ * - ถ้า startedAt เปลี่ยน → session ถูกยึด (ต้อง logout)
+ */
+export const subscribeSessionChanges = (
+  uid: string,
+  callback: (isOnline: boolean, startedAt?: string) => void
+): (() => void) => {
+  const sessionRef = userSessionsRef(uid);
+  
+  const unsubscribe = onValue(sessionRef, (snapshot: DataSnapshot) => {
+    if (!snapshot.exists()) {
+      // session ไม่มีค่า → ถูกลงชื่อออก
+      callback(false);
+      return;
+    }
+    
+    const data = snapshot.val();
+    const isOnline = data?.isOnline === 1;
+    const startedAt = data?.startedAt;
+    
+    // ถ้า isOnline === 0 → ถูกลงชื่อออก (logout จริงๆ)
+    if (!isOnline) {
+      callback(false, startedAt);
+      return;
+    }
+    
+    // isOnline === 1 → ยัง active อยู่ (แต่ต้องเช็ค startedAt ใน component ว่าเปลี่ยนหรือไม่)
+    callback(true, startedAt);
+  });
+  
+  return unsubscribe;
+};
+
+// ============================================================================
+// USER APP STATE (สำหรับ Guest RSVP App)
+// ============================================================================
+
+export const userAppStateRef = (uid: string) => ref(database, `userAppState/${uid}`);
+
+export interface UserAppState {
+  isFlipped?: boolean;
+  musicPlaying?: boolean;
+  hasStarted?: boolean;
+  currentTrackIndex?: number;
+  updatedAt?: string;
+}
+
+/**
+ * ดึงข้อมูล app state ของ user จาก Firebase Realtime Database
+ */
+export const getUserAppState = async (uid: string): Promise<UserAppState | null> => {
+  try {
+    const snapshot = await get(userAppStateRef(uid));
+    if (!snapshot.exists()) return null;
+    return snapshot.val();
+  } catch (error) {
+    console.error('Error getting user app state:', error);
+    return null;
+  }
+};
+
+/**
+ * อัพเดท app state ของ user ใน Firebase Realtime Database
+ */
+export const updateUserAppState = async (uid: string, updates: Partial<UserAppState>): Promise<void> => {
+  try {
+    const user = getCurrentUser();
+    if (!user || user.uid !== uid) {
+      throw new Error('ไม่มีสิทธิ์แก้ไข state ของ user อื่น');
+    }
+    
+    // Remove undefined fields ก่อนบันทึก
+    const cleanUpdates: Record<string, unknown> = {};
+    Object.keys(updates).forEach(key => {
+      const value = (updates as Record<string, unknown>)[key];
+      if (value !== undefined) {
+        cleanUpdates[key] = value;
+      }
+    });
+    
+    await update(userAppStateRef(uid), {
+      ...cleanUpdates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error updating user app state:', error);
+    throw error;
+  }
+};
+
+/**
+ * Subscribe เพื่อรับการเปลี่ยนแปลง app state ของ user แบบ real-time
+ */
+export const subscribeUserAppState = (
+  uid: string,
+  callback: (state: UserAppState | null) => void
+): (() => void) => {
+  const unsubscribe = onValue(userAppStateRef(uid), (snapshot: DataSnapshot) => {
+    if (!snapshot.exists()) {
+      callback(null);
+      return;
+    }
+    callback(snapshot.val());
+  });
+  return unsubscribe;
+};
+
+// ============================================================================
+// ADMIN APP STATE (สำหรับ Admin Panel)
+// ============================================================================
+
+export const adminAppStateRef = (uid: string) => ref(database, `adminAppState/${uid}`);
+
+export interface AdminAppState {
+  currentView?: string;
+  updatedAt?: string;
+}
+
+/**
+ * ดึงข้อมูล app state ของ admin จาก Firebase Realtime Database
+ */
+export const getAdminAppState = async (uid: string): Promise<AdminAppState | null> => {
+  try {
+    const snapshot = await get(adminAppStateRef(uid));
+    if (!snapshot.exists()) return null;
+    return snapshot.val();
+  } catch (error) {
+    console.error('Error getting admin app state:', error);
+    return null;
+  }
+};
+
+/**
+ * อัพเดท app state ของ admin ใน Firebase Realtime Database
+ */
+export const updateAdminAppState = async (uid: string, updates: Partial<AdminAppState>): Promise<void> => {
+  try {
+    const user = getCurrentUser();
+    if (!user || user.uid !== uid) {
+      throw new Error('ไม่มีสิทธิ์แก้ไข state ของ admin อื่น');
+    }
+    const isAdmin = await checkIsAdmin(uid);
+    if (!isAdmin) {
+      throw new Error('ไม่มีสิทธิ์เข้าถึง Admin App State');
+    }
+    
+    // Remove undefined fields ก่อนบันทึก
+    const cleanUpdates: Record<string, unknown> = {};
+    Object.keys(updates).forEach(key => {
+      const value = (updates as Record<string, unknown>)[key];
+      if (value !== undefined) {
+        cleanUpdates[key] = value;
+      }
+    });
+    
+    await update(adminAppStateRef(uid), {
+      ...cleanUpdates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error updating admin app state:', error);
+    throw error;
+  }
+};
+
+/**
+ * Subscribe เพื่อรับการเปลี่ยนแปลง app state ของ admin แบบ real-time
+ */
+export const subscribeAdminAppState = (
+  uid: string,
+  callback: (state: AdminAppState | null) => void
+): (() => void) => {
+  const unsubscribe = onValue(adminAppStateRef(uid), (snapshot: DataSnapshot) => {
+    if (!snapshot.exists()) {
+      callback(null);
+      return;
+    }
+    callback(snapshot.val());
+  });
+  return unsubscribe;
+};
+

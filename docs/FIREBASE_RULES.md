@@ -39,6 +39,19 @@
       },
       ".read": false,
       ".write": false
+    },
+    "userSessions": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "isOnline": {
+          ".write": "auth != null && auth.uid === $uid"
+        },
+        "startedAt": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      },
+      ".read": false,
+      ".write": false
     }
   }
 }
@@ -76,6 +89,31 @@
 - **อ่าน**: User สามารถอ่าน `/admins/{uid}` ของตัวเองได้ (เพื่อตรวจสอบ admin status)
 - **เขียน**: ไม่มีใครสามารถเขียนได้ (ป้องกันการแก้ไขสิทธิ์)
 - **หมายเหตุ**: User ไม่สามารถอ่าน `/admins` ทั้งหมดหรือ UID ของคนอื่นได้
+
+### User Sessions
+- **อ่าน**: User สามารถอ่าน `/userSessions/{uid}/isOnline` และ `/userSessions/{uid}/startedAt` ของตัวเองได้ (เพื่อเช็คว่ามีการ login และเวลาเริ่มต้น)
+- **เขียน**: User สามารถเขียน `/userSessions/{uid}/isOnline` และ `/userSessions/{uid}/startedAt` ของตัวเองได้ (set `isOnline: 1` หรือ `0` และ `startedAt`)
+- **โครงสร้างข้อมูล**:
+  ```json
+  {
+    "userSessions": {
+      "{uid}": {
+        "isOnline": 1,
+        "startedAt": "2025-11-22T12:00:00.000Z"
+      }
+    }
+  }
+  ```
+- **การใช้**: 
+  - ใช้สำหรับติดตาม session ที่ active ของ user แต่ละคน (ใช้ flag `isOnline: 0/1` และเก็บเวลา `startedAt`)
+  - **Real-time State**: ข้อมูลใน Firebase Realtime Database เป็น **state** ที่ sync แบบ real-time อัตโนมัติ
+  - เมื่อ login สำเร็จ → set `isOnline: 1` และ `startedAt` เป็น timestamp ปัจจุบัน
+  - เมื่อ logout → set `isOnline: 0` (เก็บ `startedAt` ไว้เพื่อแสดงประวัติ)
+  - เมื่อแท็บปิด → `onDisconnect` จะ set `isOnline: 0` อัตโนมัติ
+  - ถ้า `isOnline === 1` เมื่อ login → แจ้งเตือนว่ามีการ login จากที่อื่น พร้อมแสดงเวลา `startedAt`
+  - ถ้าต้องการ login ใหม่ → เตะ session เก่าออก (set `isOnline: 0`) แล้ว set `isOnline: 1` และ `startedAt` ใหม่
+  - **Real-time Sync**: เมื่อ `isOnline` หรือ `startedAt` เปลี่ยนใน Firebase → ทุกอุปกรณ์ที่ subscribe จะรับรู้การเปลี่ยนแปลงทันที
+  - **สำคัญ**: วิธีนี้เรียบง่าย เช็คได้เร็ว เก็บเวลาไว้แสดงใน Modal ได้ และยัง sync แบบ real-time อัตโนมัติ
 
 ---
 
@@ -143,6 +181,10 @@
 - ✅ `tables` - โต๊ะ
 - ✅ `rsvps` - การตอบรับจากแขก
 - ✅ `config` - การตั้งค่าระบบ
+- ✅ `userSessions` - **session state** สำหรับตรวจสอบการ login จากหลายอุปกรณ์
+  - `userSessions/{uid}/isOnline` - state ที่บอกว่ามีการ login หรือไม่ (0/1)
+  - `userSessions/{uid}/startedAt` - state ที่บอกเวลาเริ่มต้น session
+  - เมื่อ state เปลี่ยน → ทุกอุปกรณ์ที่ subscribe จะรับรู้การเปลี่ยนแปลงทันที (real-time)
 
 ---
 

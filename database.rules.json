@@ -1,0 +1,64 @@
+{
+  "rules": {
+    "guests": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      "$guestId": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || data.child('rsvpUid').val() === auth.uid)",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (data.exists() && data.child('rsvpUid').val() === auth.uid && newData.child('rsvpUid').val() === auth.uid) || (!data.exists() && newData.child('rsvpUid').val() === auth.uid))",
+        ".validate": "!newData.exists() || root.child('admins').child(auth.uid).exists() || newData.child('rsvpUid').val() === auth.uid"
+      }
+    },
+    "zones": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+    },
+    "tables": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+    },
+    "rsvps": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "config": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+    },
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      },
+      ".read": false,
+      ".write": false
+    },
+    "userSessions": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "isOnline": {
+          ".write": "auth != null && auth.uid === $uid"
+        },
+        "startedAt": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      },
+      ".read": false,
+      ".write": false
+    },
+    "userAppState": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      },
+      ".read": false,
+      ".write": false
+    },
+    "adminAppState": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid && root.child('admins').child(auth.uid).exists()",
+        ".write": "auth != null && auth.uid === $uid && root.child('admins').child(auth.uid).exists()"
+      },
+      ".read": false,
+      ".write": false
+    }
+  }
+}

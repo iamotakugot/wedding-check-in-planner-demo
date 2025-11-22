@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-object-injection */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Card,
   Typography,
@@ -13,6 +13,7 @@ import {
   Tag,
   Select,
   Spin,
+  Modal,
 } from 'antd';
 import {
   UsergroupAddOutlined,
@@ -48,7 +49,13 @@ import {
   createGuestFromRSVP, // Import createGuestFromRSVP
   getGuest, // Import getGuest
   updateGuestFromRSVP, // Import updateGuestFromRSVP
-  getCurrentUser // Import getCurrentUser for fallback
+  getCurrentUser, // Import getCurrentUser for fallback
+  registerSession, // Import registerSession
+  endSession, // Import endSession
+  subscribeSessionChanges, // Import subscribeSessionChanges
+  getUserAppState, // Import getUserAppState
+  updateUserAppState, // Import updateUserAppState
+  subscribeUserAppState // Import subscribeUserAppState
 } from '@/services/firebaseService';
 import type { RSVPData as FirebaseRSVPData } from '@/services/firebaseService';
 import type { User } from 'firebase/auth';
@@ -853,6 +860,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     // เพิ่ม state สำหรับเช็คสถานะเริ่มต้น
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
     const [isLoadingRSVP, setIsLoadingRSVP] = useState(false);
+    // เพิ่ม state สำหรับ session management
+    const [sessionWarning, setSessionWarning] = useState<{ hasOtherSession: boolean; otherSessionStartedAt?: string } | null>(null);
+    // เพิ่ม ref เพื่อป้องกันการ logout ซ้ำ
+    const isLoggingOutRef = useRef(false);
+    const sessionLogoutTriggeredRef = useRef(false);
+    // เพิ่ม flag เพื่อเช็คว่ายังอยู่ใน initial session setup หรือไม่
+    const isInitialSessionSetupRef = useRef(true);
+    // เพิ่ม ref เพื่อ track ว่า session registration กำลังดำเนินการอยู่หรือไม่
+    const isRegisteringSessionRef = useRef(false);
+    // เพิ่ม ref เพื่อเก็บ startedAt ของ session ปัจจุบัน (ใช้เช็คว่า session ถูกยึดหรือไม่)
+    const currentSessionStartedAtRef = useRef<string | null>(null);
 
     // Check persistent login on mount
     // สำคัญ: ต้องเรียก checkRedirectResult() ก่อน onAuthStateChanged
@@ -877,6 +895,36 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     setUserInfo(user);
                     setIsCheckingAuth(false);
                     message.success('เข้าสู่ระบบสำเร็จ');
+                    
+                    // สร้าง session ใหม่หลังจาก redirect login
+                    // ใช้ async IIFE เพื่อให้สามารถใช้ await ได้
+                    (async () => {
+                        try {
+                            // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
+                            isRegisteringSessionRef.current = true;
+                            
+                            const sessionResult = await registerSession(user);
+                            if (!isMounted) return;
+                            
+                            // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
+                            isInitialSessionSetupRef.current = false;
+                            isRegisteringSessionRef.current = false;
+                            currentSessionStartedAtRef.current = sessionResult.startedAt;
+                            
+                            if (sessionResult.hasOtherActiveSession) {
+                                // มี session อื่น active อยู่ → แสดง warning
+                                setSessionWarning({
+                                    hasOtherSession: true,
+                                    otherSessionStartedAt: sessionResult.otherSessionStartedAt,
+                                });
+                            }
+                        } catch (sessionError) {
+                            console.error('Error registering session:', sessionError);
+                            // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
+                            isInitialSessionSetupRef.current = false;
+                            isRegisteringSessionRef.current = false;
+                        }
+                    })();
                 } else {
                     // No redirect result, continue with auth state check
                     // onAuthStateChanged จะจัดการต่อ
@@ -897,8 +945,22 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
         // 2. Subscribe to auth state changes (สำหรับ persistent login และ logout)
         // ไม่ใช้ setTimeout เพื่อให้ state อัปเดตทันที
+        let isInitialAuthCheck = true; // เพิ่ม flag เพื่อเช็คว่าเป็น initial check หรือไม่
+        
         const unsubscribe = onAuthStateChange((user) => {
             if (!isMounted) return;
+            
+            // ถ้าเป็น initial check และไม่มี user ให้ข้าม (ไม่ log "User logged out")
+            if (isInitialAuthCheck && !user) {
+                isInitialAuthCheck = false;
+                setIsCheckingAuth(false);
+                return;
+            }
+            
+            // หลังจาก initial check แล้ว ให้ตั้ง flag เป็น false
+            if (isInitialAuthCheck) {
+                isInitialAuthCheck = false;
+            }
             
             // ถ้า redirect result จัดการแล้ว ให้เช็คว่า user เปลี่ยนหรือไม่ (เช่น logout แล้ว login ใหม่)
             if (redirectResultHandled && user) {
@@ -925,7 +987,45 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
                 setUserInfo(user);
+                
+                // สร้าง session ใหม่ (กรณี persistent login)
+                // แต่ถ้ามีการ register session อยู่แล้ว (เช่น จาก handleLogin) → ข้าม
+                // เพื่อป้องกันการเรียก registerSession() ซ้ำซ้อน
+                if (!isRegisteringSessionRef.current) {
+                    // ใช้ async IIFE เพื่อให้สามารถใช้ await ได้
+                    (async () => {
+                            try {
+                                // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
+                                isRegisteringSessionRef.current = true;
+                                
+                                const sessionResult = await registerSession(user);
+                                if (!isMounted) return;
+                                
+                                // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
+                                isInitialSessionSetupRef.current = false;
+                                isRegisteringSessionRef.current = false;
+                                currentSessionStartedAtRef.current = sessionResult.startedAt;
+                                
+                                if (sessionResult.hasOtherActiveSession) {
+                                    // มี session อื่น active อยู่ → แสดง warning
+                                    setSessionWarning({
+                                        hasOtherSession: true,
+                                        otherSessionStartedAt: sessionResult.otherSessionStartedAt,
+                                    });
+                                }
+                            } catch (sessionError) {
+                                console.error('Error registering session:', sessionError);
+                                // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
+                                isInitialSessionSetupRef.current = false;
+                                isRegisteringSessionRef.current = false;
+                            }
+                    })();
+                } else {
+                    // มีการ register session อยู่แล้ว → ข้าม (handleLogin กำลังจัดการอยู่)
+                    console.log('⏭️ Skipping session registration - already in progress');
+                }
             } else {
+                // Log เฉพาะเมื่อ logout จริงๆ (ไม่ใช่ initial check)
                 console.log('User logged out');
                 setIsLoggedIn(false);
                 setCurrentUser(null);
@@ -989,6 +1089,84 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         loadUserRSVP();
     }, [currentUser, isLoggedIn, form, userInfo]);
 
+    // Subscribe เพื่อเช็คว่า session ถูกเตะออกหรือไม่
+    useEffect(() => {
+        if (!currentUser) return;
+
+        // Reset flag เมื่อ currentUser เปลี่ยน
+        sessionLogoutTriggeredRef.current = false;
+        // Reset initial setup flag เมื่อ currentUser เปลี่ยน (ต้องสร้าง session ใหม่)
+        // แต่ถ้ามีการ register session อยู่แล้ว (isRegisteringSessionRef.current === true)
+        // อย่า reset flag เพราะ handleLogin กำลังจัดการอยู่
+        if (!isRegisteringSessionRef.current) {
+            isInitialSessionSetupRef.current = true;
+        }
+        // Reset startedAt เมื่อ currentUser เปลี่ยน (session ใหม่)
+        currentSessionStartedAtRef.current = null;
+        
+        // เพิ่ม flag เพื่อ log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue)
+        let hasLoggedInitialSetup = false;
+
+        const unsubscribe = subscribeSessionChanges(currentUser, (isOnline, startedAt) => {
+            // ป้องกันการเรียกซ้ำ
+            if (sessionLogoutTriggeredRef.current || isLoggingOutRef.current) return;
+            
+            // ✅ ถ้ายังอยู่ใน initial setup phase (ยังไม่สร้าง session เสร็จ) → ไม่ต้อง logout
+            // รอให้ registerSession() เสร็จก่อน (isInitialSessionSetupRef จะถูก set เป็น false)
+            if (isInitialSessionSetupRef.current) {
+                // Log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue callback)
+                if (!hasLoggedInitialSetup) {
+                    console.log('⏳ Initial session setup in progress, skipping logout check');
+                    hasLoggedInitialSetup = true;
+                }
+                // เก็บ startedAt ครั้งแรกเมื่อ session setup เสร็จ
+                if (isOnline && startedAt) {
+                    currentSessionStartedAtRef.current = startedAt;
+                }
+                return;
+            }
+            
+            // ถ้า isOnline === false แสดงว่า session ถูกปิด (logout จากที่อื่นหรือถูกเตะออก)
+            if (!isOnline) {
+                // Session ถูกลบหรือถูกปิด → ถูกลงชื่อออก
+                sessionLogoutTriggeredRef.current = true;
+                isLoggingOutRef.current = true;
+                
+                message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
+                
+                // เรียก logout (ไม่ต้องรอ finally เพราะ handleLogout จะจัดการ flag เอง)
+                handleLogout();
+                return;
+            }
+            
+            // ✅ เช็คว่า startedAt เปลี่ยนหรือไม่ (ตรวจจับการยึด session)
+            // ถ้า startedAt เปลี่ยนและไม่ใช่ session ของตัวเอง → session ถูกยึด
+            if (startedAt && currentSessionStartedAtRef.current && 
+                startedAt !== currentSessionStartedAtRef.current) {
+                // Session ถูกยึด → ถูกลงชื่อออก
+                sessionLogoutTriggeredRef.current = true;
+                isLoggingOutRef.current = true;
+                
+                message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
+                
+                // เรียก logout
+                handleLogout();
+                return;
+            }
+            
+            // ถ้า isOnline === true และ startedAt ไม่เปลี่ยน → ยัง active อยู่
+            // อัพเดท currentSessionStartedAtRef ถ้ายังไม่มีค่า
+            if (isOnline && startedAt && !currentSessionStartedAtRef.current) {
+                currentSessionStartedAtRef.current = startedAt;
+            }
+        });
+
+        return () => {
+            unsubscribe();
+            sessionLogoutTriggeredRef.current = false;
+        };
+    }, [currentUser]);
+
     const handleLogin = async (provider: 'google' | 'facebook') => {
         // Prevent multiple clicks
         if (loading) return;
@@ -1012,6 +1190,34 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setCurrentUser(firebaseUser.uid);
                 setUserInfo(firebaseUser);
                 setIsLoggedIn(true);
+                
+                // สร้าง session ใหม่และเช็คว่ามี session อื่น active อยู่หรือไม่
+                try {
+                    // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
+                    isRegisteringSessionRef.current = true;
+                    
+                    const sessionResult = await registerSession(firebaseUser);
+                    
+                    // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
+                    isInitialSessionSetupRef.current = false;
+                    isRegisteringSessionRef.current = false;
+                    currentSessionStartedAtRef.current = sessionResult.startedAt;
+                    
+                    if (sessionResult.hasOtherActiveSession) {
+                        // มี session อื่น active อยู่ → แสดง warning
+                        setSessionWarning({
+                            hasOtherSession: true,
+                            otherSessionStartedAt: sessionResult.otherSessionStartedAt,
+                        });
+                        message.warning('มีการเข้าสู่ระบบจากอุปกรณ์อื่นอยู่');
+                    }
+                } catch (sessionError) {
+                    console.error('Error registering session:', sessionError);
+                    // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
+                    isInitialSessionSetupRef.current = false;
+                    isRegisteringSessionRef.current = false;
+                    // ไม่ต้องบล็อกการทำงาน ถ้า session registration ล้มเหลว
+                }
             }
 
             // กรณี popup สำเร็จ → ปลดล็อกปุ่ม submit ได้เลย
@@ -1052,20 +1258,55 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
     const handleLogout = async () => {
+        // ป้องกันการเรียกซ้ำ
+        if (isLoggingOutRef.current) {
+            return;
+        }
+        
+        let logoutSuccess = false;
+        
         try {
+            isLoggingOutRef.current = true;
             setLoading(false); // Reset loading before logout
+            
+            // ปิด session ก่อน logout
+            if (currentUser) {
+                try {
+                    await endSession(currentUser);
+                } catch (sessionError) {
+                    console.error('Error ending session:', sessionError);
+                    // ไม่ต้องบล็อกการทำงาน ถ้า session end ล้มเหลว
+                }
+            }
+            
             await logout();
+            logoutSuccess = true;
+        } catch (error) {
+            console.error('Error logging out:', error);
+            message.error('เกิดข้อผิดพลาดในการออกจากระบบ');
+        } finally {
+            // รีเซ็ต state เสมอ แม้ว่า logout() จะ throw exception
+            // เพื่อป้องกัน app อยู่ในสถานะที่ไม่สอดคล้องกัน
             setIsLoggedIn(false);
             setCurrentUser(null);
             setUserInfo(null);
             setSubmittedData(null);
+            setSessionWarning(null);
+            // Reset initial setup flag เมื่อ logout
+            isInitialSessionSetupRef.current = true;
             form.resetFields();
             setLoading(false); // Ensure loading is reset after logout
-            message.success('ออกจากระบบสำเร็จ');
-        } catch (error) {
-            console.error('Error logging out:', error);
-            message.error('เกิดข้อผิดพลาดในการออกจากระบบ');
-            setLoading(false); // Reset loading state ในกรณี error
+            
+            // แสดง message เฉพาะเมื่อ logout สำเร็จและไม่ได้ถูกเตะออกจาก session
+            if (logoutSuccess && !sessionLogoutTriggeredRef.current) {
+                message.success('ออกจากระบบสำเร็จ');
+            }
+            
+            // Reset flag หลังจาก logout เสร็จ
+            setTimeout(() => {
+                isLoggingOutRef.current = false;
+                sessionLogoutTriggeredRef.current = false;
+            }, 1000);
         }
     };
 
@@ -1808,28 +2049,84 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
     };
 
-
+    // Modal สำหรับแสดง warning เมื่อมีการ login จากที่อื่น
+    const handleForceEndSession = async () => {
+        if (!currentUser) return;
+        
+        const user = getCurrentUser();
+        if (!user) {
+            message.error('ไม่พบข้อมูลผู้ใช้');
+            return;
+        }
+        
+        try {
+            // ตั้ง flag เพื่อป้องกัน session listener trigger logout ระหว่างการยึด session
+            isInitialSessionSetupRef.current = true;
+            isRegisteringSessionRef.current = true;
+            
+            // เรียก registerSession() เพื่อยึด session (ใช้ atomic update เพื่อ set isOnline และ startedAt พร้อมกัน)
+            const sessionResult = await registerSession(user);
+            
+            // ปิด flag หลังจากยึด session เสร็จ และอัพเดท startedAt
+            isInitialSessionSetupRef.current = false;
+            isRegisteringSessionRef.current = false;
+            currentSessionStartedAtRef.current = sessionResult.startedAt;
+            
+            setSessionWarning(null);
+            message.success('ยึด session เรียบร้อย');
+        } catch (error) {
+            // ปิด flag ในกรณี error
+            isInitialSessionSetupRef.current = false;
+            isRegisteringSessionRef.current = false;
+            console.error('Error forcing end session:', error);
+            message.error('เกิดข้อผิดพลาดในการยึด session');
+        }
+    };
 
     return (
+        <>
+            {/* Session Warning Modal */}
+            <Modal
+                title="มีการเข้าสู่ระบบจากที่อื่น"
+                open={sessionWarning?.hasOtherSession || false}
+                onOk={handleForceEndSession}
+                onCancel={() => setSessionWarning(null)}
+                okText="ยึด session นี้"
+                cancelText="ปิด"
+                okButtonProps={{ danger: true }}
+            >
+                <div className="space-y-2">
+                    <Text>มีการเข้าสู่ระบบจากอุปกรณ์อื่นอยู่</Text>
+                    {sessionWarning?.otherSessionStartedAt && (
+                        <div className="text-sm text-gray-600 mt-2">
+                            <div>เวลาเข้าใช้งาน: {new Date(sessionWarning.otherSessionStartedAt).toLocaleString('th-TH')}</div>
+                        </div>
+                    )}
+                    <Text className="text-xs text-gray-500 block mt-2">
+                        หากต้องการเข้าสู่ระบบจากอุปกรณ์นี้ กรุณาคลิก "ยึด session นี้" 
+                        เพื่อปิด session อื่นและเข้าสู่ระบบจากอุปกรณ์นี้แทน
+                    </Text>
+                </div>
+            </Modal>
 
-        <div className="w-full h-full flex flex-col bg-[#fdfbf7] relative overflow-hidden">
+            <div className="w-full h-full flex flex-col bg-[#fdfbf7] relative overflow-hidden">
 
-             <div className="absolute top-4 right-4 z-20">
+                <div className="absolute top-4 right-4 z-30">
 
-                <Button type="text" shape="circle" icon={<CloseOutlined />} onClick={onFlip} className="text-gray-500 border-gray-200 hover:text-[#5c3a58] hover:border-[#5c3a58] bg-white shadow-sm" />
+                    <Button type="text" shape="circle" icon={<CloseOutlined />} onClick={onFlip} className="text-gray-500 border-gray-200 hover:text-[#5c3a58] hover:border-[#5c3a58] bg-white shadow-sm" />
 
-             </div>
+                </div>
 
-             <div className="flex-1 overflow-hidden p-6 md:p-8 flex flex-col">
+                <div className="flex-1 overflow-hidden p-6 md:p-8 flex flex-col">
 
-                <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#f7f3eb] to-transparent pointer-events-none z-10"></div>
+                    <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#f7f3eb] to-transparent pointer-events-none z-10"></div>
 
-                <div className="relative z-10 flex-1 flex flex-col h-full">{renderContent()}</div>
+                    <div className="relative z-10 flex-1 flex flex-col h-full">{renderContent()}</div>
 
-             </div>
+                </div>
 
-        </div>
-
+            </div>
+        </>
     );
 
 };
@@ -1907,50 +2204,10 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     // Parameter renamed to _onExitGuestMode to indicate it's intentionally unused
     void _onExitGuestMode; 
 
-    // Restore state from sessionStorage if available
-    const [isFlipped, setIsFlipped] = useState(() => {
-        try {
-            return sessionStorage.getItem('wedding_is_flipped') === 'true';
-        } catch {
-            return false;
-        }
-    });
-
-    const [musicPlaying, setMusicPlaying] = useState(() => {
-        try {
-            // Restore music playing state from sessionStorage
-            return sessionStorage.getItem('wedding_music_playing') === 'true';
-        } catch {
-            return false;
-        }
-    });
-
-    const [showIntro, setShowIntro] = useState(() => {
-        try {
-            // If we have started before, skip intro
-            return sessionStorage.getItem('wedding_has_started') !== 'true';
-        } catch {
-            return true;
-        }
-    });
-
-    // Save state changes
-    useEffect(() => {
-        try {
-            sessionStorage.setItem('wedding_is_flipped', String(isFlipped));
-        } catch (e) {
-            console.error('Error saving state', e);
-        }
-    }, [isFlipped]);
-
-    // Save music playing state to sessionStorage
-    useEffect(() => {
-        try {
-            sessionStorage.setItem('wedding_music_playing', String(musicPlaying));
-        } catch (e) {
-            console.error('Error saving music state', e);
-        }
-    }, [musicPlaying]);
+    // State - จะ sync จาก Firebase เมื่อ login
+    const [isFlipped, setIsFlipped] = useState(false);
+    const [musicPlaying, setMusicPlaying] = useState(false);
+    const [showIntro, setShowIntro] = useState(true);
 
     const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
 
@@ -1986,12 +2243,130 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         }, 1500); // Increased delay to ensure YouTube API is ready
     };
 
+    // Load และ sync app state จาก Firebase Realtime Database เมื่อ login
+    useEffect(() => {
+        let isMounted = true;
+        // ประกาศ unsubscribeState นอก callback เพื่อให้ track subscriptions ได้ถูกต้อง
+        // และป้องกัน memory leak เมื่อ auth state callback ถูกเรียกหลายครั้ง
+        let unsubscribeState: (() => void) | null = null;
+
+        // Subscribe to auth state changes
+        const unsubscribeAuth = onAuthStateChange((user) => {
+            if (!isMounted) return;
+            
+            // Unsubscribe จาก state subscription เก่าก่อน (ถ้ามี)
+            // เพื่อป้องกัน memory leak เมื่อ auth state callback ถูกเรียกหลายครั้ง
+            // ต้อง unsubscribe ก่อนสร้าง subscription ใหม่ทุกครั้ง
+            if (unsubscribeState) {
+                unsubscribeState();
+                unsubscribeState = null;
+            }
+            
+            if (user) {
+                
+                // Load initial state จาก Firebase
+                getUserAppState(user.uid)
+                    .then((state) => {
+                        if (!isMounted) return;
+                        if (state) {
+                            if (state.isFlipped !== undefined) setIsFlipped(state.isFlipped);
+                            if (state.musicPlaying !== undefined) setMusicPlaying(state.musicPlaying);
+                            if (state.hasStarted !== undefined) setShowIntro(!state.hasStarted);
+                            if (state.currentTrackIndex !== undefined) setCurrentTrackIndex(state.currentTrackIndex);
+                        }
+                    })
+                    .catch((error) => {
+                        console.error('Error loading app state:', error);
+                    });
+
+                // Subscribe to state changes จาก Firebase (sync ระหว่างแท็บ/อุปกรณ์)
+                // ต้อง unsubscribe เก่าก่อน (ทำแล้วข้างบน) แล้วค่อยสร้างใหม่
+                unsubscribeState = subscribeUserAppState(user.uid, (state) => {
+                    if (!isMounted) return;
+                    if (state) {
+                        if (state.isFlipped !== undefined) setIsFlipped(state.isFlipped);
+                        if (state.musicPlaying !== undefined) setMusicPlaying(state.musicPlaying);
+                        if (state.hasStarted !== undefined) setShowIntro(!state.hasStarted);
+                        if (state.currentTrackIndex !== undefined) setCurrentTrackIndex(state.currentTrackIndex);
+                    }
+                });
+            } else {
+                // ถ้า logout ให้ reset state เป็นค่าเริ่มต้น
+                setIsFlipped(false);
+                setMusicPlaying(false);
+                setShowIntro(true);
+                setCurrentTrackIndex(0);
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            unsubscribeAuth();
+            // Cleanup subscription เมื่อ component unmount
+            if (unsubscribeState) {
+                unsubscribeState();
+                unsubscribeState = null;
+            }
+        };
+    }, []);
+
+    // Save state changes ไปยัง Firebase Realtime Database
+    useEffect(() => {
+        const user = getCurrentUser();
+        if (!user) return;
+        
+        // Debounce เพื่อป้องกันการ update บ่อยเกินไป
+        const timeoutId = setTimeout(() => {
+            updateUserAppState(user.uid, { isFlipped })
+                .catch((error) => {
+                    console.error('Error saving isFlipped state:', error);
+                });
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [isFlipped]);
+
+    // Save music playing state ไปยัง Firebase Realtime Database
+    useEffect(() => {
+        const user = getCurrentUser();
+        if (!user) return;
+        
+        // Debounce เพื่อป้องกันการ update บ่อยเกินไป
+        const timeoutId = setTimeout(() => {
+            updateUserAppState(user.uid, { musicPlaying })
+                .catch((error) => {
+                    console.error('Error saving musicPlaying state:', error);
+                });
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [musicPlaying]);
+
+    // Save currentTrackIndex ไปยัง Firebase Realtime Database
+    useEffect(() => {
+        const user = getCurrentUser();
+        if (!user) return;
+        
+        // Debounce เพื่อป้องกันการ update บ่อยเกินไป
+        const timeoutId = setTimeout(() => {
+            updateUserAppState(user.uid, { currentTrackIndex })
+                .catch((error) => {
+                    console.error('Error saving currentTrackIndex state:', error);
+                });
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [currentTrackIndex]);
+
     const handleStart = () => {
         setShowIntro(false);
-        try {
-            sessionStorage.setItem('wedding_has_started', 'true');
-        } catch (e) {
-            console.error('Error saving state', e);
+        // Save hasStarted state ไปยัง Firebase
+        const user = getCurrentUser();
+        if (user) {
+            updateUserAppState(user.uid, { hasStarted: true })
+                .catch((error) => {
+                    console.error('Error saving hasStarted state:', error);
+                });
         }
         // Set flag เพื่อบอกว่าเป็น manual control (initial start)
         isManualControlRef.current = true;
