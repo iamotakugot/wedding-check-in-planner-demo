@@ -2130,11 +2130,30 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
 
             
 
-            {/* FIX: Full Frame Container for Mobile (w-full h-100dvh) and Boxed for Desktop */}
+            {/* Full Frame mobile; Desktop scales up to fit viewport without shrinking text */}
 
-            <div className="relative w-full h-[100dvh] md:w-[900px] md:h-[600px] flex items-center justify-center perspective-container transition-all duration-300 ease-in-out">
+            <div
+                className="relative w-full h-[100dvh] flex items-center justify-center perspective-container transition-all duration-300 ease-in-out"
+                style={{
+                    // เดสก์ท็อป: ขยายการ์ดให้พอดีพื้นที่ แต่ไม่เกินค่าที่กำหนด
+                    // ใช้หน่วย viewport เพื่อให้เต็มและเว้นขอบสวยงาม
+                    // min() ต้องใส่ผ่าน style แทนคลาส Tailwind
+                    maxWidth: 'min(96vw, 1200px)',
+                    maxHeight: 'min(92vh, 760px)',
+                    width: '100%',
+                    height: '100dvh'
+                }}
+            >
 
-                <div className={`flip-inner w-full h-full md:w-[900px] md:h-[600px] ${isFlipped ? 'is-flipped' : ''}`}>
+                <div
+                    className={`flip-inner ${isFlipped ? 'is-flipped' : ''}`}
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        maxWidth: 'min(96vw, 1200px)',
+                        maxHeight: 'min(92vh, 760px)'
+                    }}
+                >
 
                     <div className={`flip-front ${isFlipped ? 'side-inactive' : 'side-active'}`}>
 
