@@ -39,16 +39,11 @@ const LinkManagementPage: React.FC<{ onPreview: () => void }> = ({ onPreview }) 
     }, []);
 
     // Generate real invitation link using Firebase Hosting URL
-    // Use production URL, fallback to current origin for development
     const getBaseUrl = () => {
-        // Production Firebase Hosting URL
         const productionUrl = 'https://got-nan-wedding.web.app';
-        // Use production URL if we're in production, otherwise use current origin for dev
         if (window.location.hostname === 'got-nan-wedding.web.app' || window.location.hostname === 'got-nan-wedding.firebaseapp.com') {
             return productionUrl;
         }
-        // For development, you can use production URL or localhost
-        // Change this to productionUrl if you want to test with real links in dev
         return productionUrl; // Always use production URL for real links
     };
 

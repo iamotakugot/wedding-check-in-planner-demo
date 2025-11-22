@@ -61,12 +61,19 @@ npm run dev
    - **Admin Panel**: ไปที่ `http://localhost:5173/admin` (ต้องล็อคอิน)
    - **Guest RSVP**: ไปที่ `http://localhost:5173/` (ไม่ต้องล็อคอิน)
 
-## 🔐 Admin Login
+## 🔐 Authentication
 
-- **Username**: `admin`
-- **Password**: `1150`
+### Admin Login
+- **Authentication**: Firebase Authentication (Email/Password)
 - **Location**: `src/pages/AdminLoginPage.tsx`
-- **หมายเหตุ**: Admin Panel ต้องล็อคอินก่อนใช้งาน
+- **หมายเหตุ**: Admin Panel ต้องล็อคอินก่อนใช้งาน (ต้องเป็น Admin ที่อยู่ใน Firebase Database)
+- **ดูคู่มือ**: [ADMIN_LOGIN.md](./docs/ADMIN_LOGIN.md)
+
+### Guest RSVP Login
+- **Authentication**: Firebase Authentication (Facebook/Google Social Login)
+- **Location**: `src/components/RSVP/GuestRSVPApp.tsx`
+- **หมายเหตุ**: แขกต้อง login ด้วย Facebook หรือ Google ก่อนกรอก RSVP
+- **Security Rules**: User ที่ login แล้วสามารถอ่าน/เขียน RSVP ได้ (`auth != null`)
 
 ## 📁 Project Structure
 
@@ -84,7 +91,7 @@ wedding-check-in-planner-demo/
 │   │   ├── CheckInPage.tsx
 │   │   ├── RSVPListPage.tsx
 │   │   └── AdminLoginPage.tsx
-│   ├── data/                # Mock data (สำหรับ migration ครั้งแรก)
+│   ├── data/                # Form options data
 │   ├── firebase/            # Firebase configuration
 │   ├── services/            # Firebase service functions
 │   ├── types.ts             # TypeScript type definitions
@@ -100,17 +107,14 @@ wedding-check-in-planner-demo/
 
 - **Security**: ESLint with security plugins
 - **CI/CD**: GitHub Actions for automated testing and security scanning
-- **Database Schema**: PostgreSQL schema defined in `db/schema.sql`
-- **API Specification**: OpenAPI YAML in `api/openapi.yaml`
+- **Database**: Firebase Realtime Database
+- **Authentication**: Firebase Authentication (Email/Password for Admin, Facebook/Google for Guest)
+- **Security Rules**: Firebase Realtime Database Rules - ดูรายละเอียดใน [FIREBASE_RULES.md](./docs/FIREBASE_RULES.md)
 - **Documentation**: 
-  - `docs/DATA_FLOW.md` - Data flow documentation
-  - `docs/DATA_MODEL.md` - Data model documentation
-  - `docs/SECURITY.md` - Security practices
-  - `docs/THREAT_MODEL.md` - Threat modeling
-  - `docs/FIREBASE_SETUP.md` - Firebase setup guide
-  - `docs/FIREBASE_SECURITY_RULES.md` - Firebase security rules
-  - `docs/PRODUCTION.md` - Production deployment guide
-  - `docs/SYSTEM_FLOW_INTERACTIVE.md` - System flow และ interactive guide
+  - [FIREBASE_RULES.md](./docs/FIREBASE_RULES.md) - **Firebase Security Rules** ⭐ (ต้องอ่านก่อน deploy)
+  - [ADMIN_LOGIN.md](./docs/ADMIN_LOGIN.md) - คู่มือการล็อกอินแอดมิน
+  - [DATA_STRUCTURE.md](./docs/DATA_STRUCTURE.md) - โครงสร้างข้อมูลใน Firebase
+  - [SETUP.md](./docs/SETUP.md) - คู่มือการตั้งค่าโปรเจกต์
 
 ## 📝 License
 

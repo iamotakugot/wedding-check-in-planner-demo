@@ -7,6 +7,7 @@ import {
   User,
   signInWithRedirect,
   getRedirectResult,
+  signInWithPopup,
   GoogleAuthProvider,
   FacebookAuthProvider
 } from 'firebase/auth';
@@ -221,16 +222,72 @@ export interface RSVPData {
 export const rsvpsRef = () => ref(database, 'rsvps');
 
 export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-  const newRef = push(rsvpsRef());
-  const now = new Date().toISOString();
-  const rsvpData: RSVPData = {
-    ...rsvp,
-    id: newRef.key!,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await set(newRef, rsvpData);
-  return newRef.key!;
+  try {
+    // ตรวจสอบว่า user login แล้วหรือไม่
+    const user = getCurrentUser();
+    if (!user) {
+      console.error('No user logged in when creating RSVP');
+      throw new Error('ต้องเข้าสู่ระบบก่อนบันทึกข้อมูล RSVP');
+    }
+
+    console.log('Current user:', { uid: user.uid, email: user.email, providerId: user.providerData?.[0]?.providerId });
+
+    // ตรวจสอบว่า rsvp.uid ตรงกับ user.uid หรือไม่
+    if (rsvp.uid && rsvp.uid !== user.uid) {
+      console.warn('RSVP UID does not match current user UID. Using current user UID.');
+    }
+
+    // ใช้ currentUser.uid แทน rsvp.uid เพื่อความปลอดภัย
+    const rsvpWithUid = {
+      ...rsvp,
+      uid: user.uid, // ใช้ uid จาก currentUser เสมอ
+    };
+
+    const newRef = push(rsvpsRef());
+    const now = new Date().toISOString();
+    const rsvpData: RSVPData = {
+      ...rsvpWithUid,
+      id: newRef.key!,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
+    Object.keys(rsvpData).forEach(key => {
+      if ((rsvpData as any)[key] === undefined) {
+        delete (rsvpData as any)[key];
+      }
+    });
+    
+    console.log('Creating RSVP with data:', JSON.stringify(rsvpData, null, 2));
+    console.log('RSVP path:', `rsvps/${newRef.key}`);
+    console.log('User UID:', user.uid);
+    console.log('Auth state check: auth != null should be true');
+    
+    try {
+      await set(newRef, rsvpData);
+      console.log('✅ RSVP created successfully with ID:', newRef.key);
+      return newRef.key!;
+    } catch (firebaseError: any) {
+      console.error('❌ Firebase error when creating RSVP:', firebaseError);
+      console.error('Error code:', firebaseError.code);
+      console.error('Error message:', firebaseError.message);
+      
+      if (firebaseError.code === 'PERMISSION_DENIED' || firebaseError.code === 'PERMISSION_DENIED') {
+        console.error('PERMISSION_DENIED - Rules may be blocking write access');
+        console.error('Current user UID:', user.uid);
+        console.error('Rules should allow: auth != null && user is logged in');
+        throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
+      }
+      throw firebaseError;
+    }
+  } catch (error: any) {
+    console.error('Error creating RSVP:', error);
+    if (error.code === 'PERMISSION_DENIED' || error.code === 'PERMISSION_DENIED') {
+      throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules');
+    }
+    throw error;
+  }
 };
 
 export const getRSVPs = async (): Promise<RSVPData[]> => {
@@ -247,25 +304,58 @@ export const getRSVPs = async (): Promise<RSVPData[]> => {
   });
 };
 
-export const getRSVPByUid = async (uid: string): Promise<RSVPData | null> => {
-  const snapshot = await get(rsvpsRef());
-  if (!snapshot.exists()) return null;
-  const data = snapshot.val();
-  const rsvps = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-  // Find the most recent RSVP for this user (in case there are multiple)
-  const userRSVPs = rsvps.filter(r => r.uid === uid);
-  if (userRSVPs.length === 0) return null;
-  // Return the most recent one (by updatedAt or createdAt)
-  const mostRecent = userRSVPs.sort((a, b) => {
-    const aTime = a.updatedAt || a.createdAt || '';
-    const bTime = b.updatedAt || b.createdAt || '';
-    return bTime.localeCompare(aTime);
-  })[0];
-  // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
-  if ('phoneNumber' in mostRecent) {
-    delete (mostRecent as Record<string, unknown>).phoneNumber;
+export const getRSVPByUid = async (_uid?: string): Promise<RSVPData | null> => {
+  try {
+    // ตรวจสอบว่า user login แล้วหรือไม่
+    const user = getCurrentUser();
+    if (!user) {
+      console.warn('No user logged in when fetching RSVP');
+      return null;
+    }
+
+    // ใช้ uid จาก currentUser เสมอเพื่อความปลอดภัย (ไม่ใช้ parameter)
+    const targetUid = user.uid;
+    
+    console.log('Fetching RSVP for UID:', targetUid);
+    
+    const snapshot = await get(rsvpsRef());
+    if (!snapshot.exists()) {
+      console.log('No RSVPs found in database');
+      return null;
+    }
+    
+    const data = snapshot.val();
+    const rsvps = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    
+    // Find the most recent RSVP for this user (in case there are multiple)
+    const userRSVPs = rsvps.filter(r => r.uid === targetUid);
+    
+    if (userRSVPs.length === 0) {
+      console.log('No RSVP found for user UID:', targetUid);
+      return null;
+    }
+    
+    // Return the most recent one (by updatedAt or createdAt)
+    const mostRecent = userRSVPs.sort((a, b) => {
+      const aTime = a.updatedAt || a.createdAt || '';
+      const bTime = b.updatedAt || b.createdAt || '';
+      return bTime.localeCompare(aTime);
+    })[0];
+    
+    // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
+    if ('phoneNumber' in mostRecent) {
+      delete (mostRecent as Record<string, unknown>).phoneNumber;
+    }
+    
+    console.log('RSVP found for user:', mostRecent.id);
+    return mostRecent;
+  } catch (error: any) {
+    console.error('Error fetching RSVP by UID:', error);
+    if (error.code === 'PERMISSION_DENIED') {
+      console.error('Permission denied when fetching RSVP. Check Firebase Rules.');
+    }
+    throw error;
   }
-  return mostRecent;
 };
 
 export const subscribeRSVPs = (callback: (rsvps: RSVPData[]) => void): () => void => {
@@ -289,7 +379,64 @@ export const subscribeRSVPs = (callback: (rsvps: RSVPData[]) => void): () => voi
 };
 
 export const updateRSVP = async (id: string, updates: Partial<RSVPData>): Promise<void> => {
-  await update(ref(database, `rsvps/${id}`), { ...updates, updatedAt: new Date().toISOString() });
+  try {
+    // ตรวจสอบว่า user login แล้วหรือไม่
+    const user = getCurrentUser();
+    if (!user) {
+      console.error('No user logged in when updating RSVP');
+      throw new Error('ต้องเข้าสู่ระบบก่อนแก้ไขข้อมูล RSVP');
+    }
+
+    console.log('Current user:', { uid: user.uid, email: user.email, providerId: user.providerData?.[0]?.providerId });
+
+    // ตรวจสอบว่า updates.uid ตรงกับ user.uid หรือไม่
+    if (updates.uid && updates.uid !== user.uid) {
+      console.warn('Update UID does not match current user UID. Using current user UID.');
+      updates.uid = user.uid; // ใช้ uid จาก currentUser เสมอ
+    }
+
+    // Remove undefined fields ก่อนบันทึก
+    Object.keys(updates).forEach(key => {
+      if ((updates as any)[key] === undefined) {
+        delete (updates as any)[key];
+      }
+    });
+
+    const updateData = { 
+      ...updates, 
+      uid: user.uid, // ใช้ uid จาก currentUser เสมอ
+      updatedAt: new Date().toISOString() 
+    };
+
+    console.log('Updating RSVP with ID:', id);
+    console.log('Update data:', JSON.stringify(updateData, null, 2));
+    console.log('RSVP path:', `rsvps/${id}`);
+    console.log('User UID:', user.uid);
+    console.log('Auth state check: auth != null should be true');
+    
+    try {
+      await update(ref(database, `rsvps/${id}`), updateData);
+      console.log('✅ RSVP updated successfully');
+    } catch (firebaseError: any) {
+      console.error('❌ Firebase error when updating RSVP:', firebaseError);
+      console.error('Error code:', firebaseError.code);
+      console.error('Error message:', firebaseError.message);
+      
+      if (firebaseError.code === 'PERMISSION_DENIED' || firebaseError.code === 'PERMISSION_DENIED') {
+        console.error('PERMISSION_DENIED - Rules may be blocking write access');
+        console.error('Current user UID:', user.uid);
+        console.error('Rules should allow: auth != null && user is logged in');
+        throw new Error('ไม่มีสิทธิ์ในการแก้ไขข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
+      }
+      throw firebaseError;
+    }
+  } catch (error: any) {
+    console.error('Error updating RSVP:', error);
+    if (error.code === 'PERMISSION_DENIED' || error.code === 'PERMISSION_DENIED') {
+      throw new Error('ไม่มีสิทธิ์ในการแก้ไขข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules');
+    }
+    throw error;
+  }
 };
 
 // ============================================================================
@@ -363,7 +510,6 @@ export const migrateInitialData = async (
   // Check if data already exists
   const guestsSnapshot = await get(guestsRef());
   if (guestsSnapshot.exists()) {
-    console.log('Data already exists, skipping migration');
     return;
   }
 
@@ -391,8 +537,6 @@ export const migrateInitialData = async (
     venue: 'เรือนชมมณี นครราชสีมา',
     venueMapLink: 'https://maps.app.goo.gl/VT1SNFGHSdY7kW9UA',
   });
-
-  console.log('Initial data migrated successfully');
 };
 
 // ============================================================================
@@ -429,30 +573,76 @@ googleProvider.setCustomParameters({
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
 facebookProvider.addScope('email');
+facebookProvider.setCustomParameters({
+  display: 'popup',
+});
 
-export const signInWithGoogle = async (): Promise<User> => {
-  // ใช้ redirect เสมอเพื่อหลีกเลี่ยงปัญหา COOP (Cross-Origin-Opener-Policy)
-  // Popup จะถูกบล็อกโดย COOP policy ในบาง browser
-  await signInWithRedirect(auth, googleProvider);
-  // This promise will never resolve as page redirects
-  throw new Error('Redirecting to Google Login...');
+export const signInWithGoogle = async (): Promise<void> => {
+  // พยายามใช้ Popup ก่อนเพื่อ UX ที่ดีกว่า ถ้าถูกบล็อก/ไม่รองรับ ค่อย fallback เป็น Redirect
+  try {
+    await signInWithPopup(auth, googleProvider);
+    // สำเร็จด้วย popup → onAuthStateChanged จะ trigger ต่อเอง
+    return;
+  } catch (error: any) {
+    // Fallback เป็น redirect สำหรับกรณี popup ถูกบล็อกหรือ environment ไม่รองรับ
+    const fallbackCodes = new Set([
+      'auth/popup-blocked',
+      'auth/popup-closed-by-user',
+      'auth/cancelled-popup-request',
+      'auth/operation-not-supported-in-this-environment',
+    ]);
+    if (error && error.code && fallbackCodes.has(error.code)) {
+      await signInWithRedirect(auth, googleProvider);
+      return;
+    }
+    throw error;
+  }
 };
 
-export const signInWithFacebook = async (): Promise<User> => {
-  // ใช้ redirect เสมอเพื่อหลีกเลี่ยงปัญหา COOP (Cross-Origin-Opener-Policy)
-  // Popup จะถูกบล็อกโดย COOP policy ในบาง browser
-  await signInWithRedirect(auth, facebookProvider);
-  // This promise will never resolve as page redirects
-  throw new Error('Redirecting to Facebook Login...');
+export const signInWithFacebook = async (): Promise<void> => {
+  // พยายามใช้ Popup ก่อน ถ้าถูกบล็อก/ไม่รองรับ ค่อย fallback เป็น Redirect
+  try {
+    await signInWithPopup(auth, facebookProvider);
+    return;
+  } catch (error: any) {
+    const fallbackCodes = new Set([
+      'auth/popup-blocked',
+      'auth/popup-closed-by-user',
+      'auth/cancelled-popup-request',
+      'auth/operation-not-supported-in-this-environment',
+    ]);
+    if (error && error.code && fallbackCodes.has(error.code)) {
+      await signInWithRedirect(auth, facebookProvider);
+      return;
+    }
+    throw error;
+  }
 };
 
 // Check for redirect result on page load
+// ต้องเรียกฟังก์ชันนี้ทันทีหลังจาก page load เพื่อเช็คว่าการ redirect สำเร็จหรือไม่
+// ควรเรียกก่อน onAuthStateChanged เพื่อให้ได้รับผลลัพธ์จาก redirect
 export const checkRedirectResult = async (): Promise<User | null> => {
   try {
     const result = await getRedirectResult(auth);
-    return result ? result.user : null;
-  } catch (error) {
-    console.error('Redirect login error:', error);
-    throw error;
+    if (result) {
+      // User successfully signed in via redirect
+      return result.user;
+    }
+    // No redirect result - user didn't come from a redirect
+    return null;
+  } catch (error: any) {
+    // Handle specific error codes
+    if (error.code === 'auth/account-exists-with-different-credential') {
+      console.error('An account already exists with the same email address but different sign-in credentials');
+      throw error;
+    }
+    if (error.code === 'auth/email-already-in-use') {
+      console.error('The email address is already in use by another account');
+      throw error;
+    }
+    // Ignore other errors that might occur when checking redirect result
+    console.warn('Error checking redirect result:', error);
+    return null;
   }
 };

@@ -97,12 +97,17 @@ const App: React.FC = () => {
 
   // Initialize Firebase and load data
   useEffect(() => {
+    if (appMode !== 'admin' || !isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
+
     // Set timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
       setIsLoading(false);
     }, 5000); // Max 5 seconds loading
 
-    // Subscribe to real-time updates
+    // Subscribe to real-time updates (admin only)
     const unsubscribeGuests = subscribeGuests((data) => {
       setGuests(data);
       setIsLoading(false);
@@ -124,7 +129,7 @@ const App: React.FC = () => {
       unsubscribeZones();
       unsubscribeTables();
     };
-  }, []);
+  }, [appMode, isAuthenticated]);
 
   // Update zone capacity based on tables whenever tables state changes
   useEffect(() => {
@@ -150,7 +155,7 @@ const App: React.FC = () => {
 
   // Auto-import RSVP to Guest when RSVP is created/updated with isComing === 'yes'
   useEffect(() => {
-    if (!isAuthenticated) return; // Only run when admin is authenticated
+    if (!isAuthenticated || appMode !== 'admin') return; // Only run when admin is authenticated
 
     const unsubscribeRSVPs = subscribeRSVPs(async (rsvps: RSVPData[]) => {
       for (const rsvp of rsvps) {
@@ -220,8 +225,6 @@ const App: React.FC = () => {
             await updateRSVP(rsvp.id, { guestId: newGuestId });
             processingRSVPsRef.current.delete(rsvp.id);
           }
-
-          console.log(`Auto-imported RSVP for ${rsvp.firstName} ${rsvp.lastName}`);
         } catch (error) {
           console.error('Error auto-importing RSVP:', error);
           if (rsvp.id) {
@@ -234,7 +237,7 @@ const App: React.FC = () => {
     return () => {
       unsubscribeRSVPs();
     };
-  }, [isAuthenticated]); // Removed guests from dependency array
+  }, [isAuthenticated, appMode]); // Removed guests from dependency array
 
   const renderAdminContent = () => {
     switch (currentView) {

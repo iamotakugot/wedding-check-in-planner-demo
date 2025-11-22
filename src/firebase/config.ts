@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -22,6 +22,10 @@ export const database = getDatabase(app);
 
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
+
+// ใช้ Local persistence เพื่อให้สถานะการล็อกอินอยู่ต่อหลังรีเฟรชหน้า
+// ไม่ block การทำงานหาก browser ไม่รองรับ
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 export default app;
 

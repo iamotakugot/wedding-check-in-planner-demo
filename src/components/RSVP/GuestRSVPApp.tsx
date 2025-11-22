@@ -53,6 +53,7 @@ import type { RSVPData as FirebaseRSVPData } from '@/services/firebaseService';
 import type { User } from 'firebase/auth';
 import { Guest, Side } from '@/types';
 import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formOptions';
+import { defaultWeddingCardConfig, getOrderedNames } from '@/constants/weddingCard';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -76,6 +77,13 @@ const GlobalStyleLoader = () => (
       @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400..700&family=Playwrite+CZ:wght@100..400&family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100&display=swap');
 
       @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&display=swap');
+
+      *, *::before, *::after {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        -webkit-user-select: text;
+        user-select: text;
+      }
 
       
 
@@ -107,6 +115,10 @@ const GlobalStyleLoader = () => (
 
         font-family: var(--font-th) !important;
 
+        -webkit-font-smoothing: antialiased;
+
+        -moz-osx-font-smoothing: grayscale;
+
       }
 
 
@@ -137,6 +149,10 @@ const GlobalStyleLoader = () => (
 
         transform-style: preserve-3d;
 
+        -webkit-user-select: none;
+
+        user-select: none;
+
       }
 
       .flip-inner.is-flipped { transform: rotateY(180deg); }
@@ -147,7 +163,9 @@ const GlobalStyleLoader = () => (
 
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
 
-        backface-visibility: hidden; -webkit-backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+
+        backface-visibility: hidden;
 
         border-radius: 0px;
 
@@ -207,7 +225,33 @@ const GlobalStyleLoader = () => (
 
         -ms-overflow-style: none;
 
-        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+
+      }
+
+      @supports (scrollbar-width: none) {
+        .no-scrollbar {
+          scrollbar-width: none;
+        }
+      }
+
+      /* Text Overflow & Word Break Utilities */
+
+      .overflow-wrap-anywhere {
+
+        overflow-wrap: anywhere;
+
+        word-break: break-word;
+
+        hyphens: auto;
+
+      }
+
+      /* Responsive Text Sizing */
+
+      .text-responsive {
+
+        font-size: clamp(0.875rem, 2vw, 1rem);
 
       }
 
@@ -495,6 +539,9 @@ interface MusicControlsProps {
 // Card Front Component
 
 const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMusic, onNext, onPrev, currentTrack }) => {
+    // ใช้ config สำหรับการ์ดแต่งงาน
+    const config = defaultWeddingCardConfig;
+    const orderedNames = getOrderedNames(config);
 
     return (
 
@@ -522,17 +569,39 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                 <div className="relative z-10 text-center px-4 w-full">
+                 <div className="relative z-10 text-center px-2 md:px-4 w-full max-w-full overflow-hidden">
 
                      <Text className="uppercase tracking-[0.15em] text-[#8d6e63] text-[8px] md:text-[10px] font-cinzel mb-1 block">Together with their families</Text>
 
-                     {/* UPDATED: Smaller fonts on mobile to prevent cut-off */}
+                     {/* UPDATED: แสดงชื่อตามลำดับที่กำหนด (เจ้าสาวก่อนเจ้าบ่าว) - ปรับให้ fit หน้าจอ */}
+                     <div 
+                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-0 drop-shadow-sm break-words overflow-wrap-anywhere"
+                         style={{ 
+                             fontSize: 'clamp(2rem, 8vw, 4.5rem)',
+                             wordBreak: 'break-word',
+                             overflowWrap: 'anywhere'
+                         }}
+                     >
+                         {orderedNames.first.firstName}
+                     </div>
 
-                     <div className="font-dancing text-[var(--color-soft-pink)] text-4xl md:text-6xl lg:text-7xl leading-tight mb-0 drop-shadow-sm">Pattarapong</div>
+                     <Text 
+                         className="font-dancing text-[var(--color-soft-pink)] mb-0 md:mb-2 block"
+                         style={{ fontSize: 'clamp(1.25rem, 4vw, 2.5rem)' }}
+                     >
+                         &amp;
+                     </Text>
 
-                     <Text className="font-dancing text-[var(--color-soft-pink)] text-2xl md:text-4xl mb-0 md:mb-2 block">&</Text>
-
-                     <div className="font-dancing text-[var(--color-soft-pink)] text-4xl md:text-6xl lg:text-7xl leading-tight mb-2 drop-shadow-sm">Supannee</div>
+                     <div 
+                         className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-2 drop-shadow-sm break-words overflow-wrap-anywhere"
+                         style={{ 
+                             fontSize: 'clamp(2rem, 8vw, 4.5rem)',
+                             wordBreak: 'break-word',
+                             overflowWrap: 'anywhere'
+                         }}
+                     >
+                         {orderedNames.second.firstName}
+                     </div>
 
                      
 
@@ -586,37 +655,55 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                 <div className="mb-2 mt-1 md:mt-2 relative z-10">
 
+                    {/* แสดงชื่อบิดามารดาที่ด้านบนสุด (ก่อนข้อความเชิญ) - ปรับให้ fit หน้าจอ */}
+                    <div className="w-full mb-3 md:mb-4 relative z-10 max-w-full overflow-hidden">
+                        <div className="flex justify-center items-center gap-2 md:gap-4 text-[9px] md:text-xs text-gray-500 mb-1 px-1 md:px-2">
+                            <div className="text-right flex-1 min-w-0 break-words">
+                                <div className="font-bold text-[#5c3a58] mb-1 text-[10px] md:text-xs">ฝ่ายเจ้าสาว</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.bride.father}</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.bride.mother}</div>
+                            </div>
+                            <div className="flex items-center px-1 md:px-2 shrink-0">
+                                <Text className="text-[#8d6e63] text-[10px] md:text-sm whitespace-nowrap">และ</Text>
+                            </div>
+                            <div className="text-left flex-1 min-w-0 break-words">
+                                <div className="font-bold text-[#5c3a58] mb-1 text-[10px] md:text-xs">ฝ่ายเจ้าบ่าว</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.groom.father}</div>
+                                <div className="break-words overflow-wrap-anywhere" style={{ wordBreak: 'break-word' }}>{config.parents.groom.mother}</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <Text className="text-[#8d6e63] uppercase tracking-[0.15em] text-[8px] md:text-[10px] block mb-1 font-cinzel">We Invite You To The Wedding Of</Text>
 
-                    <h1 className="text-[#5c3a58] m-0 leading-snug font-script my-1 drop-shadow-sm" style={{ fontSize: 'clamp(1.8rem, 4vw, 3.5rem)', fontStyle: 'normal' }}>
-
-                        Got <span className="text-[#d4af37] text-2xl md:text-4xl">&</span> Nan
-
+                    <h1 
+                        className="text-[#5c3a58] m-0 leading-snug font-script my-1 drop-shadow-sm break-words overflow-wrap-anywhere" 
+                        style={{ 
+                            fontSize: 'clamp(1.5rem, 5vw, 3rem)', 
+                            fontStyle: 'normal',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere'
+                        }}
+                    >
+                        {orderedNames.first.nickname} <span className="text-[#d4af37]" style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)' }}>&amp;</span> {orderedNames.second.nickname}
                     </h1>
 
-                    <Text className="text-[#8d6e63] mt-1 md:mt-3 block font-light text-[10px] md:text-sm lg:text-base">(นายภัทรพงษ์ พิศเพ็ง & นางสาวสุพรรณี ทอนสูงเนิน)</Text>
+                    <Text 
+                        className="text-[#8d6e63] mt-1 md:mt-3 block font-light break-words overflow-wrap-anywhere px-2" 
+                        style={{ 
+                            fontSize: 'clamp(0.625rem, 2vw, 1rem)',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere'
+                        }}
+                    >
+                        ({orderedNames.first.fullNameThai} &amp; {orderedNames.second.fullNameThai})
+                    </Text>
 
                     <Text className="text-[#8d6e63] mt-2 md:mt-6 block text-[10px] md:text-sm px-2 md:px-4 leading-relaxed font-light">
 
                         มีความยินดีขอเรียนเชิญท่านเพื่อเป็นเกียรติและร่วมรับประทานอาหาร<br className="hidden md:block"/>เนื่องในพิธีมงคลสมรส
 
                     </Text>
-
-                </div>
-
-
-
-                <div className="w-full mb-2 md:mb-4 relative z-10">
-
-                     <div className="flex justify-center gap-4 md:gap-6 text-[10px] md:text-xs text-gray-500 mb-1 px-2">
-
-                        <div className="text-right"><div className="font-bold text-[#5c3a58] mb-1">ฝ่ายเจ้าบ่าว</div><div>นาย บัณฑิต พิศเพ็ง</div><div>นาง อุบลวรรณ พิศเพ็ง</div></div>
-
-                        <div className="w-px bg-[#d4af37] h-full opacity-50"></div>
-
-                        <div className="text-left"><div className="font-bold text-[#5c3a58] mb-1">ฝ่ายเจ้าสาว</div><div>ร.ต.ท. อุดม ทอนสูงเนิน</div><div>นาง ชื่นชม ทอนสูงเนิน</div></div>
-
-                    </div>
 
                 </div>
 
@@ -643,6 +730,28 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
                     ))}
 
                 </div>
+
+                {/* Dress Code แบบวงกลม */}
+                {config.dressCode && config.dressCode.colors && config.dressCode.colors.length > 0 && (
+                    <div className="w-full mb-2 md:mb-4 px-0 md:px-2 relative z-10 flex flex-col items-center">
+                        <div className="flex items-center gap-2 mb-2">
+                            {config.dressCode.label && (
+                                <Text className="text-[#5c3a58] text-[10px] md:text-xs font-cinzel">
+                                    {config.dressCode.label}
+                                </Text>
+                            )}
+                            <div className="flex items-center gap-2">
+                                {config.dressCode.colors.map((color, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="w-6 h-6 md:w-8 md:h-8 rounded-full border-2 border-white shadow-sm"
+                                        style={{ backgroundColor: color }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 
 
@@ -740,64 +849,72 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     const [isLoadingRSVP, setIsLoadingRSVP] = useState(false);
 
     // Check persistent login on mount
+    // สำคัญ: ต้องเรียก checkRedirectResult() ก่อน onAuthStateChanged
+    // เพื่อให้ได้รับผลลัพธ์จาก redirect login ก่อนที่ auth state จะเปลี่ยน
     useEffect(() => {
         let isMounted = true;
-        let redirectHandled = false;
+        let redirectResultHandled = false; // Flag เพื่อป้องกัน race condition
         
         setIsCheckingAuth(true);
-        
-        // Check if returning from redirect login (priority check)
+
+        // 1. เช็ค redirect result ก่อน (ถ้ามี redirect result จะได้ผลลัพธ์ทันที)
         checkRedirectResult()
             .then((user) => {
-                if (user && isMounted) {
-                    redirectHandled = true;
+                if (!isMounted) return;
+                
+                if (user) {
+                    // User successfully signed in via redirect
+                    redirectResultHandled = true; // Mark ว่าจัดการ redirect result แล้ว
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
                     setUserInfo(user);
-                    message.success('เข้าสู่ระบบสำเร็จ');
-                }
-            })
-            .catch((error) => {
-                if (isMounted) {
-                    // Handle specific error cases if needed
-                    if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-                        console.error("Redirect result error:", error);
-                    }
-                }
-            })
-            .finally(() => {
-                if (isMounted) {
                     setIsCheckingAuth(false);
+                    message.success('เข้าสู่ระบบสำเร็จ');
+                } else {
+                    // No redirect result, continue with auth state check
+                    // onAuthStateChanged จะจัดการต่อ
                 }
+            })
+            .catch((err) => {
+                if (!isMounted) return;
+                
+                // Handle specific errors
+                if (err.code === 'auth/account-exists-with-different-credential') {
+                    message.error('อีเมลนี้ถูกใช้งานด้วยวิธีอื่นแล้ว กรุณาใช้วิธีเข้าสู่ระบบอื่น');
+                } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+                    console.error('Redirect login error:', err);
+                }
+                // Continue with auth state check even if redirect check fails
             });
 
-        // Subscribe to auth state changes (for persistent login and faster redirect detection)
+        // 2. Subscribe to auth state changes (สำหรับ persistent login และ logout)
+        // ใช้ setTimeout เพื่อให้ checkRedirectResult() มีโอกาสทำงานก่อน
         const unsubscribe = onAuthStateChange((user) => {
             if (!isMounted) return;
             
-            if (user) {
-                // ถ้ายังไม่ได้ handle redirect result ให้ set state ทันที
-                if (!redirectHandled) {
-                    redirectHandled = true;
+            // ใช้ setTimeout เพื่อให้ redirect result handler มีโอกาสทำงานก่อน
+            setTimeout(() => {
+                if (!isMounted) return;
+                
+                // ถ้า redirect result จัดการแล้ว ไม่ต้อง set state อีก (ป้องกัน race condition)
+                if (redirectResultHandled && user) {
+                    // Redirect result จัดการแล้ว ไม่ต้องทำอะไร
+                    return;
+                }
+                
+                // ถ้าไม่มี redirect result และ auth state เปลี่ยน
+                if (user) {
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
                     setUserInfo(user);
                 } else {
-                    // Update state if already handled
-                    setIsLoggedIn(true);
-                    setCurrentUser(user.uid);
-                    setUserInfo(user);
+                    setIsLoggedIn(false);
+                    setCurrentUser(null);
+                    setUserInfo(null);
                 }
-            } else {
-                setIsLoggedIn(false);
-                setCurrentUser(null);
-                setUserInfo(null);
-            }
-            
-            // เมื่อ auth state เปลี่ยนแล้ว ให้หยุด checking
-            if (isMounted) {
+                
                 setIsCheckingAuth(false);
-            }
+            }, 100); // Delay เล็กน้อยเพื่อให้ redirect result handler ทำงานก่อน
         });
 
         return () => {
@@ -851,62 +968,44 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         loadUserRSVP();
     }, [currentUser, isLoggedIn, form, userInfo]);
 
-    const handleLogin = async (provider: string) => {
+    const handleLogin = async (provider: 'google' | 'facebook') => {
         // Prevent multiple clicks
         if (loading) return;
 
-        if (provider === 'google') {
-            try {
-                setLoading(true);
-                const user = await signInWithGoogle();
-                setIsLoggedIn(true);
-                setCurrentUser(user.uid);
-                setUserInfo(user);
-                setLoading(false); // Reset loading after successful login
-                message.success('เข้าสู่ระบบด้วย Google สำเร็จ');
-            } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-                console.error('Error signing in with Google:', error);
-                // ถ้าเป็น redirect error ไม่ต้องแสดง error (เพราะมันจะ redirect ไป)
-                if (error.message?.includes('Redirecting')) {
-                    message.loading('กำลังเปลี่ยนหน้า...', 0);
-                    // Don't reset loading here, let redirect happen
-                    return;
-                }
-                if (error.code === 'auth/popup-closed-by-user') {
-                    message.warning('ยกเลิกการเข้าสู่ระบบ');
-                    setLoading(false);
-                } else {
-                    message.error(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google');
-                    setLoading(false);
-                }
+        try {
+            setLoading(true);
+            
+            // signInWithGoogle/Facebook จะ redirect หน้าไปยัง provider login page
+            // เมื่อ login สำเร็จ จะ redirect กลับมาที่หน้าเดิม และ checkRedirectResult() จะได้รับผลลัพธ์
+            if (provider === 'google') {
+                await signInWithGoogle();
+                // ถ้าโค้ดมาถึงบรรทัดนี้ (ไม่น่าจะเกิดขึ้น) แสดงว่า redirect ไม่สำเร็จ
+                message.loading('กำลังเปลี่ยนหน้าไปยัง Google Login...', 0);
+            } else if (provider === 'facebook') {
+                await signInWithFacebook();
+                // ถ้าโค้ดมาถึงบรรทัดนี้ (ไม่น่าจะเกิดขึ้น) แสดงว่า redirect ไม่สำเร็จ
+                message.loading('กำลังเปลี่ยนหน้าไปยัง Facebook Login...', 0);
             }
-        } else if (provider === 'facebook') {
-            try {
-                setLoading(true);
-                const user = await signInWithFacebook();
-                setIsLoggedIn(true);
-                setCurrentUser(user.uid);
-                setUserInfo(user);
-                setLoading(false); // Reset loading after successful login
-                message.success('เข้าสู่ระบบด้วย Facebook สำเร็จ');
-            } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-                console.error('Error signing in with Facebook:', error);
-                // ถ้าเป็น redirect error ไม่ต้องแสดง error
-                if (error.message?.includes('Redirecting')) {
-                    message.loading('กำลังเปลี่ยนหน้า...', 0);
-                    // Don't reset loading here, let redirect happen
-                    return;
-                }
-                if (error.code === 'auth/popup-closed-by-user') {
-                    message.warning('ยกเลิกการเข้าสู่ระบบ');
-                    setLoading(false);
-                } else if (error.code === 'auth/account-exists-with-different-credential') {
-                    message.error('อีเมลนี้ถูกใช้งานด้วยวิธีอื่นแล้ว');
-                    setLoading(false);
-                } else {
-                    message.error(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Facebook');
-                    setLoading(false);
-                }
+            
+            // ไม่ควร reset loading เพราะหน้าจะ redirect ไป
+            // เมื่อ redirect กลับมา checkRedirectResult() จะจัดการต่อ
+        } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+            console.error(`Error initiating ${provider} login:`, error);
+            
+            // Handle specific errors
+            if (error.code === 'auth/popup-blocked') {
+                message.error('ป๊อปอัปถูกบล็อก กรุณาอนุญาตป๊อปอัปสำหรับเว็บไซต์นี้');
+                setLoading(false);
+            } else if (error.code === 'auth/popup-closed-by-user') {
+                message.warning('ยกเลิกการเข้าสู่ระบบ');
+                setLoading(false);
+            } else if (error.code === 'auth/network-request-failed') {
+                message.error('เกิดข้อผิดพลาดเกี่ยวกับเครือข่าย กรุณาลองใหม่');
+                setLoading(false);
+            } else {
+                // For redirect, the error might not be caught because page redirects
+                message.warning('กำลังเปลี่ยนหน้า...');
+                // Don't reset loading for redirect cases
             }
         }
     };
@@ -1019,20 +1118,45 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             let rsvpId: string;
             if (existingRSVP && existingRSVP.id) {
                 // Update RSVP ที่มีอยู่แล้ว
-                await updateRSVP(existingRSVP.id, rsvpData);
-                rsvpId = existingRSVP.id;
-                setSubmittedData({ 
-                    ...rsvpData, 
-                    id: existingRSVP.id, 
-                    createdAt: existingRSVP.createdAt, 
-                    updatedAt: new Date().toISOString() 
-                } as FirebaseRSVPData);
-                message.success('อัพเดทข้อมูลเรียบร้อย');
+                try {
+                    console.log('Updating existing RSVP with ID:', existingRSVP.id, 'Data:', rsvpData);
+                    await updateRSVP(existingRSVP.id, rsvpData);
+                    console.log('RSVP updated successfully');
+                    rsvpId = existingRSVP.id;
+                    setSubmittedData({ 
+                        ...rsvpData, 
+                        id: existingRSVP.id, 
+                        createdAt: existingRSVP.createdAt, 
+                        updatedAt: new Date().toISOString() 
+                    } as FirebaseRSVPData);
+                    message.success('อัพเดทข้อมูลเรียบร้อย');
+                } catch (error: any) {
+                    console.error('Error updating RSVP:', error);
+                    const errorMessage = error?.message || 'เกิดข้อผิดพลาดในการอัพเดทข้อมูล RSVP';
+                    message.error(errorMessage);
+                    setLoading(false);
+                    return;
+                }
             } else {
                 // Create RSVP ใหม่
-                rsvpId = await createRSVP(rsvpData);
-                setSubmittedData({ ...rsvpData, id: rsvpId } as FirebaseRSVPData);
-                message.success('บันทึกข้อมูลเรียบร้อย');
+                try {
+                    console.log('Creating new RSVP with data:', rsvpData);
+                    rsvpId = await createRSVP(rsvpData);
+                    console.log('RSVP created successfully with ID:', rsvpId);
+                    setSubmittedData({ 
+                        ...rsvpData, 
+                        id: rsvpId,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    } as FirebaseRSVPData);
+                    message.success('บันทึกข้อมูลเรียบร้อย');
+                } catch (error: any) {
+                    console.error('Error creating RSVP:', error);
+                    const errorMessage = error?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล RSVP';
+                    message.error(errorMessage);
+                    setLoading(false);
+                    return;
+                }
             }
 
             // ถ้า isComing === 'yes' ให้สร้างหรืออัพเดท Guest อัตโนมัติ
@@ -1129,7 +1253,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         }, currentUser);
                     } else if (existingGuest && !existingGuest.rsvpUid) {
                         // ถ้า Guest ถูกสร้างโดย admin ให้ข้าม (ไม่สามารถแก้ไขได้)
-                        console.log('Guest ถูกสร้างโดย Admin ไม่สามารถแก้ไขได้');
                     }
                 } catch (guestError) {
                     console.error('Error updating guest isComing:', guestError);
@@ -1661,6 +1784,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 // Intro Component - Interaction required for autoplay
 
 const IntroOverlay: React.FC<{ onStart: () => void }> = ({ onStart }) => {
+    // ใช้ config สำหรับการ์ดแต่งงาน
+    const config = defaultWeddingCardConfig;
+    const orderedNames = getOrderedNames(config);
 
     return (
 
@@ -1680,7 +1806,16 @@ const IntroOverlay: React.FC<{ onStart: () => void }> = ({ onStart }) => {
 
                 <Text className="uppercase tracking-[0.2em] text-[#8d6e63] text-xs md:text-sm font-cinzel mb-2 block">The Wedding Of</Text>
 
-                <div className="font-dancing text-[var(--color-soft-pink)] text-5xl md:text-7xl leading-tight mb-4 drop-shadow-sm">Got & Nan</div>
+                <div 
+                    className="font-dancing text-[var(--color-soft-pink)] leading-tight mb-4 drop-shadow-sm break-words overflow-wrap-anywhere px-4"
+                    style={{ 
+                        fontSize: 'clamp(2.5rem, 10vw, 4.5rem)',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere'
+                    }}
+                >
+                    {orderedNames.first.nickname} &amp; {orderedNames.second.nickname}
+                </div>
 
                 <Text className="block text-[#5c3a58] font-cinzel mb-8 opacity-70 tracking-widest">JAN 31 2026</Text>
 
@@ -1769,6 +1904,11 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const iframeRef = React.useRef<HTMLIFrameElement>(null);
     const [iframeReady, setIframeReady] = useState(false);
     
+    // Refs เพื่อป้องกัน infinite loop
+    const isManualControlRef = React.useRef(false); // Flag สำหรับ manual control
+    const lastMusicStateRef = React.useRef(musicPlaying); // เก็บ state ล่าสุด
+    const autoPlayAttemptedRef = React.useRef(false); // Flag เพื่อป้องกัน auto-play ซ้ำ
+    
     // Helper to send commands to YouTube iframe
     const sendCommand = useCallback((func: string, args: unknown[] = [], requireReady = false) => {
         // For auto-play after refresh, require iframe to be ready
@@ -1798,18 +1938,40 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         } catch (e) {
             console.error('Error saving state', e);
         }
+        // Set flag เพื่อบอกว่าเป็น manual control (initial start)
+        isManualControlRef.current = true;
         setMusicPlaying(true);
+        lastMusicStateRef.current = true;
+        autoPlayAttemptedRef.current = false; // Reset flag เมื่อ start ใหม่
         // Attempt to play immediately (don't require ready for initial start)
-        setTimeout(() => sendCommand('playVideo', [], false), 100);
+        setTimeout(() => {
+            sendCommand('playVideo', [], false);
+            // Reset flag หลังจากการ start เสร็จ
+            setTimeout(() => {
+                isManualControlRef.current = false;
+            }, 500);
+        }, 100);
     };
 
     const onToggleMusic = () => {
-        if (musicPlaying) {
-            sendCommand('pauseVideo', [], false); // Don't require ready for manual control
-        } else {
+        // Set flag เพื่อบอกว่าเป็น manual control (ให้ priority สูงกว่า auto-play)
+        isManualControlRef.current = true;
+        
+        const newState = !musicPlaying;
+        
+        if (newState) {
             sendCommand('playVideo', [], false); // Don't require ready for manual control
+        } else {
+            sendCommand('pauseVideo', [], false); // Don't require ready for manual control
         }
-        setMusicPlaying(!musicPlaying);
+        
+        setMusicPlaying(newState);
+        lastMusicStateRef.current = newState;
+        
+        // Reset flag หลังจากการ toggle เสร็จ
+        setTimeout(() => {
+            isManualControlRef.current = false;
+        }, 500);
     };
 
     const handleNext = () => {
@@ -1827,61 +1989,76 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         if (!musicPlaying) setMusicPlaying(true);
     };
     
-    // Sync Play/Pause state with iframe (backup for external changes or initial state)
+    // รวม logic การเล่นเพลงทั้งหมดใน useEffect เดียวเพื่อป้องกัน infinite loop
     useEffect(() => {
-        if (!showIntro && iframeReady) {
-            if (musicPlaying) {
-                sendCommand('playVideo', [], false); // Don't require ready for sync
-            } else {
-                sendCommand('pauseVideo', [], false); // Don't require ready for sync
-            }
+        // Skip ถ้าเป็น manual control (ให้ priority สูงกว่า auto-play)
+        if (isManualControlRef.current) {
+            return;
         }
-    }, [musicPlaying, showIntro, iframeReady, sendCommand]);
-
-    // Retry play after redirect (for in-app browsers like Facebook/Line)
-    useEffect(() => {
-        if (!showIntro && musicPlaying && iframeRef.current) {
-            // Retry play after a delay (for in-app browsers that may have stopped playback)
-            const retryPlay = () => {
-                setTimeout(() => {
-                    if (iframeRef.current) {
-                        sendCommand('playVideo', [], false); // Don't require ready for retry
-                    }
-                }, 1000);
-            };
-            retryPlay();
+        
+        // Skip ถ้า state ไม่เปลี่ยน (ป้องกัน unnecessary re-run)
+        if (lastMusicStateRef.current === musicPlaying) {
+            return;
         }
-    }, [showIntro, musicPlaying, sendCommand]);
-
-    // Auto-play music when restored from sessionStorage after refresh
-    useEffect(() => {
-        if (!showIntro && musicPlaying && iframeReady && iframeRef.current) {
-            // Retry mechanism with multiple attempts to ensure playback starts
+        
+        // Update last state
+        lastMusicStateRef.current = musicPlaying;
+        
+        // Skip ถ้ายังอยู่ใน intro หรือ iframe ยังไม่ ready
+        if (showIntro || !iframeRef.current) {
+            return;
+        }
+        
+        // ถ้า musicPlaying = true และยังไม่ได้ auto-play
+        if (musicPlaying && !autoPlayAttemptedRef.current && iframeReady) {
+            // Auto-play music when restored from sessionStorage after refresh
             let attempts = 0;
-            const maxAttempts = 8; // More attempts for better reliability
+            const maxAttempts = 5; // ลดจำนวน attempts เพื่อป้องกัน loop
             let timeoutId: ReturnType<typeof setTimeout> | null = null;
             
             const tryPlay = () => {
+                // Check flag อีกครั้งก่อนเล่น
+                if (isManualControlRef.current || !iframeRef.current || !iframeReady) {
+                    return;
+                }
+                
                 attempts++;
-                if (attempts <= maxAttempts && iframeRef.current && iframeReady) {
+                if (attempts <= maxAttempts) {
                     sendCommand('playVideo', [], true); // Require ready for auto-play
                     if (attempts < maxAttempts) {
                         // Retry with increasing delay
-                        timeoutId = setTimeout(tryPlay, 300 + (attempts * 100));
+                        timeoutId = setTimeout(tryPlay, 500 + (attempts * 200));
+                    } else {
+                        // Mark ว่าได้พยายาม auto-play แล้ว
+                        autoPlayAttemptedRef.current = true;
                     }
+                } else {
+                    autoPlayAttemptedRef.current = true;
                 }
             };
             
-            // Start trying after iframe is ready
+            // Start trying after iframe is ready (delay เพื่อให้ iframe พร้อม)
             timeoutId = setTimeout(() => {
                 tryPlay();
-            }, 500);
+            }, 800);
             
             return () => {
                 if (timeoutId) clearTimeout(timeoutId);
             };
+        } else if (!musicPlaying && iframeReady) {
+            // Pause music
+            sendCommand('pauseVideo', [], false);
+            autoPlayAttemptedRef.current = false; // Reset flag เมื่อ pause
+        } else if (musicPlaying && iframeReady && !autoPlayAttemptedRef.current) {
+            // Sync play state (backup)
+            sendCommand('playVideo', [], false);
         }
-    }, [showIntro, musicPlaying, iframeReady, sendCommand]);
+        
+        // Reset autoPlayAttemptedRef เมื่อ state เปลี่ยนจาก true เป็น false
+        if (!musicPlaying) {
+            autoPlayAttemptedRef.current = false;
+        }
+    }, [musicPlaying, showIntro, iframeReady, sendCommand]);
 
     // Listen for YouTube player state changes to sync UI
     useEffect(() => {
