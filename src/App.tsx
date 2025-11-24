@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ConfigProvider, App as AntApp, Spin, message } from 'antd';
-import { Guest, Zone, TableData, RSVPData } from '@/types';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import MainLayout from '@/components/Layout/MainLayout';
 import DashboardPage from '@/pages/DashboardPage';
@@ -11,12 +10,6 @@ import CheckInPage from '@/pages/CheckInPage';
 import CardManagementPage from '@/pages/CardManagementPage';
 import RSVPListPage from '@/pages/RSVPListPage';
 import {
-  subscribeGuests,
-  subscribeZones,
-  subscribeTables,
-  subscribeRSVPs,
-  createGuest,
-  updateRSVP,
   onAuthStateChange,
   checkIsAdmin,
   logout,
@@ -25,7 +18,12 @@ import {
   subscribeAdminAppState,
   getCurrentUser,
   getGuestByRsvpUid,
+  createGuest,
+  updateRSVP,
 } from '@/services/firebaseService';
+import { useAdminData } from '@/hooks/useAdminData';
+import { useRSVPSync } from '@/hooks/useRSVPSync';
+import { Guest, RSVPData } from '@/types';
 
 const App: React.FC = () => {
   // Check URL path BEFORE initial render
@@ -181,71 +179,22 @@ const App: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [currentView, isAuthenticated]);
 
-  // Central State Management
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [tables, setTables] = useState<TableData[]>([]);
-  const [rsvps, setRsvps] = useState<RSVPData[]>([]); // 🔧 DevOps: เพิ่ม RSVP state
+  // ใช้ custom hooks สำหรับจัดการข้อมูล
+  const { guests, zones, tables, rsvps, isLoading: dataLoading, setZones, setTables } = useAdminData(
+    appMode === 'admin' && isAuthenticated
+  );
 
-  // Initialize Firebase and load data
+  // ใช้ custom hook สำหรับ auto-sync RSVPs ไปยัง Guests
+  useRSVPSync(appMode === 'admin' && isAuthenticated);
+
+  // Update loading state based on data loading
   useEffect(() => {
-    if (appMode !== 'admin' || !isAuthenticated) {
+    if (appMode === 'admin' && isAuthenticated) {
+      setIsLoading(dataLoading);
+    } else {
       setIsLoading(false);
-      return;
     }
-
-    // Set timeout to prevent infinite loading
-    const loadingTimeout = setTimeout(() => {
-      setIsLoading(false);
-    }, 5000); // Max 5 seconds loading
-
-    // Subscribe to real-time updates (admin only)
-    const unsubscribeGuests = subscribeGuests((data) => {
-      setGuests(data);
-      setIsLoading(false);
-      clearTimeout(loadingTimeout);
-    });
-
-    const unsubscribeZones = subscribeZones((data) => {
-      setZones(data);
-    });
-
-    const unsubscribeTables = subscribeTables((data) => {
-      setTables(data);
-    });
-
-    // 🔧 DevOps: Subscribe to RSVPs
-    const unsubscribeRSVPs = subscribeRSVPs((data) => {
-      console.log('📊 [Dashboard] รับข้อมูล RSVP:', data.length, 'รายการ');
-      setRsvps(data);
-    });
-
-    // Cleanup on unmount
-    return () => {
-      clearTimeout(loadingTimeout);
-      unsubscribeGuests();
-      unsubscribeZones();
-      unsubscribeTables();
-      unsubscribeRSVPs();
-    };
-  }, [appMode, isAuthenticated]);
-
-  // Update zone capacity based on tables whenever tables state changes
-  useEffect(() => {
-    setZones((prevZones) =>
-      prevZones.map((zone) => {
-        const totalTableCapacity = tables
-          .filter((t) => t.zoneId === zone.zoneId)
-          .reduce((acc, t) => acc + t.capacity, 0);
-        return { ...zone, capacity: totalTableCapacity };
-      }),
-    );
-  }, [tables]);
-
-  // 🔧 DevOps Fix: ปิด auto-import เพราะ GuestRSVPApp สร้าง Guest เองแล้ว
-  // เพื่อป้องกัน duplicate Guest creation และ race condition
-  // GuestRSVPApp จะสร้าง Guest อัตโนมัติเมื่อ isComing === 'yes'
-  // Admin สามารถ import RSVP แบบ manual ได้ที่ RSVPListPage
+  }, [appMode, isAuthenticated, dataLoading]);
 
   // 🔧 DevOps Fix: Handler สำหรับเปลี่ยนหน้า (ป้องกัน navigation bounce)
   const handlePageChange = (key: string) => {
@@ -304,7 +253,7 @@ const App: React.FC = () => {
         return (
           <RSVPListPage
             rsvps={rsvps}
-            onImportToGuests={async (rsvp) => {
+            onImportToGuests={async (rsvp: RSVPData) => {
               try {
                 if (rsvp.guestId) {
                   message.warning('รายการนี้ถูกนำเข้าแล้ว');
