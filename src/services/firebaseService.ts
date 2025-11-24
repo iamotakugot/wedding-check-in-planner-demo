@@ -614,6 +614,17 @@ export const getWeddingCardConfig = async (): Promise<WeddingCardConfigFirebase 
   return snapshot.val();
 };
 
+export const subscribeWeddingCardConfig = (callback: (config: WeddingCardConfigFirebase | null) => void): () => void => {
+  const unsubscribe = onValue(weddingCardConfigRef(), (snapshot: DataSnapshot) => {
+    if (!snapshot.exists()) {
+      callback(null);
+      return;
+    }
+    callback(snapshot.val());
+  });
+  return unsubscribe;
+};
+
 export const updateWeddingCardConfig = async (config: Partial<WeddingCardConfigFirebase>): Promise<void> => {
   await requireAdmin();
   await update(weddingCardConfigRef(), config);

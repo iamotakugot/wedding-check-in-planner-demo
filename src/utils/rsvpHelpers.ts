@@ -11,6 +11,87 @@ import type { RSVPData } from '@/types';
 import type { Guest } from '@/types';
 
 /**
+ * คำนวณจำนวนคนเข้างานทั้งหมดจาก RSVP (รวมผู้ติดตาม)
+ * นับเฉพาะ RSVP ที่ isComing === 'yes'
+ * 
+ * @param rsvps - Array of RSVPData
+ * @returns จำนวนคนทั้งหมด (ตัวเอง + ผู้ติดตาม)
+ */
+export const calculateTotalAttendees = (rsvps: RSVPData[]): number => {
+  if (!rsvps || rsvps.length === 0) return 0;
+  
+  return rsvps.reduce((total, rsvp) => {
+    if (!rsvp || rsvp.isComing !== 'yes') return total;
+    
+    // นับตัวเอง (1) + ผู้ติดตาม
+    const mainPerson = 1;
+    const accompanyingCount = rsvp.accompanyingGuests?.length || 0;
+    
+    return total + mainPerson + accompanyingCount;
+  }, 0);
+};
+
+/**
+ * คำนวณจำนวนคนที่เช็คอินแล้วจาก Guests
+ * 
+ * @param guests - Array of Guest
+ * @returns จำนวน guests ที่มี checkedInAt ไม่เป็น null
+ */
+export const calculateCheckedInCount = (guests: Guest[]): number => {
+  if (!guests || guests.length === 0) return 0;
+  
+  return guests.filter(guest => 
+    guest && 
+    guest.checkedInAt !== null && 
+    guest.checkedInAt !== undefined
+  ).length;
+};
+
+/**
+ * คำนวณสถิติ RSVP
+ * 
+ * @param rsvps - Array of RSVPData
+ * @returns Object ที่มี totalForms, totalComingForms, totalNotComingForms
+ */
+export const calculateRsvpStats = (rsvps: RSVPData[]): {
+  totalForms: number;
+  totalComingForms: number;
+  totalNotComingForms: number;
+} => {
+  if (!rsvps || rsvps.length === 0) {
+    return {
+      totalForms: 0,
+      totalComingForms: 0,
+      totalNotComingForms: 0,
+    };
+  }
+  
+  const totalForms = rsvps.length;
+  const totalComingForms = rsvps.filter(r => r && r.isComing === 'yes').length;
+  const totalNotComingForms = rsvps.filter(r => r && r.isComing === 'no').length;
+  
+  return {
+    totalForms,
+    totalComingForms,
+    totalNotComingForms,
+  };
+};
+
+/**
+ * ตรวจสอบว่า Guest ถูกจัดโต๊ะแล้วหรือไม่
+ * ต้องมีทั้ง zoneId และ tableId ที่ไม่เป็น null
+ * 
+ * @param guest - Guest object
+ * @returns true ถ้า Guest ถูกจัดโต๊ะแล้ว (มีทั้ง zoneId และ tableId)
+ */
+export const isGuestSeated = (guest: Guest): boolean => {
+  return guest.zoneId !== null && 
+         guest.zoneId !== undefined && 
+         guest.tableId !== null && 
+         guest.tableId !== undefined;
+};
+
+/**
  * หา Guests ทั้งหมดที่ link กับ RSVP นี้ (ทั้ง main และ accompanying)
  * 
  * Logic:

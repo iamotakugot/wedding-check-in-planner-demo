@@ -5,7 +5,12 @@ import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOu
 import { Guest, Zone, TableData, Side } from '@/types';
 import { updateGuest } from '@/services/firebaseService';
 import type { RSVPData } from '@/types';
-import { groupRSVPsWithGuests, getGuestsFromRSVP } from '@/utils/rsvpHelpers';
+import { 
+  groupRSVPsWithGuests, 
+  getGuestsFromRSVP,
+  calculateTotalAttendees,
+  calculateCheckedInCount,
+} from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;
 
@@ -33,12 +38,33 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, zones, tables, rsvps 
     });
   }, [rsvps, guests, filterSide, filterZone, filterTable, search]);
 
-  // 🔧 DevOps: คำนวณ totals จาก groups
+  // 🔧 DevOps: หา Guests ที่ link กับ RSVP
+  const guestsFromRSVP = useMemo(() => {
+    if (!rsvps || rsvps.length === 0) return [];
+    if (!guests || guests.length === 0) return [];
+    
+    const guestSet = new Set<string>();
+    rsvps.forEach(rsvp => {
+      if (rsvp && rsvp.isComing === 'yes') {
+        const relatedGuests = getGuestsFromRSVP(rsvp, guests);
+        relatedGuests.forEach(g => guestSet.add(g.id));
+      }
+    });
+    return guests.filter(g => guestSet.has(g.id));
+  }, [rsvps, guests]);
+
+  // 🔧 DevOps: คำนวณ totals จาก RSVP (Source of Truth)
+  // ใช้ helper functions เพื่อความสอดคล้องกับ Dashboard
   const totals = useMemo(() => {
-    const total = groups.reduce((acc, g) => acc + g.totalPeople, 0);
-    const checkedIn = groups.reduce((acc, g) => acc + g.checkedIn, 0);
-    return { total, checkedIn, notChecked: total - checkedIn };
-  }, [groups]);
+    // คำนวณจำนวนคนที่คาดหวังจาก RSVP (รวมผู้ติดตาม)
+    const totalExpected = calculateTotalAttendees(rsvps);
+    
+    // คำนวณจำนวนคนที่เช็คอินแล้วจาก Guests ที่ link กับ RSVP
+    const checkedIn = calculateCheckedInCount(guestsFromRSVP);
+    const notChecked = totalExpected - checkedIn;
+    
+    return { total: totalExpected, checkedIn, notChecked };
+  }, [rsvps, guestsFromRSVP]);
 
   // 🔧 DevOps: คำนวณ RSVP statistics
   const rsvpsNotImported = useMemo(() => {

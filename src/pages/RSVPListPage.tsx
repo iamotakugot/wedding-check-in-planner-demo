@@ -208,12 +208,21 @@ const RSVPListPage: React.FC<RSVPListPageProps> = ({ rsvps }) => {
                     <Text strong>{1 + (selectedRSVP.accompanyingGuestsCount || 0)} ท่าน</Text>
                   </Space>
                 </Descriptions.Item>
+                <Descriptions.Item label="ผู้แจ้ง (Main Guest)">
+                  <Text strong>
+                    {selectedRSVP.firstName} {selectedRSVP.lastName}
+                    {selectedRSVP.nickname && ` (${selectedRSVP.nickname})`}
+                  </Text>
+                </Descriptions.Item>
                 {selectedRSVP.accompanyingGuests && selectedRSVP.accompanyingGuests.length > 0 && (
-                  <Descriptions.Item label="ผู้ติดตาม">
+                  <Descriptions.Item label="ผู้ติดตาม (Accompanying Guests)">
                     <ul style={{ margin: 0, paddingLeft: 20 }}>
                       {selectedRSVP.accompanyingGuests.map((guest, index) => (
                         <li key={index}>
-                          {guest.relationToMain} {guest.name ? `(${guest.name})` : ''}
+                          <Text>
+                            คนที่ {index + 1}: {guest.name || 'ไม่ระบุชื่อ'}
+                            {guest.relationToMain && ` (${guest.relationToMain})`}
+                          </Text>
                         </li>
                       ))}
                     </ul>

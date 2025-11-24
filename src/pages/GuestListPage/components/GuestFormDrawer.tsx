@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
-import { Drawer, Form, Input, InputNumber, Select, Space, Button, Row, Col, Typography } from 'antd';
+import { Drawer, Form, Input, InputNumber, Select, Space, Button, Row, Col } from 'antd';
 import { Guest, Zone, TableData } from '@/types';
 import { GENDER_OPTIONS, SIDE_OPTIONS } from '@/data/formOptions';
 
 const { TextArea } = Input;
-const { Text } = Typography;
 
 interface GuestFormDrawerProps {
   visible: boolean;
@@ -20,14 +19,11 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
   onClose,
   guestToEdit,
   onSubmit,
-  zones,
-  tables,
+  zones: _zones,
+  tables: _tables,
 }) => {
   const [form] = Form.useForm();
   const isEditMode = !!guestToEdit;
-
-  const selectedZoneId = Form.useWatch('zoneId', form);
-  const tablesInSelectedZone = tables.filter((t) => t.zoneId === selectedZoneId);
 
   useEffect(() => {
     if (visible) {
@@ -135,7 +131,8 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
         >
           <Select placeholder="เลือกฝ่าย" options={SIDE_OPTIONS} />
         </Form.Item>
-        <Row gutter={16}>
+        {/* 🔧 ลบการเลือกที่นั่งออก - ใช้เฉพาะที่หน้า จัดการผังโต๊ะ & โซน เท่านั้น */}
+        {/* <Row gutter={16}>
           <Col span={12}>
             <Form.Item name="zoneId" label="โซนที่นั่ง">
               <Select
@@ -164,7 +161,7 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
               )}
             </Form.Item>
           </Col>
-        </Row>
+        </Row> */}
         <Form.Item name="note" label="หมายเหตุ (ข้อจำกัด/คำขอพิเศษ)">
           <TextArea
             rows={3}

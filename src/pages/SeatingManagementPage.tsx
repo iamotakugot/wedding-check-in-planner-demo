@@ -17,9 +17,11 @@ import {
   Divider,
   message,
   Modal,
+  Drawer,
   Avatar,
   Input,
   Alert,
+  Checkbox,
 } from 'antd';
 import {
   PlusOutlined,
@@ -33,6 +35,7 @@ import {
   TeamOutlined,
   FileTextOutlined,
   ExclamationCircleOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import { Guest, Zone, TableData } from '@/types';
@@ -64,7 +67,9 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
   // In-page detail modal state (simpler UX)
   const [activeTable, setActiveTable] = useState<TableData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isAssignDrawerOpen, setIsAssignDrawerOpen] = useState(false);
   const [unassignedSearchText, setUnassignedSearchText] = useState('');
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
 
   // Zone/Table CRUD modals
   const [isZoneModalVisible, setIsZoneModalVisible] = useState(false);
@@ -153,18 +158,38 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
       // หา Guests ที่ link กับ RSVP นี้
       const relatedGuests = getGuestsFromRSVP(rsvp, guests);
       
-      // กรองเฉพาะ Guests ที่ยังไม่ได้จัดโต๊ะ
-      const unassignedGuests = relatedGuests.filter(g => g.zoneId === null || g.tableId === null);
+      // 🔧 Debug: Log ข้อมูลเพื่อตรวจสอบ
+      if (relatedGuests.length > 0) {
+        console.log('🔍 [Seating] RSVP:', rsvp.firstName, rsvp.lastName, 'มี Guests:', relatedGuests.length);
+      }
+      
+      // กรองเฉพาะ Guests ที่ยังไม่ได้จัดโต๊ะ (zoneId === null && tableId === null)
+      const unassignedGuests = relatedGuests.filter(g => 
+        (g.zoneId === null || g.zoneId === undefined) && 
+        (g.tableId === null || g.tableId === undefined)
+      );
       
       if (unassignedGuests.length === 0) return;
       
       const groupName = rsvp.fullName || `${rsvp.firstName} ${rsvp.lastName}`;
       
-      // หา main guest (ตัวแรกที่ match กับ RSVP)
-      const mainGuest = unassignedGuests.find(g => 
-        g.rsvpUid === rsvp.uid && 
-        (g.firstName === rsvp.firstName || g.id === rsvp.guestId)
-      ) || unassignedGuests[0];
+      // 🔧 หา main guest - ใช้วิธีที่ยืดหยุ่นกว่า
+      // 1. หาผ่าน guestId ก่อน (ถ้ามี)
+      // 2. หาผ่าน rsvpUid และ firstName (case-insensitive)
+      // 3. ถ้าไม่เจอ ใช้ตัวแรก
+      let mainGuest = unassignedGuests.find(g => g.id === rsvp.guestId);
+      
+      if (!mainGuest) {
+        mainGuest = unassignedGuests.find(g => 
+          g.rsvpUid === rsvp.uid && 
+          g.firstName?.toLowerCase().trim() === rsvp.firstName?.toLowerCase().trim()
+        );
+      }
+      
+      if (!mainGuest) {
+        // ถ้ายังไม่เจอ ใช้ตัวแรกที่มี rsvpUid ตรงกัน
+        mainGuest = unassignedGuests.find(g => g.rsvpUid === rsvp.uid) || unassignedGuests[0];
+      }
       
       // เพิ่ม main guest
       if (mainGuest) {
@@ -179,12 +204,20 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
       // เพิ่ม accompanying guests
       if (rsvp.accompanyingGuests && rsvp.accompanyingGuests.length > 0) {
         rsvp.accompanyingGuests.forEach((accGuest, index) => {
-          // หา Guest ที่ match กับ accompanying guest
-          const relatedGuest = unassignedGuests.find(g => 
-            g.rsvpUid === rsvp.uid && 
-            g.firstName === accGuest.name &&
-            g.id !== mainGuest?.id
-          );
+          // 🔧 หา Guest ที่ match กับ accompanying guest - ใช้วิธีที่ยืดหยุ่นกว่า
+          // 1. หาผ่าน firstName (case-insensitive, trim)
+          // 2. หาผ่าน nickname (ถ้ามี)
+          const relatedGuest = unassignedGuests.find(g => {
+            if (g.id === mainGuest?.id) return false; // ข้าม main guest
+            
+            // Match ผ่าน firstName
+            const firstNameMatch = g.firstName?.toLowerCase().trim() === accGuest.name?.toLowerCase().trim();
+            
+            // Match ผ่าน nickname (ถ้ามี)
+            const nicknameMatch = g.nickname?.toLowerCase().trim() === accGuest.name?.toLowerCase().trim();
+            
+            return g.rsvpUid === rsvp.uid && (firstNameMatch || nicknameMatch);
+          });
           
           if (relatedGuest) {
             items.push({
@@ -195,10 +228,16 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
               accompanyingIndex: index,
               accompanyingName: accGuest.name,
             });
+          } else {
+            // 🔧 Debug: ถ้าไม่เจอ accompanying guest
+            console.warn('⚠️ [Seating] ไม่พบ Guest สำหรับ accompanying guest:', accGuest.name, 'ใน RSVP:', rsvp.firstName);
           }
         });
       }
     });
+    
+    // 🔧 Debug: Log จำนวน items ที่พบ
+    console.log('📊 [Seating] unassignedGuestItems:', items.length, 'items');
     
     return items;
   }, [rsvps, guests]);
@@ -228,21 +267,51 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     }
   };
 
-  const handleAddGuestToTable = async (guestId: string) => {
-    if (!activeTable) return;
-    const currentCount = (guestsByTable.get(activeTable.tableId) || []).length;
-    if (currentCount >= activeTable.capacity) {
-      message.error('โต๊ะเต็มแล้ว');
+  // 🔧 Helper function สำหรับเพิ่ม guest เดียว (ใช้ใน handleAddMultipleGuestsToTable)
+  const addSingleGuestToTable = async (guestId: string) => {
+    if (!activeTable) {
+      throw new Error('ไม่มีโต๊ะที่เลือก');
+    }
+    
+    await updateGuest(guestId, { 
+      zoneId: activeTable.zoneId, 
+      tableId: activeTable.tableId 
+    });
+  };
+
+  const handleAddMultipleGuestsToTable = async () => {
+    if (!activeTable || selectedGuestIds.length === 0) {
+      message.warning('กรุณาเลือกแขกที่ต้องการเพิ่ม');
       return;
     }
+    
+    const currentTableGuests = guests.filter((g) => g.tableId === activeTable.tableId);
+    const currentCount = currentTableGuests.length;
+    const availableSlots = activeTable.capacity - currentCount;
+    
+    if (availableSlots <= 0) {
+      message.error(`โต๊ะเต็มแล้ว (${currentCount}/${activeTable.capacity})`);
+      return;
+    }
+    
+    const guestsToAdd = selectedGuestIds.slice(0, availableSlots);
+    
     try {
-      await updateGuest(guestId, { zoneId: activeTable.zoneId, tableId: activeTable.tableId });
-      // Note: Firebase subscription will update the guests prop automatically
-      // The guestsByTable memo will recompute when guests change
-      message.success('เพิ่มเข้าโต๊ะสำเร็จ');
+      // เพิ่ม guests ทีละคน
+      for (const guestId of guestsToAdd) {
+        await addSingleGuestToTable(guestId);
+      }
+      
+      message.success(`เพิ่ม ${guestsToAdd.length} คนเข้าโต๊ะสำเร็จ`);
+      setSelectedGuestIds([]);
+      setIsAssignDrawerOpen(false);
+      
+      if (guestsToAdd.length < selectedGuestIds.length) {
+        message.warning(`เพิ่มได้เพียง ${guestsToAdd.length} คน (โต๊ะเต็ม)`);
+      }
     } catch (error) {
-      console.error('Error adding guest to table:', error);
-      message.error('เกิดข้อผิดพลาด');
+      console.error('❌ [Seating] Error adding multiple guests:', error);
+      message.error('เกิดข้อผิดพลาดในการเพิ่มแขก');
     }
   };
 
@@ -264,7 +333,15 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
   const handleOpenDetailModal = (table: TableData) => {
     setActiveTable(table);
     setUnassignedSearchText('');
+    setSelectedGuestIds([]);
     setIsDetailModalOpen(true);
+  };
+
+  const handleOpenAssignDrawer = (table: TableData) => {
+    setActiveTable(table);
+    setUnassignedSearchText('');
+    setSelectedGuestIds([]);
+    setIsAssignDrawerOpen(true);
   };
 
   // Zone handlers
@@ -647,7 +724,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
         </Col>
       </Row>
 
-      {/* In-page Table Detail Modal */}
+      {/* 🔧 Redesign: Table Detail Modal - แสดงเฉพาะแขกที่นั่งอยู่ */}
       <Modal
         title={
           activeTable ? (
@@ -659,145 +736,262 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
           ) : 'รายละเอียดโต๊ะ'
         }
         open={isDetailModalOpen}
-        onCancel={() => setIsDetailModalOpen(false)}
-        footer={null}
-        width={800}
-        key={activeTable?.id} // Force re-render when table changes
+        onCancel={() => {
+          setIsDetailModalOpen(false);
+          setActiveTable(null);
+        }}
+        footer={[
+          <Button key="assign" type="primary" icon={<PlusOutlined />} onClick={() => {
+            setIsDetailModalOpen(false);
+            if (activeTable) handleOpenAssignDrawer(activeTable);
+          }}>
+            เพิ่มแขกเข้าโต๊ะ
+          </Button>,
+          <Button key="close" onClick={() => {
+            setIsDetailModalOpen(false);
+            setActiveTable(null);
+          }}>
+            ปิด
+          </Button>,
+        ]}
+        width={600}
+        key={activeTable?.id}
       >
         {activeTable && (() => {
           // Get current guests for this table - ensure we use the latest data
           const currentTableGuests = guests.filter((g) => g.tableId === activeTable.tableId);
           
           return (
-            <Row gutter={[24, 24]}>
-              {/* Left: current guests */}
-              <Col xs={24} md={12} style={{ borderRight: '1px solid #f0f0f0' }}>
-                <Divider orientation="left" style={{ margin: '0 0 16px 0' }}>
-                  <Text type="success">นั่งอยู่ที่นี่</Text>
-                </Divider>
-                <List
-                  itemLayout="horizontal"
-                  dataSource={currentTableGuests}
-                  locale={{ emptyText: 'ยังไม่มีใครนั่งโต๊ะนี้' }}
-                  renderItem={(guest) => (
-                    <List.Item key={guest.id} actions={[<Button key="delete" type="text" danger icon={<DeleteOutlined />} onClick={() => handleUnassignGuest(guest.id)} />]}>
-                      <List.Item.Meta
-                        avatar={<Avatar style={{ backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96' }}>{guest.nickname ? guest.nickname[0] : guest.firstName[0]}</Avatar>}
-                        title={`${guest.firstName} ${guest.lastName}${guest.nickname ? ` (${guest.nickname})` : ''}`}
-                        description={guest.relationToCouple}
-                      />
-                    </List.Item>
-                  )}
-                  style={{ maxHeight: 400, overflowY: 'auto' }}
-                />
-              </Col>
-
-            {/* Right: available guests */}
-            <Col xs={24} md={12}>
+            <div>
               <Divider orientation="left" style={{ margin: '0 0 16px 0' }}>
-                <Text type="warning">เลือกคนเข้าโต๊ะ</Text>
+                <Text type="success" strong>แขกที่นั่งอยู่ ({currentTableGuests.length} / {activeTable.capacity})</Text>
               </Divider>
-              <Input placeholder="ค้นหาชื่อจาก RSVP" value={unassignedSearchText} onChange={(e) => setUnassignedSearchText(e.target.value)} style={{ marginBottom: 16 }} />
               <List
                 itemLayout="horizontal"
-                dataSource={filteredUnassignedGuestItems}
-                locale={{ emptyText: 'ไม่พบ RSVP ที่ยังว่าง' }}
-                renderItem={(item) => {
-                  const { guest, rsvp, groupName, isMainGuest, accompanyingIndex, accompanyingName } = item;
-                  // Use current guests count directly from filtered list for accurate count
-                  const currentTableCount = guests.filter((g) => g.tableId === activeTable.tableId).length;
-                  const canAdd = currentTableCount < activeTable.capacity;
-                  
-                  // กำหนด title ตามประเภท
-                  let displayTitle = '';
-                  if (isMainGuest) {
-                    displayTitle = `${groupName} (ข้อมูลผู้แจ้ง)`;
-                  } else if (accompanyingIndex !== undefined && accompanyingName) {
-                    displayTitle = `${groupName} (ผู้ติดตามคนที่ ${accompanyingIndex + 1}: ${accompanyingName})`;
-                  } else {
-                    displayTitle = `${groupName} (${guest.firstName} ${guest.lastName})`;
-                  }
-                  
-                  return (
-                    <List.Item 
-                      key={guest.id}
-                      actions={[
-                        <Button 
-                          key="select" 
-                          type="primary" 
-                          ghost 
-                          size="small" 
-                          icon={<ArrowRightOutlined />} 
-                          onClick={() => handleAddGuestToTable(guest.id)} 
-                          disabled={!canAdd}
-                        >
-                          เลือก
+                dataSource={currentTableGuests}
+                locale={{ emptyText: 'ยังไม่มีใครนั่งโต๊ะนี้' }}
+                renderItem={(guest) => (
+                  <List.Item 
+                    key={guest.id} 
+                    actions={[
+                      <Popconfirm
+                        key="unassign"
+                        title="ย้ายแขกออก?"
+                        description={`นำคุณ ${guest.nickname || guest.firstName} ออกจากโต๊ะนี้?`}
+                        onConfirm={() => handleUnassignGuest(guest.id)}
+                        okText="ย้ายออก"
+                        cancelText="ยกเลิก"
+                      >
+                        <Button type="text" danger icon={<DeleteOutlined />} size="small">
+                          ย้ายออก
                         </Button>
-                      ]}
-                    >
-                      <List.Item.Meta
-                        avatar={
-                          <Avatar 
-                            size="small" 
-                            style={{ 
-                              backgroundColor: isMainGuest ? '#722ed1' : '#52c41a',
-                            }}
-                          >
-                            {isMainGuest ? '👤' : `${(accompanyingIndex || 0) + 1}`}
-                          </Avatar>
-                        }
-                        title={
-                          <div>
-                            <Space>
-                              <Text strong style={{ fontSize: 14, color: isMainGuest ? '#722ed1' : '#52c41a' }}>
-                                {displayTitle}
-                              </Text>
-                              <Tag color="blue" icon={<FileTextOutlined />} style={{ fontSize: 10 }}>
-                                RSVP
-                              </Tag>
-                            </Space>
-                            <div style={{ marginTop: 4 }}>
-                              <Text style={{ fontSize: 12, color: '#666' }}>
-                                {guest.firstName} {guest.lastName} {guest.nickname ? `(${guest.nickname})` : ''}
-                              </Text>
-                              {guest.relationToCouple && (
-                                <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-                                  {guest.relationToCouple}
-                                </div>
-                              )}
-                            </div>
-                            {/* 🔧 DevOps: แสดงข้อมูล RSVP */}
-                            <div style={{ marginTop: 8, padding: 8, backgroundColor: '#f0faff', borderRadius: 4, fontSize: 11 }}>
-                              <Text type="secondary" strong>ข้อมูล RSVP:</Text>
-                              <div style={{ marginTop: 4 }}>
-                                <Text type="secondary">
-                                  {isMainGuest ? 'ข้อมูลผู้แจ้ง' : `ผู้ติดตามคนที่ ${(accompanyingIndex || 0) + 1}`}
-                                </Text>
-                                {rsvp.note && (
-                                  <div style={{ marginTop: 2 }}>
-                                    <Text type="secondary">หมายเหตุ: {rsvp.note}</Text>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        }
-                        description={
-                          <Tag style={{ fontSize: 10, lineHeight: '16px' }}>
-                            {rsvp.side === 'groom' ? 'บ่าว' : rsvp.side === 'bride' ? 'สาว' : 'ทั้งคู่'} • {groupName}
-                          </Tag>
-                        }
-                      />
-                    </List.Item>
-                  );
-                }}
-                style={{ maxHeight: 350, overflowY: 'auto' }}
+                      </Popconfirm>
+                    ]}
+                  >
+                    <List.Item.Meta
+                      avatar={<Avatar style={{ backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96' }}>{guest.nickname ? guest.nickname[0] : guest.firstName[0]}</Avatar>}
+                      title={`${guest.firstName} ${guest.lastName}${guest.nickname ? ` (${guest.nickname})` : ''}`}
+                      description={guest.relationToCouple || 'ไม่มีข้อมูล'}
+                    />
+                  </List.Item>
+                )}
+                style={{ maxHeight: 400, overflowY: 'auto' }}
               />
-            </Col>
-          </Row>
+            </div>
           );
         })()}
       </Modal>
+
+      {/* 🔧 Redesign: Drawer สำหรับเลือกคนเข้าโต๊ะ - มีพื้นที่มากขึ้นและใช้งานง่ายขึ้น */}
+      <Drawer
+        title={
+          activeTable ? (
+          <Space>
+            <TeamOutlined />
+            <Text strong style={{ fontSize: 18 }}>เพิ่มแขกเข้าโต๊ะ {activeTable.tableName}</Text>
+            <Tag color="blue">
+              {guests.filter((g) => g.tableId === activeTable.tableId).length} / {activeTable.capacity} คน
+            </Tag>
+          </Space>
+          ) : 'เลือกคนเข้าโต๊ะ'
+        }
+        open={isAssignDrawerOpen}
+        onClose={() => {
+          setIsAssignDrawerOpen(false);
+          setSelectedGuestIds([]);
+          setUnassignedSearchText('');
+        }}
+        width={window.innerWidth > 768 ? 600 : '100%'}
+        extra={
+          <Space>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              เลือกแล้ว: {selectedGuestIds.length} คน
+            </Text>
+            <Button 
+              type="primary" 
+              icon={<ArrowRightOutlined />}
+              onClick={handleAddMultipleGuestsToTable}
+              disabled={selectedGuestIds.length === 0}
+            >
+              เพิ่มเข้าโต๊ะ ({selectedGuestIds.length})
+            </Button>
+          </Space>
+        }
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Input
+            placeholder="ค้นหาชื่อ, นามสกุล, หรือชื่อเล่น"
+            value={unassignedSearchText}
+            onChange={(e) => setUnassignedSearchText(e.target.value)}
+            allowClear
+            prefix={<SearchOutlined />}
+            size="large"
+          />
+        </div>
+
+        {/* 🔧 แสดงจำนวน guests ที่ยังไม่ได้จัด */}
+        {filteredUnassignedGuestItems.length === 0 && unassignedGuestItems.length === 0 && (
+          <Alert
+            message="ไม่พบแขกที่ยังไม่ได้จัดโต๊ะ"
+            description="ไม่มี RSVP ที่ยังไม่ได้จัดโต๊ะ หรือ Guests ทั้งหมดถูกจัดโต๊ะแล้ว"
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+        {filteredUnassignedGuestItems.length === 0 && unassignedGuestItems.length > 0 && (
+          <Alert
+            message="ไม่พบผลลัพธ์จากการค้นหา"
+            description={`พบ ${unassignedGuestItems.length} คนที่ยังไม่ได้จัด แต่ไม่ตรงกับคำค้นหา "${unassignedSearchText}"`}
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {/* 🔧 แสดงรายการ guests ที่ยังไม่ได้จัดโต๊ะ */}
+        <List
+          itemLayout="horizontal"
+          dataSource={filteredUnassignedGuestItems}
+          locale={{ emptyText: 'ไม่พบ RSVP ที่ยังว่าง' }}
+          renderItem={(item) => {
+            const { guest, rsvp, groupName, isMainGuest, accompanyingIndex, accompanyingName } = item;
+            
+            if (!guest || !activeTable) {
+              return null;
+            }
+            
+            const currentTableGuests = guests.filter((g) => g.tableId === activeTable.tableId);
+            const currentTableCount = currentTableGuests.length;
+            const availableSlots = activeTable.capacity - currentTableCount;
+            const isSelected = selectedGuestIds.includes(guest.id);
+            // คำนวณว่าสามารถเลือกได้หรือไม่ (ต้องมีที่ว่างพอ)
+            const alreadySelectedCount = selectedGuestIds.length;
+            const canSelect = alreadySelectedCount < availableSlots || isSelected;
+            
+            // กำหนด title ตามประเภท
+            let displayTitle = '';
+            if (isMainGuest) {
+              displayTitle = `${groupName} (ข้อมูลผู้แจ้ง)`;
+            } else if (accompanyingIndex !== undefined && accompanyingName) {
+              displayTitle = `${groupName} (ผู้ติดตามคนที่ ${accompanyingIndex + 1}: ${accompanyingName})`;
+            } else {
+              displayTitle = `${groupName} (${guest.firstName} ${guest.lastName})`;
+            }
+            
+            return (
+              <List.Item
+                key={guest.id}
+                style={{
+                  backgroundColor: isSelected ? '#e6f7ff' : 'transparent',
+                  border: isSelected ? '1px solid #1890ff' : '1px solid transparent',
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  padding: '12px 16px',
+                  cursor: canSelect ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() => {
+                  if (!canSelect && !isSelected) return;
+                  
+                  if (isSelected) {
+                    setSelectedGuestIds(prev => prev.filter(id => id !== guest.id));
+                  } else {
+                    if (selectedGuestIds.length < availableSlots) {
+                      setSelectedGuestIds(prev => [...prev, guest.id]);
+                    } else {
+                      message.warning(`เลือกได้สูงสุด ${availableSlots} คน (เหลือที่ว่าง ${availableSlots} ที่นั่ง)`);
+                    }
+                  }
+                }}
+              >
+                <List.Item.Meta
+                  avatar={
+                    <Checkbox
+                      checked={isSelected}
+                      disabled={!canSelect && !isSelected}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        if (e.target.checked) {
+                          if (selectedGuestIds.length < availableSlots) {
+                            setSelectedGuestIds(prev => [...prev, guest.id]);
+                          } else {
+                            message.warning(`เลือกได้สูงสุด ${availableSlots} คน`);
+                          }
+                        } else {
+                          setSelectedGuestIds(prev => prev.filter(id => id !== guest.id));
+                        }
+                      }}
+                    />
+                  }
+                  title={
+                    <div>
+                      <Space>
+                        <Text strong style={{ fontSize: 14, color: isMainGuest ? '#722ed1' : '#52c41a' }}>
+                          {displayTitle}
+                        </Text>
+                        <Tag color="blue" icon={<FileTextOutlined />} style={{ fontSize: 10 }}>
+                          RSVP
+                        </Tag>
+                        {isMainGuest && (
+                          <Tag color="purple" style={{ fontSize: 10 }}>
+                            👤 ผู้แจ้ง
+                          </Tag>
+                        )}
+                      </Space>
+                      <div style={{ marginTop: 6 }}>
+                        <Text style={{ fontSize: 13, fontWeight: 500 }}>
+                          {guest.firstName} {guest.lastName}
+                          {guest.nickname && <Text type="secondary"> ({guest.nickname})</Text>}
+                        </Text>
+                        {guest.relationToCouple && (
+                          <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
+                            {guest.relationToCouple}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  }
+                  description={
+                    <Space size={4}>
+                      <Tag style={{ fontSize: 10 }}>
+                        {rsvp.side === 'groom' ? 'บ่าว' : rsvp.side === 'bride' ? 'สาว' : 'ทั้งคู่'}
+                      </Tag>
+                      {rsvp.note && (
+                        <Tooltip title={rsvp.note}>
+                          <Tag color="orange" style={{ fontSize: 10 }}>
+                            📝 มีหมายเหตุ
+                          </Tag>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  }
+                />
+              </List.Item>
+            );
+          }}
+        />
+      </Drawer>
 
       {/* Zone modal */}
       <ZoneModal visible={isZoneModalVisible} onClose={() => setIsZoneModalVisible(false)} zoneToEdit={editingZone} onSubmit={handleZoneSubmit} />

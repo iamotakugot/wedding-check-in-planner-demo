@@ -59,6 +59,7 @@ import {
   updateUserAppState, // Import updateUserAppState
   subscribeUserAppState, // Import subscribeUserAppState
   getWebViewInfo, // Import getWebViewInfo
+  subscribeWeddingCardConfig, // 🔧 Import subscription for wedding card config
 } from '@/services/firebaseService';
 import { get, ref, set, onValue, remove } from 'firebase/database';
 import { database } from '@/firebase/config';
@@ -66,7 +67,7 @@ import type { RSVPData } from '@/types';
 import type { User } from 'firebase/auth';
 import { Guest, Side } from '@/types';
 import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formOptions';
-import { defaultWeddingCardConfig, getOrderedNames } from '@/constants/weddingCard';
+import { defaultWeddingCardConfig, getOrderedNames, type WeddingCardConfig } from '@/constants/weddingCard';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -512,6 +513,7 @@ const CountdownTimer: React.FC = () => {
 
 
 interface MusicControlsProps {
+  config?: WeddingCardConfig;
 
     onFlip: () => void;
 
@@ -531,9 +533,8 @@ interface MusicControlsProps {
 
 // Card Front Component
 
-const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMusic, onNext, onPrev, currentTrack }) => {
-    // ใช้ config สำหรับการ์ดแต่งงาน
-    const config = defaultWeddingCardConfig;
+const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMusic, onNext, onPrev, currentTrack, config = defaultWeddingCardConfig }) => {
+    // ใช้ config สำหรับการ์ดแต่งงาน (รับจาก props หรือใช้ default)
     const orderedNames = getOrderedNames(config);
 
     return (
@@ -2361,9 +2362,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 // Intro Component - Interaction required for autoplay
 
-const IntroOverlay: React.FC<{ onStart: () => void }> = ({ onStart }) => {
-    // ใช้ config สำหรับการ์ดแต่งงาน
-    const config = defaultWeddingCardConfig;
+const IntroOverlay: React.FC<{ onStart: () => void; config?: WeddingCardConfig }> = ({ onStart, config = defaultWeddingCardConfig }) => {
+    // ใช้ config สำหรับการ์ดแต่งงาน (รับจาก props หรือใช้ default)
     const orderedNames = getOrderedNames(config);
 
     return (
@@ -2436,6 +2436,11 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const [showIntro, setShowIntro] = useState(true);
 
     const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+    
+    // 🔧 State สำหรับ wedding card config - ดึงจาก Firebase
+    // เริ่มต้นเป็น null เพื่อไม่ให้แสดงข้อมูล default ก่อนโหลดข้อมูลจาก Firebase
+    const [weddingCardConfig, setWeddingCardConfig] = useState<WeddingCardConfig | null>(null);
+    const [isConfigLoading, setIsConfigLoading] = useState(true);
 
     const currentTrack = PLAYLIST[currentTrackIndex];
 
@@ -2545,6 +2550,41 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 unsubscribeState();
                 unsubscribeState = null;
             }
+        };
+    }, []);
+
+    // 🔧 Subscribe to wedding card config จาก Firebase (real-time updates)
+    useEffect(() => {
+        let isMounted = true;
+        
+        const unsubscribeConfig = subscribeWeddingCardConfig((config) => {
+            if (!isMounted) return;
+            
+            setIsConfigLoading(false);
+            
+            if (config) {
+                // Merge กับ default config เพื่อให้มีค่าครบถ้วน
+                const mergedConfig: WeddingCardConfig = {
+                    ...defaultWeddingCardConfig,
+                    ...config,
+                    groom: { ...defaultWeddingCardConfig.groom, ...config.groom },
+                    bride: { ...defaultWeddingCardConfig.bride, ...config.bride },
+                    parents: {
+                        groom: { ...defaultWeddingCardConfig.parents.groom, ...config.parents?.groom },
+                        bride: { ...defaultWeddingCardConfig.parents.bride, ...config.parents?.bride },
+                    },
+                    dressCode: config.dressCode || defaultWeddingCardConfig.dressCode,
+                };
+                setWeddingCardConfig(mergedConfig);
+            } else {
+                // ถ้าไม่มี config ใน Firebase ให้ใช้ default
+                setWeddingCardConfig(defaultWeddingCardConfig);
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            unsubscribeConfig();
         };
     }, []);
 
@@ -2792,8 +2832,10 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
 
             
             {/* Intro Overlay for Autoplay Policy Compliance */}
-
-            {showIntro && <IntroOverlay onStart={handleStart} />}
+            {/* 🔧 ไม่แสดง UI จนกว่าจะโหลด config จาก Firebase เสร็จ */}
+            {!isConfigLoading && showIntro && weddingCardConfig && (
+                <IntroOverlay onStart={handleStart} config={weddingCardConfig} />
+            )}
 
 
 
@@ -2849,23 +2891,26 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
 
                     <div className={`flip-front ${isFlipped ? 'side-inactive' : 'side-active'}`}>
 
-                        {/* Pass music control props */}
+                        {/* 🔧 ไม่แสดง CardFront จนกว่าจะโหลด config จาก Firebase เสร็จ */}
+                        {!isConfigLoading && weddingCardConfig && (
+                            <CardFront 
 
-                        <CardFront 
+                                onFlip={() => setIsFlipped(true)} 
 
-                            onFlip={() => setIsFlipped(true)} 
+                                isPlaying={musicPlaying} 
 
-                            isPlaying={musicPlaying} 
+                                onToggleMusic={onToggleMusic}
 
-                            onToggleMusic={onToggleMusic}
+                                onNext={handleNext}
 
-                            onNext={handleNext}
+                                onPrev={handlePrev}
 
-                            onPrev={handlePrev}
+                                currentTrack={currentTrack}
+                                
+                                config={weddingCardConfig}
 
-                            currentTrack={currentTrack}
-
-                        />
+                            />
+                        )}
 
                     </div>
 

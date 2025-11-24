@@ -8,14 +8,19 @@ import {
   ExclamationCircleOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  UserAddOutlined,
   TableOutlined,
   CloseCircleOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import { Guest, Zone, TableData, Side } from '@/types';
 import type { RSVPData } from '@/types';
-import { getGuestsFromRSVP, getTotalPeopleFromRSVP } from '@/utils/rsvpHelpers';
+import { 
+  getGuestsFromRSVP, 
+  calculateTotalAttendees,
+  calculateCheckedInCount,
+  calculateRsvpStats,
+  isGuestSeated,
+} from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;
 
@@ -36,25 +41,15 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 }) => {
   // ============================================================================
   // 🔧 DevOps: คำนวณ Statistics จาก RSVPs เท่านั้น (Source of Truth)
+  // ใช้ helper functions จาก rsvpHelpers.ts เพื่อความสอดคล้อง
   // ============================================================================
-  const totalRSVPs = useMemo(() => {
-    return rsvps && rsvps.length > 0 ? rsvps.length : 0;
+  
+  // คำนวณสถิติ RSVP Forms
+  const rsvpStats = useMemo(() => {
+    return calculateRsvpStats(rsvps);
   }, [rsvps]);
   
-  const rsvpsComing = useMemo(() => {
-    if (!rsvps || rsvps.length === 0) return 0;
-    return rsvps.filter((r) => r && r.isComing === 'yes').length;
-  }, [rsvps]);
-  
-  const rsvpsNotComing = useMemo(() => {
-    if (!rsvps || rsvps.length === 0) return 0;
-    return rsvps.filter((r) => r && r.isComing === 'no').length;
-  }, [rsvps]);
-  
-  const rsvpsPending = useMemo(() => {
-    if (!rsvps || rsvps.length === 0) return 0;
-    return rsvps.filter((r) => r && !r.isComing).length;
-  }, [rsvps]);
+  const { totalForms, totalComingForms, totalNotComingForms } = rsvpStats;
 
   // 🔧 DevOps: ตรวจสอบว่า RSVP ไหนถูกนำเข้าแล้ว
   const rsvpsImported = useMemo(() => {
@@ -69,22 +64,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [rsvps, guests]);
 
   const rsvpsNotImported = useMemo(() => {
-    return rsvpsComing - rsvpsImported;
-  }, [rsvpsComing, rsvpsImported]);
+    return totalComingForms - rsvpsImported;
+  }, [totalComingForms, rsvpsImported]);
 
-  // 🔧 DevOps: คำนวณจำนวนคนทั้งหมดจาก RSVP
-  const totalPeopleFromRSVP = useMemo(() => {
-    if (!rsvps || rsvps.length === 0) return 0;
-    return rsvps.reduce((acc, rsvp) => {
-      if (rsvp && rsvp.isComing === 'yes') {
-        return acc + getTotalPeopleFromRSVP(rsvp);
-      }
-      return acc;
-    }, 0);
+  // 🔧 DevOps: คำนวณจำนวนคนเข้างานทั้งหมดจาก RSVP (รวมผู้ติดตาม)
+  // ใช้ helper function เพื่อความสอดคล้อง
+  const totalAttendees = useMemo(() => {
+    return calculateTotalAttendees(rsvps);
   }, [rsvps]);
-
-  // 🔧 DevOps: คำนวณจำนวนกลุ่มจาก RSVP
-  const totalGroupsFromRSVP = rsvpsComing;
 
   // 🔧 DevOps: คำนวณฝ่ายจาก RSVP
   const sideCountsFromRSVP = useMemo(() => {
@@ -115,14 +102,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [rsvps, guests]);
 
   const totalGuestsFromRSVP = guestsFromRSVP.length;
-  const totalSeatedFromRSVP = guestsFromRSVP.filter((g) => g.zoneId !== null && g.zoneId !== undefined).length;
-  const totalCheckedInFromRSVP = guestsFromRSVP.filter((g) => g.checkedInAt !== null && g.checkedInAt !== undefined).length;
-
-  // 🔧 DevOps Fix: คำนวณจำนวนกลุ่มจาก RSVP (Source of Truth) แทน Guests
-  const totalGroupsFromGuests = useMemo(() => {
-    // จำนวน RSVP ที่ตอบรับ = จำนวนกลุ่ม
-    return rsvpsComing;
-  }, [rsvpsComing]);
+  const totalSeatedFromRSVP = guestsFromRSVP.filter(isGuestSeated).length;
+  
+  // 🔧 DevOps: ใช้ helper function เพื่อคำนวณ checked-in count
+  const totalCheckedIn = useMemo(() => {
+    return calculateCheckedInCount(guestsFromRSVP);
+  }, [guestsFromRSVP]);
 
   // ============================================================================
   // 🔧 DevOps: Zone Summary จาก Guests ที่มาจาก RSVP
@@ -131,7 +116,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     .slice()
     .sort((a, b) => a.order - b.order)
     .map((zone) => {
-      const seated = guestsFromRSVP.filter((g) => g.zoneId === zone.zoneId).length;
+      const seated = guestsFromRSVP.filter((g) => g.zoneId === zone.zoneId && isGuestSeated(g)).length;
       const zoneTables = tables.filter((t) => t.zoneId === zone.zoneId);
       const zoneCapacity = zoneTables.reduce((acc, t) => acc + t.capacity, 0);
       const checkedIn = guestsFromRSVP.filter((g) => g.zoneId === zone.zoneId && g.checkedInAt !== null && g.checkedInAt !== undefined).length;
@@ -271,8 +256,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="RSVP ทั้งหมด"
-                value={totalRSVPs}
+                title="RSVP Forms (จำนวนรายการตอบรับ)"
+                value={totalForms}
                 prefix={<FileTextOutlined />}
                 valueStyle={{ color: '#1890ff' }}
               />
@@ -284,27 +269,31 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="ตอบรับเข้างาน"
-                value={rsvpsComing}
-                prefix={<CheckCircleOutlined />}
+                title="Total Attendees (จำนวนคนเข้างานจริง)"
+                value={totalAttendees}
+                prefix={<TeamOutlined />}
                 valueStyle={{ color: '#52c41a' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                {totalPeopleFromRSVP} คน ({totalGroupsFromRSVP} กลุ่ม)
+                รวมผู้ติดตาม ({totalComingForms} กลุ่ม)
               </Text>
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="นำเข้าแล้ว"
-                value={rsvpsImported}
-                prefix={<UserAddOutlined />}
+                title="Checked-in (Headcount)"
+                value={totalCheckedIn}
+                suffix={`/ ${totalAttendees}`}
+                prefix={<CheckCircleOutlined />}
                 valueStyle={{ color: '#722ed1' }}
               />
-              <Text type="secondary" style={{ fontSize: '12px' }}>
-                จาก {rsvpsComing} รายการ
-              </Text>
+              <Progress
+                percent={totalAttendees > 0 ? Math.round((totalCheckedIn / totalAttendees) * 100) : 0}
+                showInfo={false}
+                size="small"
+                strokeColor="#722ed1"
+              />
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
@@ -316,7 +305,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 valueStyle={{ color: rsvpsNotImported > 0 ? '#faad14' : '#52c41a' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                ต้องดำเนินการ
+                จาก {totalComingForms} รายการ
               </Text>
             </Card>
           </Col>
@@ -326,20 +315,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="ไม่เข้างาน"
-                value={rsvpsNotComing}
-                prefix={<CloseCircleOutlined />}
-                valueStyle={{ color: '#ff4d4f' }}
+                title="ตอบรับเข้างาน"
+                value={totalComingForms}
+                prefix={<CheckCircleOutlined />}
+                valueStyle={{ color: '#52c41a' }}
               />
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="รอการตอบรับ"
-                value={rsvpsPending}
-                prefix={<ClockCircleOutlined />}
-                valueStyle={{ color: '#faad14' }}
+                title="ไม่เข้างาน"
+                value={totalNotComingForms}
+                prefix={<CloseCircleOutlined />}
+                valueStyle={{ color: '#ff4d4f' }}
               />
             </Card>
           </Col>
@@ -367,13 +356,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="จำนวนคนเข้างานทั้งหมด"
+                title="Guest Records (จาก RSVP)"
                 value={totalGuestsFromRSVP}
                 prefix={<TeamOutlined />}
                 valueStyle={{ color: '#ec4899' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                จาก RSVP ที่นำเข้าแล้ว
+                จำนวน Guest ที่ link กับ RSVP
               </Text>
             </Card>
           </Col>
@@ -381,12 +370,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
                 title="จำนวนกลุ่ม"
-                value={totalGroupsFromGuests}
+                value={totalComingForms}
                 prefix={<TeamOutlined />}
                 valueStyle={{ color: '#722ed1' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                {totalGuestsFromRSVP} คนใน {totalGroupsFromGuests} กลุ่ม
+                {totalGuestsFromRSVP} Guest ใน {totalComingForms} กลุ่ม
               </Text>
             </Card>
           </Col>
@@ -399,21 +388,21 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 valueStyle={{ color: '#3f8600' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                จาก {totalGuestsFromRSVP} คน
+                จาก {totalGuestsFromRSVP} Guest
               </Text>
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
             <Card variant="borderless" className="shadow-sm hover:shadow-md transition-all h-full">
               <Statistic
-                title="เช็คอินแล้ว"
-                value={totalCheckedInFromRSVP}
+                title="เช็คอินแล้ว (Guest)"
+                value={totalCheckedIn}
                 suffix={`/ ${totalGuestsFromRSVP}`}
                 prefix={<CheckCircleOutlined />}
                 valueStyle={{ color: '#52c41a' }}
               />
               <Progress
-                percent={totalGuestsFromRSVP > 0 ? Math.round((totalCheckedInFromRSVP / totalGuestsFromRSVP) * 100) : 0}
+                percent={totalGuestsFromRSVP > 0 ? Math.round((totalCheckedIn / totalGuestsFromRSVP) * 100) : 0}
                 showInfo={false}
                 size="small"
                 strokeColor="#52c41a"
@@ -432,7 +421,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 valueStyle={{ color: '#1890ff' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                {totalGroupsFromRSVP > 0 ? Math.round((sideCountsFromRSVP.groom / totalGroupsFromRSVP) * 100) : 0}% ของ RSVP
+                {totalComingForms > 0 ? Math.round((sideCountsFromRSVP.groom / totalComingForms) * 100) : 0}% ของ RSVP
               </Text>
             </Card>
           </Col>
@@ -445,7 +434,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 valueStyle={{ color: '#eb2f96' }}
               />
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                {totalGroupsFromRSVP > 0 ? Math.round((sideCountsFromRSVP.bride / totalGroupsFromRSVP) * 100) : 0}% ของ RSVP
+                {totalComingForms > 0 ? Math.round((sideCountsFromRSVP.bride / totalComingForms) * 100) : 0}% ของ RSVP
               </Text>
             </Card>
           </Col>
