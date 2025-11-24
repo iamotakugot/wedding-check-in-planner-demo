@@ -845,10 +845,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     // เพิ่ม state สำหรับเช็คสถานะเริ่มต้น
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
     const [isLoadingRSVP, setIsLoadingRSVP] = useState(false);
-    // เพิ่ม state สำหรับ session management
-    const [sessionWarning, setSessionWarning] = useState<{ hasOtherSession: boolean; otherSessionStartedAt?: string } | null>(null);
     // เพิ่ม ref เพื่อป้องกันการ logout ซ้ำ
     const isLoggingOutRef = useRef(false);
+    const sessionLogoutTriggeredRef = useRef(false);
     
     // 🔧 DevOps: เพิ่ม state สำหรับ Modal คัดลอก link
     const [copyLinkModal, setCopyLinkModal] = useState<{
@@ -860,13 +859,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         link: '',
         provider: null,
     });
-    const sessionLogoutTriggeredRef = useRef(false);
-    // เพิ่ม flag เพื่อเช็คว่ายังอยู่ใน initial session setup หรือไม่
-    const isInitialSessionSetupRef = useRef(true);
-    // เพิ่ม ref เพื่อ track ว่า session registration กำลังดำเนินการอยู่หรือไม่
-    const isRegisteringSessionRef = useRef(false);
-    // เพิ่ม ref เพื่อเก็บ startedAt ของ session ปัจจุบัน (ใช้เช็คว่า session ถูกยึดหรือไม่)
-    const currentSessionStartedAtRef = useRef<string | null>(null);
 
     // Check persistent login on mount
     // สำคัญ: ต้องเรียก checkRedirectResult() ก่อน onAuthStateChanged
@@ -896,7 +888,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 
                 if (user) {
                     // User successfully signed in via redirect
-                    redirectResultHandled = true; // Mark ว่าจัดการ redirect result แล้ว
+                    redirectResultHandled = true;
                     console.log('✅ Redirect login successful, user:', user.uid);
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
@@ -904,47 +896,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     setIsCheckingAuth(false);
                     message.success('เข้าสู่ระบบสำเร็จ');
                     
-                    // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+                    // สร้าง session ใหม่หลังจาก redirect login (เฉพาะหน้า guest)
                     const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
                     const isAdminPath = currentPathname.startsWith('/admin');
                     
                     if (!isAdminPath) {
-                        // สร้าง session ใหม่หลังจาก redirect login (เฉพาะหน้า guest)
-                        // ใช้ async IIFE เพื่อให้สามารถใช้ await ได้
-                        (async () => {
-                            try {
-                                // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
-                                isRegisteringSessionRef.current = true;
-                                
-                                // Guest Flow - ใช้ isAdmin = false
-                                const sessionResult = await registerSession(user, false);
-                                if (!isMounted) return;
-                                
-                                // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
-                                isInitialSessionSetupRef.current = false;
-                                isRegisteringSessionRef.current = false;
-                                currentSessionStartedAtRef.current = sessionResult.startedAt;
-                                
-                                if (sessionResult.hasOtherActiveSession) {
-                                    // มี session อื่น active อยู่ → แสดง warning
-                                    setSessionWarning({
-                                        hasOtherSession: true,
-                                        otherSessionStartedAt: sessionResult.otherSessionStartedAt,
-                                    });
-                                }
-                            } catch (sessionError) {
-                                console.error('Error registering session:', sessionError);
-                                // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
-                                isInitialSessionSetupRef.current = false;
-                                isRegisteringSessionRef.current = false;
-                            }
-                        })();
-                    } else {
-                        console.log('⏭️ [Redirect Login] ข้าม session management - อยู่ในหน้า admin');
+                        registerSession(user, false).catch((sessionError) => {
+                            console.error('Error registering session:', sessionError);
+                        });
                     }
                 } else {
                     // No redirect result, continue with auth state check
-                    // onAuthStateChanged จะจัดการต่อ
                     console.log('No redirect result, checking auth state...');
                 }
             })
@@ -1031,59 +993,18 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             if (user) {
                 console.log('✅ Auth state detected, user:', user.uid);
                 
-                // Guest Flow - ทำงาน session management ตามปกติ
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
                 setUserInfo(user);
                 
-                // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+                // สร้าง session ใหม่ (กรณี persistent login)
                 const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
                 const isAdminPath = currentPathname.startsWith('/admin');
                 
-                if (isAdminPath) {
-                    // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
-                    console.log('⏭️ [Session] ข้าม session management - อยู่ในหน้า admin');
-                    setIsCheckingAuth(false);
-                    setLoading(false);
-                    return;
-                }
-                
-                // สร้าง session ใหม่ (กรณี persistent login)
-                // แต่ถ้ามีการ register session อยู่แล้ว (เช่น จาก handleLogin) → ข้าม
-                // เพื่อป้องกันการเรียก registerSession() ซ้ำซ้อน
-                if (!isRegisteringSessionRef.current) {
-                    // ใช้ async IIFE เพื่อให้สามารถใช้ await ได้
-                    (async () => {
-                            try {
-                                // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
-                                isRegisteringSessionRef.current = true;
-                                
-                                // Guest Flow - ใช้ isAdmin = false
-                                const sessionResult = await registerSession(user, false);
-                                if (!isMounted) return;
-                                
-                                // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
-                                isInitialSessionSetupRef.current = false;
-                                isRegisteringSessionRef.current = false;
-                                currentSessionStartedAtRef.current = sessionResult.startedAt;
-                                
-                                if (sessionResult.hasOtherActiveSession) {
-                                    // มี session อื่น active อยู่ → แสดง warning
-                                    setSessionWarning({
-                                        hasOtherSession: true,
-                                        otherSessionStartedAt: sessionResult.otherSessionStartedAt,
-                                    });
-                                }
-                            } catch (sessionError) {
-                                console.error('Error registering session:', sessionError);
-                                // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
-                                isInitialSessionSetupRef.current = false;
-                                isRegisteringSessionRef.current = false;
-                            }
-                    })();
-                } else {
-                    // มีการ register session อยู่แล้ว → ข้าม (handleLogin กำลังจัดการอยู่)
-                    console.log('⏭️ Skipping session registration - already in progress');
+                if (!isAdminPath) {
+                    registerSession(user, false).catch((sessionError) => {
+                        console.error('Error registering session:', sessionError);
+                    });
                 }
             } else {
                 // Log เฉพาะเมื่อ logout จริงๆ (ไม่ใช่ initial check)
@@ -1091,7 +1012,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setIsLoggedIn(false);
                 setCurrentUser(null);
                 setUserInfo(null);
-                // Reset flag เมื่อ logout
                 redirectResultHandled = false;
             }
             
@@ -1193,164 +1113,37 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         }
     }, [currentUser, isLoggedIn, userInfo, form]);
 
-    // Subscribe เพื่อเช็คว่า session ถูกเตะออกหรือไม่
+    // Subscribe เพื่อเช็คว่า session ถูกปิดหรือไม่
+    // ใช้ Firebase Auth state persistence มาตรฐาน - ไม่ต้องเช็ค concurrent login
     useEffect(() => {
         if (!currentUser) return;
 
-        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
         const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
         const isAdminPath = currentPathname.startsWith('/admin');
         
         if (isAdminPath) {
-            // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
-            console.log('⏭️ [Session] ข้าม session subscription - อยู่ในหน้า admin');
             return;
         }
 
-        // Reset flag เมื่อ currentUser เปลี่ยน
         sessionLogoutTriggeredRef.current = false;
-        // Reset initial setup flag เมื่อ currentUser เปลี่ยน (ต้องสร้าง session ใหม่)
-        // แต่ถ้ามีการ register session อยู่แล้ว (isRegisteringSessionRef.current === true)
-        // อย่า reset flag เพราะ handleLogin กำลังจัดการอยู่
-        if (!isRegisteringSessionRef.current) {
-            isInitialSessionSetupRef.current = true;
-        }
-        // Reset startedAt เมื่อ currentUser เปลี่ยน (session ใหม่)
-        currentSessionStartedAtRef.current = null;
         
-        // เพิ่ม flag เพื่อ log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue)
-        let hasLoggedInitialSetup = false;
-
-        // 🔧 DevOps: เก็บ session ID ของตัวเองเพื่อเช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
-        // ใช้ Firebase เป็นหลัก (ไม่พึ่งพา browser storage)
-        const getCurrentSessionId = async (): Promise<string | null> => {
-            if (!currentUser || typeof currentUser !== 'string') return null;
+        const unsubscribeSession = subscribeSessionChanges(currentUser, (isOnline) => {
+            if (sessionLogoutTriggeredRef.current || isLoggingOutRef.current) return;
             
-            try {
-                // 1. ลองดึงจาก Firebase ก่อน (ไม่พึ่งพา browser storage)
-                const sessionIdRef = ref(database, `userSessions/${currentUser}/sessionId`);
-                const snapshot = await get(sessionIdRef);
-                if (snapshot.exists()) {
-                    return snapshot.val();
-                }
-            } catch (error) {
-                console.warn('⚠️ [Session ID] ไม่สามารถดึงจาก Firebase ได้:', error);
+            // ถ้า isOnline === false แสดงว่า session ถูกปิด
+            if (!isOnline) {
+                sessionLogoutTriggeredRef.current = true;
+                isLoggingOutRef.current = true;
+                handleLogout();
             }
-            
-            // 2. Fallback: ลองดึงจาก browser storage (cache)
-            try {
-                const sessionId = sessionStorage.getItem('__wedding_session_id__');
-                if (sessionId) return sessionId;
-            } catch {
-                // sessionStorage ไม่ได้ → ข้ามไป
-            }
-            
-            try {
-                const sessionId = localStorage.getItem('__wedding_session_id__');
-                if (sessionId) return sessionId;
-            } catch {
-                // localStorage ไม่ได้ → ข้ามไป
-            }
-            
-            return null;
-        };
-        
-        // Guest Flow - ใช้ isAdmin = false
-        let unsubscribeSession: (() => void) | null = null;
-        
-        unsubscribeSession = subscribeSessionChanges(currentUser, async (isOnline, startedAt, sessionId) => {
-                    // ป้องกันการเรียกซ้ำ
-                    if (sessionLogoutTriggeredRef.current || isLoggingOutRef.current) return;
-                    
-                    // 🔧 DevOps Fix: เช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
-                    const currentSessionId = await getCurrentSessionId();
-                    const isOwnSession = sessionId && currentSessionId && sessionId === currentSessionId;
-                    
-                    // ✅ ถ้ายังอยู่ใน initial setup phase (ยังไม่สร้าง session เสร็จ) → ไม่ต้อง logout
-                    // รอให้ registerSession() เสร็จก่อน (isInitialSessionSetupRef จะถูก set เป็น false)
-                    if (isInitialSessionSetupRef.current) {
-                        // Log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue callback)
-                        if (!hasLoggedInitialSetup) {
-                            console.log('⏳ Initial session setup in progress, skipping logout check');
-                            hasLoggedInitialSetup = true;
-                        }
-                        // เก็บ startedAt ครั้งแรกเมื่อ session setup เสร็จ
-                        if (isOnline && startedAt) {
-                            currentSessionStartedAtRef.current = startedAt;
-                        }
-                        return;
-                    }
-                    
-                    // ถ้า isOnline === false แสดงว่า session ถูกปิด (logout จากที่อื่นหรือถูกเตะออก)
-                    if (!isOnline) {
-                        // Session ถูกลบหรือถูกปิด → ถูกลงชื่อออก
-                        sessionLogoutTriggeredRef.current = true;
-                        isLoggingOutRef.current = true;
-                        
-                        message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
-                        
-                        // เรียก logout (ไม่ต้องรอ finally เพราะ handleLogout จะจัดการ flag เอง)
-                        handleLogout();
-                        return;
-                    }
-                    
-                    // 🔧 DevOps Fix: เช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
-                    // ถ้า sessionId ไม่ตรงกับ session ของตัวเอง → session ถูกยึด
-                    // Note: currentSessionId ถูก await แล้วในบรรทัดก่อนหน้า
-                    if (isOnline && sessionId && currentSessionId && sessionId !== currentSessionId) {
-                        // Session ถูกยึด → ถูกลงชื่อออก
-                        sessionLogoutTriggeredRef.current = true;
-                        isLoggingOutRef.current = true;
-                        
-                        console.log('⚠️ [Session] Session ถูกยึด - sessionId ไม่ตรงกัน:', { current: currentSessionId, active: sessionId });
-                        message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
-                        
-                        // เรียก logout
-                        handleLogout();
-                        return;
-                    }
-                    
-                    // ✅ เช็คว่า startedAt เปลี่ยนหรือไม่ (ตรวจจับการยึด session - fallback)
-                    // ถ้า startedAt เปลี่ยนและไม่ใช่ session ของตัวเอง → session ถูกยึด
-                    if (startedAt && currentSessionStartedAtRef.current && 
-                        startedAt !== currentSessionStartedAtRef.current && !isOwnSession) {
-                        // Session ถูกยึด → ถูกลงชื่อออก
-                        sessionLogoutTriggeredRef.current = true;
-                        isLoggingOutRef.current = true;
-                        
-                        console.log('⚠️ [Session] Session ถูกยึด - startedAt เปลี่ยน:', { current: currentSessionStartedAtRef.current, new: startedAt });
-                        message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
-                        
-                        // เรียก logout
-                        handleLogout();
-                        return;
-                    }
-                    
-                    // ถ้า isOnline === true และ sessionId ตรงกัน → ยัง active อยู่ (session ของตัวเอง)
-                    // อัพเดท currentSessionStartedAtRef ถ้ายังไม่มีค่า
-                    if (isOnline && startedAt && !currentSessionStartedAtRef.current) {
-                        currentSessionStartedAtRef.current = startedAt;
-                    }
-                    
-                    // 🔧 DevOps Fix: ถ้า session ที่ active อยู่เป็นของตัวเอง → ปิด modal warning ทันที
-                    if (isOnline && isOwnSession) {
-                        console.log('✅ [Session] Session ที่ active อยู่เป็นของตัวเอง ไม่ต้องแสดง warning');
-                        // ปิด modal warning ถ้ามี
-                        if (sessionWarning?.hasOtherSession) {
-                            console.log('🔧 [Session] ปิด modal warning เพราะ session เป็นของตัวเอง');
-                            setSessionWarning(null);
-                        }
-                    }
-                }, false);
+        }, false);
 
         return () => {
-            if (unsubscribeSession) {
-                unsubscribeSession();
-            }
+            unsubscribeSession();
             sessionLogoutTriggeredRef.current = false;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentUser]); // handleLogout is stable and doesn't need to be in deps
+    }, [currentUser]);
 
     const handleLogin = async (provider: 'google' | 'facebook') => {
         // Prevent multiple clicks
@@ -1382,79 +1175,19 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
             const firebaseUser = getCurrentUser();
             if (firebaseUser) {
-                // Guest Flow - ทำงาน session management ตามปกติ
                 console.log('✅ Login successful, setting user state:', firebaseUser.uid);
                 setCurrentUser(firebaseUser.uid);
                 setUserInfo(firebaseUser);
                 setIsLoggedIn(true);
                 
-                // สร้าง session ใหม่และเช็คว่ามี session อื่น active อยู่หรือไม่
-                try {
-                    // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
-                    isRegisteringSessionRef.current = true;
-                    
-                    // Guest Flow - ใช้ isAdmin = false
-                    const sessionResult = await registerSession(firebaseUser, false);
-                    
-                    // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
-                    isInitialSessionSetupRef.current = false;
-                    isRegisteringSessionRef.current = false;
-                    currentSessionStartedAtRef.current = sessionResult.startedAt;
-                    
-                    // 🔧 DevOps Fix: ตรวจสอบอีกครั้งว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
-                    // (เพราะ registerSession อาจจะ return hasOtherActiveSession: true แม้ว่า session จะเป็นของตัวเอง)
-                    // รอสักครู่เพื่อให้ Firebase sync sessionId ก่อน
-                    setTimeout(async () => {
-                        // ดึง sessionId จาก Firebase เพื่อตรวจสอบ
-                        try {
-                            const sessionIdRef = ref(database, `userSessions/${firebaseUser.uid}/sessionId`);
-                            const snapshot = await get(sessionIdRef);
-                            if (snapshot.exists()) {
-                                const activeSessionId = snapshot.val();
-                                // ดึง currentSessionId จาก browser storage หรือ Firebase
-                                let currentSessionId: string | null = null;
-                                try {
-                                    const currentSessionIdRef = ref(database, `userSessions/${firebaseUser.uid}/sessionId`);
-                                    const currentSnapshot = await get(currentSessionIdRef);
-                                    if (currentSnapshot.exists()) {
-                                        currentSessionId = currentSnapshot.val();
-                                    }
-                                } catch {
-                                    // Fallback: ลองดึงจาก browser storage
-                                    try {
-                                        currentSessionId = sessionStorage.getItem('__wedding_session_id__') || localStorage.getItem('__wedding_session_id__');
-                                    } catch {
-                                        // Ignore
-                                    }
-                                }
-                                
-                                if (activeSessionId && currentSessionId && activeSessionId === currentSessionId) {
-                                    // Session เป็นของตัวเอง → ไม่ต้องแสดง warning
-                                    console.log('✅ [Session] Session ที่ active อยู่เป็นของตัวเอง ไม่ต้องแสดง warning (double check)');
-                                    setSessionWarning(null);
-                                    return;
-                                }
-                            }
-                        } catch (error) {
-                            console.warn('⚠️ [Session] ไม่สามารถตรวจสอบ sessionId จาก Firebase ได้:', error);
-                        }
-                        
-                        // ถ้ายังไม่ปิด warning → แสดง warning ตามปกติ
-                        if (sessionResult.hasOtherActiveSession) {
-                            // มี session อื่น active อยู่ → แสดง warning
-                            setSessionWarning({
-                                hasOtherSession: true,
-                                otherSessionStartedAt: sessionResult.otherSessionStartedAt,
-                            });
-                            message.warning('มีการเข้าสู่ระบบจากอุปกรณ์อื่นอยู่');
-                        }
-                    }, 500); // รอ 500ms เพื่อให้ Firebase sync
-                } catch (sessionError) {
-                    console.error('Error registering session:', sessionError);
-                    // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
-                    isInitialSessionSetupRef.current = false;
-                    isRegisteringSessionRef.current = false;
-                    // ไม่ต้องบล็อกการทำงาน ถ้า session registration ล้มเหลว
+                // สร้าง session ใหม่
+                const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+                const isAdminPath = currentPathname.startsWith('/admin');
+                
+                if (!isAdminPath) {
+                    registerSession(firebaseUser, false).catch((sessionError) => {
+                        console.error('Error registering session:', sessionError);
+                    });
                 }
             }
 
@@ -1563,13 +1296,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             setCurrentUser(null);
             setUserInfo(null);
             setSubmittedData(null);
-            setSessionWarning(null);
-            // Reset initial setup flag เมื่อ logout
-            isInitialSessionSetupRef.current = true;
             form.resetFields();
-            setLoading(false); // Ensure loading is reset after logout
+            setLoading(false);
             
-            // แสดง message เฉพาะเมื่อ logout สำเร็จและไม่ได้ถูกเตะออกจาก session
             if (logoutSuccess && !sessionLogoutTriggeredRef.current) {
                 message.success('ออกจากระบบสำเร็จ');
             }
@@ -2053,8 +1782,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
     const renderContent = () => {
-        // แสดง loading ขณะเช็ค auth หรือ load RSVP
-        if (isCheckingAuth || (isLoggedIn && isLoadingRSVP)) {
+        // แสดง loading ขณะเช็ค auth state - ต้องรอให้ auth state resolve ก่อนแสดง form
+        if (isCheckingAuth) {
             return (
                 <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
                     <Spin size="large" tip="กำลังตรวจสอบข้อมูล..." />
@@ -2062,8 +1791,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             );
         }
 
-        // 🔧 Fix: ตรวจสอบว่า login แล้วหรือไม่ - ต้องมีทั้ง isLoggedIn และ currentUser
-        // เพื่อป้องกันการแสดง form เมื่อยังไม่ login
+        // แสดง loading ขณะ load RSVP (เฉพาะเมื่อ login แล้ว)
+        if (isLoggedIn && isLoadingRSVP) {
+            return (
+                <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
+                    <Spin size="large" tip="กำลังโหลดข้อมูล..." />
+                </div>
+            );
+        }
+
+        // ตรวจสอบว่า login แล้วหรือไม่ - ต้องมีทั้ง isLoggedIn และ currentUser
+        // และต้องผ่านการเช็ค auth state แล้ว (isCheckingAuth === false)
         if (!isLoggedIn || !currentUser) {
             // ตรวจสอบว่าอยู่ใน WebView หรือไม่
             const webViewInfo = getWebViewInfo();
@@ -2560,78 +2298,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         }
     };
 
-    // Modal สำหรับแสดง warning เมื่อมีการ login จากที่อื่น
-    const handleForceEndSession = async () => {
-        if (!currentUser) return;
-        
-        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
-        const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
-        const isAdminPath = currentPathname.startsWith('/admin');
-        
-        if (isAdminPath) {
-            // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
-            console.log('⏭️ [Force End Session] ข้าม session management - อยู่ในหน้า admin');
-            setSessionWarning(null);
-            return;
-        }
-        
-        const user = getCurrentUser();
-        if (!user) {
-            message.error('ไม่พบข้อมูลผู้ใช้');
-            return;
-        }
-        
-        try {
-            // ตั้ง flag เพื่อป้องกัน session listener trigger logout ระหว่างการยึด session
-            isInitialSessionSetupRef.current = true;
-            isRegisteringSessionRef.current = true;
-            
-            // เรียก registerSession() เพื่อยึด session (ใช้ atomic update เพื่อ set isOnline และ startedAt พร้อมกัน)
-            // Guest Flow - ใช้ isAdmin = false
-            const sessionResult = await registerSession(user, false);
-            
-            // ปิด flag หลังจากยึด session เสร็จ และอัพเดท startedAt
-            isInitialSessionSetupRef.current = false;
-            isRegisteringSessionRef.current = false;
-            currentSessionStartedAtRef.current = sessionResult.startedAt;
-            
-            setSessionWarning(null);
-            message.success('ยึด session เรียบร้อย');
-        } catch (error) {
-            // ปิด flag ในกรณี error
-            isInitialSessionSetupRef.current = false;
-            isRegisteringSessionRef.current = false;
-            console.error('Error forcing end session:', error);
-            message.error('เกิดข้อผิดพลาดในการยึด session');
-        }
-    };
-
     return (
         <>
-            {/* Session Warning Modal */}
-            <Modal
-                title="มีการเข้าสู่ระบบจากที่อื่น"
-                open={sessionWarning?.hasOtherSession || false}
-                onOk={handleForceEndSession}
-                onCancel={() => setSessionWarning(null)}
-                okText="ยึด session นี้"
-                cancelText="ปิด"
-                okButtonProps={{ danger: true }}
-            >
-                <div className="space-y-2">
-                    <Text>มีการเข้าสู่ระบบจากอุปกรณ์อื่นอยู่</Text>
-                    {sessionWarning?.otherSessionStartedAt && (
-                        <div className="text-sm text-gray-600 mt-2">
-                            <div>เวลาเข้าใช้งาน: {new Date(sessionWarning.otherSessionStartedAt).toLocaleString('th-TH')}</div>
-                        </div>
-                    )}
-                    <Text className="text-xs text-gray-500 block mt-2">
-                        หากต้องการเข้าสู่ระบบจากอุปกรณ์นี้ กรุณาคลิก "ยึด session นี้" 
-                        เพื่อปิด session อื่นและเข้าสู่ระบบจากอุปกรณ์นี้แทน
-                    </Text>
-                </div>
-            </Modal>
-
             {/* 🔧 DevOps: Modal สำหรับคัดลอก link เมื่อ popup ไม่ทำงาน */}
             <Modal
                 title="ไม่สามารถเข้าสู่ระบบในแอปนี้ได้"

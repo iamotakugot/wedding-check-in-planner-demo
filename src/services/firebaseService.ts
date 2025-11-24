@@ -993,19 +993,19 @@ export const checkRedirectResult = async (): Promise<User | null> => {
     console.log('ℹ️ [Redirect] ไม่มี redirect result');
     return null;
   } catch (error: unknown) {
-    // 🔧 IMPORTANT: Handle critical errors - re-throw เพื่อให้ component จัดการ
+    // Handle critical errors - re-throw เพื่อให้ component จัดการ
     if (isFirebaseError(error)) {
       if (error.code === 'auth/account-exists-with-different-credential') {
         console.error('❌ [Redirect] มี account อื่นใช้ email เดียวกัน');
-        throw error; // Re-throw เพื่อให้ component จัดการ
+        throw error;
       }
       if (error.code === 'auth/email-already-in-use') {
         console.error('❌ [Redirect] Email ถูกใช้งานแล้ว');
-        throw error; // Re-throw เพื่อให้ component จัดการ
+        throw error;
       }
       
-      // 🔧 DevOps Fix: สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
-      // ไม่ควร throw error เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการ)
+      // สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
+      // Return null เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการ)
       if (error.message && (
         error.message.includes('sessionStorage') || 
         error.message.includes('initial state') ||
@@ -1013,13 +1013,12 @@ export const checkRedirectResult = async (): Promise<User | null> => {
         error.message.includes('storage-partitioned') ||
         error.message.includes('localStorage')
       ) || error.code === 'auth/operation-not-supported-in-this-environment') {
-        console.warn('⚠️ [Redirect] SessionStorage/localStorage error - อาจเกิดใน WebView (Messenger) ระบบจะใช้ auth state check แทน');
-        // Return null เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการต่อ)
+        console.warn('⚠️ [Redirect] SessionStorage/localStorage error - ระบบจะใช้ auth state check แทน');
         return null;
       }
     }
     
-    // 🔧 สำหรับ error อื่นๆ - return null แทน throw เพื่อไม่ให้ block UI
+    // สำหรับ error อื่นๆ - return null แทน throw เพื่อไม่ให้ block UI
     // onAuthStateChanged จะจัดการต่อ
     console.warn('Error checking redirect result:', error);
     return null;
@@ -1210,56 +1209,25 @@ const getOrCreateSessionId = async (uid?: string, isAdmin: boolean = false): Pro
 
 /**
  * สร้าง session ใหม่หลังจาก login สำเร็จ
- * จะเช็คว่ามี session อื่น active อยู่หรือไม่ (เช็ค isOnline === 1 และ sessionId ไม่ตรงกัน)
+ * ใช้ Firebase Auth state persistence มาตรฐาน - ไม่ต้องเช็ค concurrent login
  * 🔒 Security: ใช้สำหรับ guest เท่านั้น (isAdmin = false)
  */
-export const registerSession = async (user: User, isAdmin: boolean = false): Promise<{ hasOtherActiveSession: boolean; otherSessionStartedAt?: string; startedAt: string }> => {
+export const registerSession = async (user: User, isAdmin: boolean = false): Promise<void> => {
   const uid = user.uid;
   const startedAt = new Date().toISOString();
-  const currentSessionId = await getOrCreateSessionId(uid, isAdmin); // 🔧 DevOps: ใช้ session ID จาก Firebase (ไม่พึ่งพา browser storage) + 🔒 Security: ส่ง isAdmin parameter
   
   // 🔒 Security: ใช้ path ตาม role
   const sessionRef = isAdmin ? adminSessionsRef(uid) : userSessionsRef(uid);
   const isOnlineRef = isAdmin ? adminSessionIsOnlineRef(uid) : userSessionIsOnlineRef(uid);
   
-  // เช็คว่ามี session อื่น active อยู่หรือไม่ (isOnline === 1)
-  const isOnline = await getIsOnline(uid, isAdmin);
-  let otherSessionStartedAt: string | undefined;
-  let hasOtherActiveSession = false;
-  
-  if (isOnline) {
-    // มี session active อยู่ - ดึงข้อมูล session
-    const sessionInfo = await getSessionInfo(uid, isAdmin);
-    const existingSessionId = sessionInfo?.sessionId;
-    
-    // 🔧 DevOps Fix: เช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
-    if (existingSessionId && existingSessionId === currentSessionId) {
-      // Session ของตัวเอง → ไม่ถือว่าเป็น session อื่น
-      console.log('✅ [Session] Session ที่ active อยู่เป็นของตัวเอง ไม่ต้องแสดง warning');
-      hasOtherActiveSession = false;
-    } else {
-      // Session ของคนอื่น → แสดง warning
-      otherSessionStartedAt = sessionInfo?.startedAt;
-      hasOtherActiveSession = true;
-      console.log('⚠️ [Session] พบ session อื่น active อยู่:', existingSessionId);
-    }
-  }
-  
-  // ใช้ atomic update เพื่อ set ทั้ง isOnline, startedAt และ sessionId พร้อมกัน
+  // ใช้ atomic update เพื่อ set isOnline และ startedAt
   await update(sessionRef, {
     isOnline: 1,
     startedAt: startedAt,
-    sessionId: currentSessionId, // 🔧 DevOps: เก็บ session ID
   });
   
   // ตั้งค่า onDisconnect เพื่อ set isOnline = 0 เมื่อแท็บปิด
   await onDisconnect(isOnlineRef).set(0);
-  
-  return {
-    hasOtherActiveSession,
-    otherSessionStartedAt,
-    startedAt,
-  };
 };
 
 /**
@@ -1279,19 +1247,17 @@ export const getIsOnline = async (uid: string, isAdmin: boolean = false): Promis
 };
 
 /**
- * ดึงข้อมูล session (isOnline, startedAt และ sessionId)
+ * ดึงข้อมูล session (isOnline, startedAt)
  * 🔒 Security: ใช้ path ตาม role
  */
-export const getSessionInfo = async (uid: string, isAdmin: boolean = false): Promise<{ isOnline: boolean; startedAt?: string; sessionId?: string } | null> => {
+export const getSessionInfo = async (uid: string, isAdmin: boolean = false): Promise<{ isOnline: boolean; startedAt?: string } | null> => {
   try {
     const isOnlineRef = isAdmin ? adminSessionIsOnlineRef(uid) : userSessionIsOnlineRef(uid);
     const startedAtRef = isAdmin ? adminSessionStartedAtRef(uid) : userSessionStartedAtRef(uid);
-    const sessionIdRef = isAdmin ? adminSessionIdRef(uid) : userSessionIdRef(uid);
     
-    const [isOnlineSnapshot, startedAtSnapshot, sessionIdSnapshot] = await Promise.all([
+    const [isOnlineSnapshot, startedAtSnapshot] = await Promise.all([
       get(isOnlineRef),
       get(startedAtRef),
-      get(sessionIdRef),
     ]);
     
     if (!isOnlineSnapshot.exists()) return null;
@@ -1299,7 +1265,6 @@ export const getSessionInfo = async (uid: string, isAdmin: boolean = false): Pro
     return {
       isOnline: isOnlineSnapshot.val() === 1,
       startedAt: startedAtSnapshot.exists() ? startedAtSnapshot.val() : undefined,
-      sessionId: sessionIdSnapshot.exists() ? sessionIdSnapshot.val() : undefined,
     };
   } catch (error) {
     console.error('Error getting session info:', error);
@@ -1318,46 +1283,27 @@ export const endSession = async (uid: string, isAdmin: boolean = false): Promise
   // ไม่ต้องลบ startedAt เพื่อเก็บประวัติ
 };
 
-/**
- * เตะ session อื่นออก (set isOnline = 0)
- */
-export const forceEndSession = async (uid: string): Promise<void> => {
-  await endSession(uid);
-};
 
 /**
- * Subscribe เพื่อเช็คว่า session ถูกปิดหรือไม่ (ถูกเตะออก)
- * จะ subscribe ทั้ง isOnline และ startedAt เพื่อตรวจจับการยึด session
- * - ถ้า isOnline === 0 → logout (logout จริงๆ)
- * - ถ้า startedAt เปลี่ยน → session ถูกยึด (ต้อง logout)
+ * Subscribe เพื่อเช็คว่า session ถูกปิดหรือไม่
+ * ใช้ Firebase Auth state persistence มาตรฐาน - ไม่ต้องเช็ค concurrent login
  */
 export const subscribeSessionChanges = (
   uid: string,
-  callback: (isOnline: boolean, startedAt?: string, sessionId?: string) => void,
+  callback: (isOnline: boolean) => void,
   isAdmin: boolean = false
 ): (() => void) => {
   const sessionRef = isAdmin ? adminSessionsRef(uid) : userSessionsRef(uid);
   
   const unsubscribe = onValue(sessionRef, (snapshot: DataSnapshot) => {
     if (!snapshot.exists()) {
-      // session ไม่มีค่า → ถูกลงชื่อออก
       callback(false);
       return;
     }
     
     const data = snapshot.val();
     const isOnline = data?.isOnline === 1;
-    const startedAt = data?.startedAt;
-    const sessionId = data?.sessionId; // 🔧 DevOps: เพิ่ม sessionId
-    
-    // ถ้า isOnline === 0 → ถูกลงชื่อออก (logout จริงๆ)
-    if (!isOnline) {
-      callback(false, startedAt, sessionId);
-      return;
-    }
-    
-    // isOnline === 1 → ยัง active อยู่ (แต่ต้องเช็ค startedAt ใน component ว่าเปลี่ยนหรือไม่)
-    callback(true, startedAt, sessionId);
+    callback(isOnline);
   });
   
   return unsubscribe;
