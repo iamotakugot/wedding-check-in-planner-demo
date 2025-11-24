@@ -39,7 +39,8 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
     } else {
       form.resetFields();
     }
-  }, [visible, guestToEdit, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, guestToEdit]); // form is stable, no need in deps
 
   const handleFinish = (values: Omit<Guest, 'id' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString();

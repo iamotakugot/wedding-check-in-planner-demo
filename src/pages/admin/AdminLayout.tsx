@@ -1,3 +1,8 @@
+/**
+ * Admin Layout Component
+ * Layout เรียบง่ายสำหรับ Admin Panel
+ */
+
 import React, { useState } from 'react';
 import { Layout, Menu, Avatar, Button } from 'antd';
 import {
@@ -9,21 +14,21 @@ import {
   HeartOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  LinkOutlined,
-  CheckCircleOutlined,
+  FileTextOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 
 const { Header, Content, Sider } = Layout;
 
-interface MainLayoutProps {
+interface AdminLayoutProps {
   onLogout: () => void;
   currentView: string;
   setCurrentView: (key: string) => void;
   children: React.ReactNode;
 }
 
-const MainLayout: React.FC<MainLayoutProps> = ({
+const AdminLayout: React.FC<AdminLayoutProps> = ({
   onLogout,
   currentView,
   setCurrentView,
@@ -33,40 +38,35 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
   const menuItems: MenuProps['items'] = [
     {
-      key: '1',
+      key: 'dashboard',
       icon: <DashboardOutlined />,
-      label: 'Dashboard ภาพรวม',
+      label: 'Dashboard',
     },
     {
-      key: '2',
+      key: 'guests',
       icon: <TeamOutlined />,
-      label: 'รายชื่อคนเข้างาน',
+      label: 'แขก',
     },
     {
-      key: '3',
+      key: 'seating',
       icon: <TableOutlined />,
-      label: 'จัดการผังโต๊ะ & โซน',
+      label: 'ที่นั่ง',
     },
     {
-      key: '4',
-      icon: <TeamOutlined />,
-      label: 'เช็คอินหน้างาน',
+      key: 'rsvps',
+      icon: <FileTextOutlined />,
+      label: 'RSVP',
     },
     {
-      key: '5',
-      icon: <LinkOutlined />,
-      label: 'จัดการการ์ด',
-    },
-    {
-      key: '6',
-      icon: <CheckCircleOutlined />,
-      label: 'รายการตอบรับ',
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: 'ตั้งค่า',
     },
     {
       type: 'divider',
     },
     {
-      key: '99',
+      key: 'logout',
       icon: <LogoutOutlined />,
       label: 'ออกจากระบบ',
       danger: true,
@@ -94,7 +94,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           theme="light"
           selectedKeys={[currentView]}
           mode="inline"
-          onClick={(e) => setCurrentView(e.key)}
+          onClick={(e) => {
+            if (e.key !== 'logout') {
+              setCurrentView(e.key);
+            }
+          }}
           items={menuItems}
           className="border-none mt-2"
         />
@@ -113,7 +117,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
             onClick={onLogout}
           >
             <div className="text-right leading-tight hidden sm:block">
-              <div className="font-bold text-gray-700 text-sm">Admin Team</div>
+              <div className="font-bold text-gray-700 text-sm">Admin</div>
               <div className="text-xs text-gray-400">ออกจากระบบ</div>
             </div>
             <Avatar style={{ backgroundColor: '#fde3cf', color: '#f56a00' }} icon={<UserOutlined />} />
@@ -128,4 +132,5 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   );
 };
 
-export default MainLayout;
+export default AdminLayout;
+

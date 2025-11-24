@@ -1,5 +1,7 @@
 /* eslint-disable security/detect-object-injection */
+// นำเข้า React hooks ที่จำเป็น
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+// นำเข้า Ant Design components สำหรับ UI
 import {
   Card,
   Typography,
@@ -16,6 +18,7 @@ import {
   Modal,
   Alert,
 } from 'antd';
+// นำเข้า icons จาก Ant Design
 import {
   UsergroupAddOutlined,
   FacebookFilled,
@@ -38,36 +41,33 @@ import {
   LogoutOutlined,
 } from '@ant-design/icons';
 import { Avatar } from 'antd';
-import { 
-  createRSVP, 
-  onAuthStateChange,
-  signInWithGoogle,
-  signInWithFacebook,
-  checkRedirectResult, // Import new function
-  logout, // Import logout
-  getRSVPByUid, // Import getRSVPByUid
-  updateRSVP, // Import updateRSVP
-  createGuestFromRSVP, // Import createGuestFromRSVP
-  getGuest, // Import getGuest
-  getGuestByRsvpUid, // 🔧 DevOps: Import idempotency check
-  updateGuestFromRSVP, // Import updateGuestFromRSVP
-  getCurrentUser, // Import getCurrentUser for fallback
-  registerSession, // Import registerSession
-  endSession, // Import endSession
-  subscribeSessionChanges, // Import subscribeSessionChanges
-  getUserAppState, // Import getUserAppState
-  updateUserAppState, // Import updateUserAppState
-  subscribeUserAppState, // Import subscribeUserAppState
-  getWebViewInfo, // Import getWebViewInfo
-  subscribeWeddingCardConfig, // 🔧 Import subscription for wedding card config
-} from '@/services/firebaseService';
-import { get, ref, set, onValue, remove } from 'firebase/database';
+// นำเข้า Firebase service classes สำหรับจัดการ authentication, RSVP, Guest และ App State
+import { RSVPService } from '@/services/firebase/RSVPService';
+import { GuestService } from '@/services/firebase/GuestService';
+import { AuthService } from '@/services/firebase/AuthService';
+import { ConfigService } from '@/services/firebase/ConfigService';
+import {
+  registerSession,
+  endSession,
+  subscribeSessionChanges,
+} from '@/services/firebase/sessions';
+import {
+  getUserAppState,
+  updateUserAppState,
+  subscribeUserAppState,
+} from '@/services/firebase/appState';
+// นำเข้า Firebase Realtime Database functions
+import { get, ref, onValue, remove } from 'firebase/database';
 import { database } from '@/firebase/config';
+// นำเข้า TypeScript types
 import type { RSVPData } from '@/types';
 import type { User } from 'firebase/auth';
 import { Guest, Side } from '@/types';
+// นำเข้า form options และ wedding card config
 import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formOptions';
 import { defaultWeddingCardConfig, getOrderedNames, type WeddingCardConfig } from '@/constants/weddingCard';
+// นำเข้า utility functions
+import { generateId } from '@/utils/id';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -75,9 +75,8 @@ const { TextArea } = Input;
 
 
 // ============================================================================
-
 // === PART 1: STYLES & ASSETS ===
-
+// Component สำหรับโหลด global styles และ CSS variables
 // ============================================================================
 
 
@@ -393,81 +392,56 @@ const GlobalStyleLoader = () => (
 
 
 
+// ตารางเวลางานแต่งงาน - กำหนดเวลาของแต่ละพิธี
 const weddingSchedule = [
-
     { time: '08:09 น.', title: 'พิธีสงฆ์', icon: '🙏' },
-
     { time: '09:09 น.', title: 'แห่ขันหมาก', icon: '💍' },
-
     { time: '09:29 น.', title: 'รดน้ำสังข์', icon: '🐚' },
-
     { time: '10:30 น.', title: 'ทานอาหาร', icon: '🍽️' },
-
 ];
 
 
 
 // ใช้ options จาก formOptions.ts แทน
 
-
-
-// Music Playlist Configuration
-
+// Music Playlist Configuration - รายการเพลงที่ใช้ในงานแต่งงาน
 const PLAYLIST = [
-
     { 
-
         id: '7fKN5KWuAAQ', // รักนาน ๆ - พัด Vorapat x Dome Jaruwat
-
         title: 'รักนาน ๆ', 
-
         artist: 'พัด Vorapat x Dome Jaruwat',
-
         cover: 'https://img.youtube.com/vi/7fKN5KWuAAQ/0.jpg'
-
     }
-
 ];
-
-
 
 // Types - RSVPData is imported from @/types
 
-
-
 // ============================================================================
-
 // === PART 3: GUEST COMPONENTS ===
-
+// Components สำหรับแสดงผลในหน้า Guest RSVP
 // ============================================================================
 
 
 
+// Component สำหรับแสดง countdown timer ไปยังวันงานแต่งงาน
 const CountdownTimer: React.FC = () => {
-
+    // ฟังก์ชันคำนวณเวลาที่เหลือจนถึงวันงาน
     const calculateTimeLeft = () => {
-
-        // Use slash format for better cross-browser compatibility (especially iOS/Safari)
+        // ใช้ slash format เพื่อความเข้ากันได้กับ browser ต่างๆ (โดยเฉพาะ iOS/Safari)
         const targetDate = new Date('2026/01/31 08:09:00').getTime();
-
         const now = new Date().getTime();
-
         const distance = targetDate - now;
 
+        // ถ้าเวลาผ่านไปแล้ว ให้ return 0 ทั้งหมด
         if (distance < 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
 
+        // คำนวณวัน, ชั่วโมง, นาที, วินาทีที่เหลือ
         return {
-
             days: Math.floor(distance / (1000 * 60 * 60 * 24)),
-
             hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-
             minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
-
             seconds: Math.floor((distance % (1000 * 60)) / 1000)
-
         };
-
     };
 
 
@@ -531,8 +505,7 @@ interface MusicControlsProps {
 
 
 
-// Card Front Component
-
+// Card Front Component - Component สำหรับแสดงด้านหน้าของการ์ดเชิญ
 const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMusic, onNext, onPrev, currentTrack, config = defaultWeddingCardConfig }) => {
     // ใช้ config สำหรับการ์ดแต่งงาน (รับจาก props หรือใช้ default)
     const orderedNames = getOrderedNames(config);
@@ -832,19 +805,28 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
+// Card Back Component - Component สำหรับแสดงด้านหลังของการ์ดเชิญ (ฟอร์ม RSVP)
 const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
-
+    // State สำหรับสถานะการ login
     const [isLoggedIn, setIsLoggedIn] = useState(false); 
+    // State สำหรับข้อมูล RSVP ที่ส่งแล้ว
     const [submittedData, setSubmittedData] = useState<RSVPData | null>(null);
+    // State สำหรับสถานะการโหลด
     const [loading, setLoading] = useState(false);
+    // State สำหรับสถานะการแก้ไข
     const [isEditing, setIsEditing] = useState(false);
+    // Form instance จาก Ant Design
     const [form] = Form.useForm();
+    // Watch form values - ดูค่า isComing และ accompanyingGuests จาก form
     const isComing = Form.useWatch('isComing', form);
     const accompanyingGuests = Form.useWatch('accompanyingGuests', form);
+    // State สำหรับเก็บ UID ของ user ปัจจุบัน
     const [currentUser, setCurrentUser] = useState<string | null>(null);
+    // State สำหรับเก็บข้อมูล user จาก Firebase Auth
     const [userInfo, setUserInfo] = useState<User | null>(null);
     // เพิ่ม state สำหรับเช็คสถานะเริ่มต้น
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+    // State สำหรับสถานะการโหลด RSVP
     const [isLoadingRSVP, setIsLoadingRSVP] = useState(false);
     // เพิ่ม ref เพื่อป้องกันการ logout ซ้ำ
     const isLoggingOutRef = useRef(false);
@@ -880,7 +862,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         }, 10000); // 10 seconds timeout
 
         // 1. เช็ค redirect result ก่อน (ถ้ามี redirect result จะได้ผลลัพธ์ทันที)
-        checkRedirectResult()
+        AuthService.getInstance().checkRedirectResult()
             .then((user) => {
                 if (!isMounted) return;
                 
@@ -942,7 +924,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // ไม่ใช้ setTimeout เพื่อให้ state อัปเดตทันที
         let isInitialAuthCheck = true; // เพิ่ม flag เพื่อเช็คว่าเป็น initial check หรือไม่
         
-        const unsubscribe = onAuthStateChange((user) => {
+        // Subscribe เพื่อรับการเปลี่ยนแปลง authentication state
+        const unsubscribe = AuthService.getInstance().onAuthStateChange((user) => {
             if (!isMounted) return;
             
             // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
@@ -1046,6 +1029,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             
             // 🔧 DevOps Fix: ใช้ realtime subscription แทน one-time fetch
             const rsvpRef = ref(database, `rsvps`);
+            // Subscribe เพื่อรับการเปลี่ยนแปลง RSVP แบบ real-time
             const unsubscribe = onValue(rsvpRef, (snapshot) => {
                 if (!snapshot.exists()) {
                     // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
@@ -1059,6 +1043,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 }
                 
                 const data = snapshot.val();
+                // แปลงข้อมูลจาก object เป็น array
                 const rsvps = Object.keys(data).map(key => {
                     const rsvp = { id: key, ...data[key] };
                     // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
@@ -1082,6 +1067,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                             ? `${userRSVP.firstName} ${userRSVP.lastName}` 
                             : userRSVP.firstName || '');
                     
+                    // เติมข้อมูลลง form
                     form.setFieldsValue({
                         isComing: userRSVP.isComing,
                         side: userRSVP.side,
@@ -1103,6 +1089,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setIsLoadingRSVP(false);
             });
             
+            // Cleanup เมื่อ component unmount หรือ dependencies เปลี่ยน
             return () => {
                 unsubscribe();
             };
@@ -1112,7 +1099,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             form.resetFields();
             setIsLoadingRSVP(false);
         }
-    }, [currentUser, isLoggedIn, userInfo, form]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser, isLoggedIn, userInfo]); // form is stable, no need in deps
 
     // Subscribe เพื่อเช็คว่า session ถูกปิดหรือไม่
     // ใช้ Firebase Auth state persistence มาตรฐาน - ไม่ต้องเช็ค concurrent login
@@ -1122,12 +1110,14 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
         const isAdminPath = currentPathname.startsWith('/admin');
         
+        // ถ้าอยู่ในหน้า admin ไม่ต้อง subscribe session changes
         if (isAdminPath) {
             return;
         }
 
         sessionLogoutTriggeredRef.current = false;
         
+        // Subscribe เพื่อรับการเปลี่ยนแปลง session state
         const unsubscribeSession = subscribeSessionChanges(currentUser, (isOnline) => {
             if (sessionLogoutTriggeredRef.current || isLoggingOutRef.current) return;
             
@@ -1139,6 +1129,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             }
         }, false);
 
+        // Cleanup เมื่อ component unmount หรือ currentUser เปลี่ยน
         return () => {
             unsubscribeSession();
             sessionLogoutTriggeredRef.current = false;
@@ -1146,8 +1137,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
 
+    // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google หรือ Facebook
     const handleLogin = async (provider: 'google' | 'facebook') => {
-        // Prevent multiple clicks
+        // Prevent multiple clicks - ป้องกันการคลิกซ้ำ
         if (loading) return;
 
         // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
@@ -1167,14 +1159,14 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // ถ้า popup สำเร็จ ฟังก์ชันจะ resolve และไม่ redirect
             // ถ้า fallback เป็น redirect หน้าเพจจะเปลี่ยนทันที
             if (provider === 'google') {
-                await signInWithGoogle();
+                await AuthService.getInstance().signInWithGoogle();
             } else if (provider === 'facebook') {
-                await signInWithFacebook();
+                await AuthService.getInstance().signInWithFacebook();
             }
 
             // หลังจาก login สำเร็จ ให้ดึง user จาก Firebase Auth โดยตรง
             // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
-            const firebaseUser = getCurrentUser();
+            const firebaseUser = AuthService.getInstance().getCurrentUser();
             if (firebaseUser) {
                 console.log('✅ Login successful, setting user state:', firebaseUser.uid);
                 setCurrentUser(firebaseUser.uid);
@@ -1198,7 +1190,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
             console.error(`Error initiating ${provider} login:`, error);
             
-            // Handle specific errors
+            // Handle specific errors - จัดการ error เฉพาะ
             if (error.code === 'auth/popup-blocked') {
                 message.error({
                     content: 'ป๊อปอัปถูกบล็อก กรุณาอนุญาตป๊อปอัปสำหรับเว็บไซต์นี้ หรือเปิดในเบราว์เซอร์ภายนอก',
@@ -1262,6 +1254,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
 
+    // ฟังก์ชันสำหรับออกจากระบบ
     const handleLogout = async () => {
         // ป้องกันการเรียกซ้ำ
         if (isLoggingOutRef.current) {
@@ -1285,7 +1278,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 }
             }
             
-            await logout();
+            await AuthService.getInstance().logout();
             logoutSuccess = true;
         } catch (error) {
             console.error('Error logging out:', error);
@@ -1312,6 +1305,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         }
     };
 
+    // ฟังก์ชันสำหรับดึง URL ของ avatar จาก user
     const getAvatarUrl = (user: User) => {
         if (!user.photoURL) return undefined;
         // ใช้ URL ตรงๆ จาก Firebase Auth (Firebase จะจัดการ Facebook photo URL ให้แล้ว)
@@ -1320,6 +1314,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         return user.photoURL;
     };
 
+    // ฟังก์ชันสำหรับจัดการเมื่อ submit form (บันทึกหรืออัปเดต RSVP)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleFinish = async (values: any) => {
         // ตรวจสอบว่ามี currentUser หรือไม่ - ใช้ getCurrentUser() จาก Firebase ถ้า state ยังไม่อัปเดต
@@ -1327,7 +1322,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         
         // ถ้า currentUser ยังไม่มี ให้ลองดึงจาก Firebase Auth โดยตรง (กรณีที่ state ยังไม่อัปเดต)
         if (!effectiveUserId) {
-            const firebaseUser = getCurrentUser();
+            const firebaseUser = AuthService.getInstance().getCurrentUser();
             if (firebaseUser) {
                 effectiveUserId = firebaseUser.uid;
                 // อัปเดต state ทันที
@@ -1344,7 +1339,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             return;
         }
 
-        // Prevent double submission
+        // Prevent double submission - ป้องกันการ submit ซ้ำ
         if (loading) {
             return;
         }
@@ -1409,7 +1404,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // ตรวจสอบว่ามี RSVP อยู่แล้วหรือไม่ - ใช้ effectiveUserId
             let existingRSVP: RSVPData | null = null;
             try {
-                existingRSVP = await getRSVPByUid(effectiveUserId);
+                existingRSVP = await RSVPService.getInstance().getByUid(effectiveUserId);
             } catch (error) {
                 console.error('Error fetching existing RSVP:', error);
                 // ยังคงดำเนินการต่อแม้ว่าจะดึงข้อมูลไม่ได้
@@ -1421,7 +1416,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 try {
                     console.log('🔄 [RSVP] กำลังอัปเดต RSVP ID:', existingRSVP.id);
                     console.log('📝 [RSVP] ข้อมูลที่อัปเดต:', JSON.stringify(rsvpData, null, 2));
-                    await updateRSVP(existingRSVP.id, rsvpData);
+                    await RSVPService.getInstance().update(existingRSVP.id, rsvpData);
                     console.log('✅ [RSVP] อัปเดต RSVP สำเร็จ');
                     rsvpId = existingRSVP.id;
                     setSubmittedData({ 
@@ -1443,7 +1438,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 try {
                     console.log('🆕 [RSVP] กำลังสร้าง RSVP ใหม่...');
                     console.log('📝 [RSVP] ข้อมูล RSVP:', JSON.stringify(rsvpData, null, 2));
-                    rsvpId = await createRSVP(rsvpData);
+                    rsvpId = await RSVPService.getInstance().create(rsvpData);
                     console.log('✅ [RSVP] สร้าง RSVP สำเร็จ ID:', rsvpId);
                     setSubmittedData({ 
                         ...rsvpData, 
@@ -1463,23 +1458,24 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
             // 🔧 DevOps: ถ้า isComing === 'yes' ให้สร้างหรืออัพเดท Guest อัตโนมัติ (พร้อม Idempotency Check)
             if (values.isComing === 'yes') {
+                let allGuestsCreated = true;
                 try {
                     console.log('🔄 [RSVP Flow] กำลังจัดการ Guest สำหรับ RSVP...');
                     
                     // 1. เช็ค Guest ที่ link กับ RSVP อยู่แล้ว (ถ้ามี)
-                    let existingGuest = existingRSVP?.guestId ? await getGuest(existingRSVP.guestId) : null;
+                    let existingGuest = existingRSVP?.guestId ? await GuestService.getInstance().getById(existingRSVP.guestId) : null;
                     
                     // 2. 🔧 Idempotency Check: เช็คว่ามี Guest ที่มี rsvpUid นี้อยู่แล้วหรือไม่
                     if (!existingGuest) {
                         console.log('🔍 [RSVP Flow] กำลังตรวจสอบ Guest ที่มี rsvpUid:', effectiveUserId);
-                        existingGuest = await getGuestByRsvpUid(effectiveUserId);
+                        existingGuest = await GuestService.getInstance().getByRsvpUid(effectiveUserId);
                         
                         if (existingGuest) {
                             console.log('✅ [RSVP Flow] พบ Guest ที่มีอยู่แล้ว (rsvpUid):', existingGuest.id);
                             // Link RSVP กับ Guest ที่มีอยู่ (ถ้ายังไม่ได้ link)
                             if (!existingRSVP?.guestId || existingRSVP.guestId !== existingGuest.id) {
                                 console.log('🔗 [RSVP Flow] กำลัง link RSVP กับ Guest ที่มีอยู่...');
-                                await updateRSVP(rsvpId, { guestId: existingGuest.id });
+                                await RSVPService.getInstance().update(rsvpId, { guestId: existingGuest.id });
                                 console.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
                             }
                         }
@@ -1509,12 +1505,12 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         });
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
-                        await updateGuestFromRSVP(existingGuest.id, updatedGuest, effectiveUserId);
+                        await GuestService.getInstance().updateFromRSVP(existingGuest.id, updatedGuest, effectiveUserId);
                         console.log('✅ [RSVP Flow] อัปเดต Guest สำเร็จ:', existingGuest.id);
                         
                         // Update RSVP ให้ link กับ Guest (ถ้ายังไม่ได้ link)
                         if (!existingRSVP?.guestId || existingRSVP.guestId !== existingGuest.id) {
-                            await updateRSVP(rsvpId, { guestId: existingGuest.id });
+                            await RSVPService.getInstance().update(rsvpId, { guestId: existingGuest.id });
                             console.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
                         }
                         
@@ -1570,13 +1566,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                             }
                                         });
                                         
-                                        await updateGuestFromRSVP(existingAccGuest.id, updatedAccGuest, effectiveUserId);
+                                        await GuestService.getInstance().updateFromRSVP(existingAccGuest.id, updatedAccGuest, effectiveUserId);
                                         console.log(`✅ [RSVP Flow] อัปเดต Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, existingAccGuest.id, accGuest.name);
                                     } else {
                                         // สร้าง Guest ใหม่สำหรับผู้ติดตาม
-                                        const timestamp = Date.now();
-                                        const random = Math.floor(Math.random() * 1000);
-                                        const accGuestId = `G${timestamp}${random}_${i}`;
+                                        const accGuestId = generateId();
                                         const accGuestData: Guest = {
                                             id: accGuestId,
                                             firstName: accGuest.name || `คนที่ ${i + 1}`,
@@ -1607,10 +1601,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                             }
                                         });
                                         
-                                        await set(ref(database, `guests/${accGuestId}`), accGuestData);
+                                                                        await GuestService.getInstance().createFromRSVP(accGuestData, effectiveUserId);
                                         console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
                                     }
                                 } catch (accError: unknown) {
+                                    allGuestsCreated = false;
                                     console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest ผู้ติดตาม ${i + 1}:`, accError);
                                     if (accError && typeof accError === 'object' && 'code' in accError && accError.code === 'PERMISSION_DENIED') {
                                         console.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
@@ -1636,11 +1631,9 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     } else {
                         // 🔧 DevOps: สร้างกลุ่ม (Group) จาก RSVP
                         console.log('🆕 [RSVP Flow] กำลังสร้าง Guest ใหม่ (พร้อมกลุ่ม)...');
-                        const timestamp = Date.now();
-                        const random = Math.floor(Math.random() * 1000);
-                        const groupId = `GROUP_${timestamp}${random}`;
+                        const groupId = `GROUP_${generateId()}`;
                         const groupName = `${rsvpData.firstName || 'ไม่ระบุชื่อ'} ${rsvpData.lastName || ''}`.trim();
-                        const mainGuestId = `G${timestamp}${random}`;
+                        const mainGuestId = generateId();
                         
                         // 1. สร้าง Guest หลัก (ตัวเอง)
                         const newGuest: Guest = {
@@ -1676,7 +1669,12 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
                         // createGuestFromRSVP จะเช็ค idempotency เอง
-                        await createGuestFromRSVP(newGuest, effectiveUserId);
+                        try {
+                            await GuestService.getInstance().createFromRSVP(newGuest, effectiveUserId);
+                        } catch (createMainError) {
+                            allGuestsCreated = false;
+                            throw createMainError;
+                        }
                         
                         // 2. สร้าง Guest สำหรับผู้ติดตาม (accompanyingGuests)
                         if (rsvpData.accompanyingGuests && rsvpData.accompanyingGuests.length > 0) {
@@ -1685,7 +1683,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                             for (let i = 0; i < rsvpData.accompanyingGuests.length; i++) {
                                 try {
                                     const accGuest = rsvpData.accompanyingGuests[i];
-                                    const accGuestId = `G${timestamp}${random}_${i}`;
+                                    const accGuestId = generateId();
                                     const accGuestData: Guest = {
                                         id: accGuestId,
                                         firstName: accGuest.name || `คนที่ ${i + 1}`,
@@ -1720,7 +1718,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                     // 🔧 DevOps: ใช้ createGuestFromRSVP เพื่อให้ผ่าน Firebase Rules และ idempotency check
                                     // แต่ต้อง bypass idempotency check สำหรับผู้ติดตาม (เพราะมี rsvpUid เดียวกัน)
                                     // ดังนั้นใช้ set โดยตรง แต่เพิ่ม error handling
-                                    await set(ref(database, `guests/${accGuestId}`), accGuestData);
+                                    await GuestService.getInstance().createFromRSVP(accGuestData, effectiveUserId);
                                     console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
                                 } catch (accError: unknown) {
                                     console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการสร้าง Guest ผู้ติดตาม ${i + 1}:`, accError);
@@ -1734,11 +1732,15 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         }
                         
                         // 🔧 Double-check: เช็คว่า Guest ถูกสร้างจริงหรือไม่ (อาจจะถูก skip เพราะ idempotency)
-                        const createdGuest = await getGuestByRsvpUid(effectiveUserId);
+                                                if (!allGuestsCreated) {
+                            throw new Error('??????????????????????????????????????? ??????????????????????????????');
+                        }
+
+                                                const createdGuest = await GuestService.getInstance().getByRsvpUid(effectiveUserId);
                         const finalGuestId = createdGuest?.id || mainGuestId;
                         
                         // Update RSVP ให้ link กับ Guest
-                        await updateRSVP(rsvpId, { guestId: finalGuestId });
+                        await RSVPService.getInstance().update(rsvpId, { guestId: finalGuestId });
                         console.log('✅ [RSVP Flow] สร้าง Guest และ link RSVP สำเร็จ:', finalGuestId);
                     }
                 } catch (guestError: unknown) {
@@ -1750,10 +1752,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             } else if (existingRSVP?.guestId) {
                 // ถ้าเปลี่ยนจาก yes เป็น no ให้ update Guest.isComing = false
                 try {
-                    const existingGuest = await getGuest(existingRSVP.guestId);
+                    const existingGuest = await GuestService.getInstance().getById(existingRSVP.guestId);
                     if (existingGuest && existingGuest.rsvpUid === effectiveUserId) {
                         // ใช้ฟังก์ชันสำหรับ RSVP ถ้า Guest ถูกสร้างโดย RSVP
-                        await updateGuestFromRSVP(existingGuest.id, { 
+                        await GuestService.getInstance().updateFromRSVP(existingGuest.id, { 
                             isComing: false,
                             updatedAt: new Date().toISOString(),
                         }, effectiveUserId);
@@ -1805,7 +1807,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // และต้องผ่านการเช็ค auth state แล้ว (isCheckingAuth === false)
         if (!isLoggedIn || !currentUser) {
             // ตรวจสอบว่าอยู่ใน WebView หรือไม่
-            const webViewInfo = getWebViewInfo();
+            const webViewInfo = AuthService.getInstance().getWebViewInfo();
             const isInWebView = webViewInfo.isInWebView;
             const sessionStorageAvailable = webViewInfo.sessionStorageAvailable;
 
@@ -2253,7 +2255,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                 
                                 // Disable button if no status or loading
                                 // ใช้ getCurrentUser() เป็น fallback ถ้า currentUser state ยังไม่อัปเดต
-                                const effectiveUser = currentUser || getCurrentUser()?.uid || null;
+                                const effectiveUser = currentUser || AuthService.getInstance().getCurrentUser()?.uid || null;
                                 const isDisabled = !status || loading || !effectiveUser;
 
                                 return (
@@ -2361,7 +2363,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
 
 // Intro Component - Interaction required for autoplay
-
+// Component สำหรับแสดง intro overlay ก่อนเปิดการ์ดเชิญ (ต้องมี user interaction เพื่อ autoplay)
 const IntroOverlay: React.FC<{ onStart: () => void; config?: WeddingCardConfig }> = ({ onStart, config = defaultWeddingCardConfig }) => {
     // ใช้ config สำหรับการ์ดแต่งงาน (รับจาก props หรือใช้ default)
     const orderedNames = getOrderedNames(config);
@@ -2423,6 +2425,8 @@ const IntroOverlay: React.FC<{ onStart: () => void; config?: WeddingCardConfig }
 
 
 
+// Main Component - Guest RSVP App
+// Component หลักสำหรับหน้า Guest RSVP (หน้าการ์ดเชิญ)
 const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMode: _onExitGuestMode }) => {
     // Keep onExitGuestMode in props to avoid changing interface, but ignore usage for now
     // or remove it from props if the parent component is also updated.
@@ -2431,33 +2435,36 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     void _onExitGuestMode; 
 
     // State - จะ sync จาก Firebase เมื่อ login
-    const [isFlipped, setIsFlipped] = useState(false);
-    const [musicPlaying, setMusicPlaying] = useState(false);
-    const [showIntro, setShowIntro] = useState(true);
+    const [isFlipped, setIsFlipped] = useState(false); // สถานะการ flip การ์ด (false = หน้าแรก, true = หน้า form)
+    const [musicPlaying, setMusicPlaying] = useState(false); // สถานะการเล่นเพลง
+    const [showIntro, setShowIntro] = useState(true); // สถานะการแสดง intro overlay
 
-    const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+    const [currentTrackIndex, setCurrentTrackIndex] = useState(0); // Index ของเพลงปัจจุบัน
     
     // 🔧 State สำหรับ wedding card config - ดึงจาก Firebase
     // เริ่มต้นเป็น null เพื่อไม่ให้แสดงข้อมูล default ก่อนโหลดข้อมูลจาก Firebase
     const [weddingCardConfig, setWeddingCardConfig] = useState<WeddingCardConfig | null>(null);
-    const [isConfigLoading, setIsConfigLoading] = useState(true);
+    const [isConfigLoading, setIsConfigLoading] = useState(true); // สถานะการโหลด config
 
+    // eslint-disable-next-line security/detect-object-injection
     const currentTrack = PLAYLIST[currentTrackIndex];
 
+    // Ref สำหรับ YouTube iframe
     const iframeRef = React.useRef<HTMLIFrameElement>(null);
-    const [iframeReady, setIframeReady] = useState(false);
+    const [iframeReady, setIframeReady] = useState(false); // สถานะว่า iframe พร้อมใช้งานหรือไม่
     
     // Refs เพื่อป้องกัน infinite loop
-    const isManualControlRef = React.useRef(false); // Flag สำหรับ manual control
+    const isManualControlRef = React.useRef(false); // Flag สำหรับ manual control (ผู้ใช้ควบคุมเอง)
     const lastMusicStateRef = React.useRef(musicPlaying); // เก็บ state ล่าสุด
     const autoPlayAttemptedRef = React.useRef(false); // Flag เพื่อป้องกัน auto-play ซ้ำ
     
-    // Helper to send commands to YouTube iframe
+    // Helper function สำหรับส่งคำสั่งไปยัง YouTube iframe
     const sendCommand = useCallback((func: string, args: unknown[] = [], requireReady = false) => {
         // For auto-play after refresh, require iframe to be ready
         // For manual controls, try to send even if not ready yet
         if (iframeRef.current && iframeRef.current.contentWindow) {
             if (!requireReady || iframeReady) {
+                // ส่งคำสั่งผ่าน postMessage API
                 iframeRef.current.contentWindow.postMessage(
                     JSON.stringify({ event: 'command', func, args }), 
                     '*'
@@ -2466,7 +2473,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         }
     }, [iframeReady]);
 
-    // Handle iframe load event
+    // Handle iframe load event - เมื่อ iframe โหลดเสร็จ
     const handleIframeLoad = () => {
         // Wait for YouTube API to be ready (YouTube iframe needs time to initialize)
         setTimeout(() => {
@@ -2481,8 +2488,8 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         // และป้องกัน memory leak เมื่อ auth state callback ถูกเรียกหลายครั้ง
         let unsubscribeState: (() => void) | null = null;
 
-        // Subscribe to auth state changes
-        const unsubscribeAuth = onAuthStateChange((user) => {
+        // Subscribe to auth state changes - รับการเปลี่ยนแปลง authentication state
+        const unsubscribeAuth = AuthService.getInstance().onAuthStateChange((user) => {
             if (!isMounted) return;
             
             // Unsubscribe จาก state subscription เก่าก่อน (ถ้ามี)
@@ -2554,10 +2561,11 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     }, []);
 
     // 🔧 Subscribe to wedding card config จาก Firebase (real-time updates)
+    // รับการเปลี่ยนแปลง wedding card config แบบ real-time
     useEffect(() => {
         let isMounted = true;
         
-        const unsubscribeConfig = subscribeWeddingCardConfig((config) => {
+        const unsubscribeConfig = ConfigService.getInstance().subscribeWeddingCardConfig((config) => {
             if (!isMounted) return;
             
             setIsConfigLoading(false);
@@ -2582,6 +2590,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
             }
         });
 
+        // Cleanup เมื่อ component unmount
         return () => {
             isMounted = false;
             unsubscribeConfig();
@@ -2589,8 +2598,9 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     }, []);
 
     // Save state changes ไปยัง Firebase Realtime Database
+    // บันทึกสถานะ isFlipped ไปยัง Firebase
     useEffect(() => {
-        const user = getCurrentUser();
+        const user = AuthService.getInstance().getCurrentUser();
         if (!user) return;
         
         // 🔧 DevOps Fix: เมื่อล็อคอินอยู่ → กด X หรือ Heart → แสดงการ์ด (isFlipped = true) เสมอ
@@ -2609,8 +2619,9 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     }, [isFlipped]);
 
     // Save music playing state ไปยัง Firebase Realtime Database
+    // บันทึกสถานะการเล่นเพลงไปยัง Firebase
     useEffect(() => {
-        const user = getCurrentUser();
+        const user = AuthService.getInstance().getCurrentUser();
         if (!user) return;
         
         // Guest Flow - ใช้ userAppState ตามปกติ
@@ -2626,8 +2637,9 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     }, [musicPlaying]);
 
     // Save currentTrackIndex ไปยัง Firebase Realtime Database
+    // บันทึก index ของเพลงปัจจุบันไปยัง Firebase
     useEffect(() => {
-        const user = getCurrentUser();
+        const user = AuthService.getInstance().getCurrentUser();
         if (!user) return;
         
         // Guest Flow - ใช้ userAppState ตามปกติ
@@ -2642,6 +2654,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         return () => clearTimeout(timeoutId);
     }, [currentTrackIndex]);
 
+    // ฟังก์ชันสำหรับเริ่มต้น (เมื่อกด Heart button ใน intro)
     const handleStart = () => {
         // 🔧 Fix: เมื่อกด Heart button → ปิด intro และแสดงการ์ด
         setShowIntro(false);
@@ -2649,7 +2662,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         // 🔧 Fix: เช็คว่าล็อคอินแล้วหรือไม่
         // - ถ้าไม่ล็อคอิน → แสดงหน้าแรกของการ์ด (isFlipped = false)
         // - ถ้าล็อคอิน → แสดงหน้า form (isFlipped = true)
-        const user = getCurrentUser();
+        const user = AuthService.getInstance().getCurrentUser();
         const shouldFlip = !!user; // Flip เฉพาะเมื่อล็อคอินแล้ว
         
         setIsFlipped(shouldFlip);
@@ -2682,7 +2695,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         setIsFlipped(false);
         
         // Update Firebase state (ถ้าล็อคอินแล้ว)
-        const user = getCurrentUser();
+        const user = AuthService.getInstance().getCurrentUser();
         if (user) {
             updateUserAppState(user.uid, { isFlipped: false })
                 .catch((error) => {
@@ -2691,12 +2704,14 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         }
     };
 
+    // ฟังก์ชันสำหรับเปิด/ปิดเพลง
     const onToggleMusic = () => {
         // Set flag เพื่อบอกว่าเป็น manual control (ให้ priority สูงกว่า auto-play)
         isManualControlRef.current = true;
         
         const newState = !musicPlaying;
         
+        // ส่งคำสั่งไปยัง YouTube iframe
         if (newState) {
             sendCommand('playVideo', [], false); // Don't require ready for manual control
         } else {
@@ -2712,17 +2727,21 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         }, 500);
     };
 
+    // ฟังก์ชันสำหรับเล่นเพลงถัดไป
     const handleNext = () => {
         const nextIndex = (currentTrackIndex + 1) % PLAYLIST.length;
         setCurrentTrackIndex(nextIndex);
+        // eslint-disable-next-line security/detect-object-injection
         sendCommand('loadVideoById', [PLAYLIST[nextIndex].id], false); // Don't require ready for manual control
         // Keep playing state true if we change track
         if (!musicPlaying) setMusicPlaying(true);
     };
 
+    // ฟังก์ชันสำหรับเล่นเพลงก่อนหน้า
     const handlePrev = () => {
         const prevIndex = (currentTrackIndex - 1 + PLAYLIST.length) % PLAYLIST.length;
         setCurrentTrackIndex(prevIndex);
+        // eslint-disable-next-line security/detect-object-injection
         sendCommand('loadVideoById', [PLAYLIST[prevIndex].id], false); // Don't require ready for manual control
         if (!musicPlaying) setMusicPlaying(true);
     };
@@ -2747,49 +2766,52 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
             return;
         }
         
-        // ถ้า musicPlaying = true และยังไม่ได้ auto-play
-        if (musicPlaying && !autoPlayAttemptedRef.current && iframeReady) {
-            // 🔧 DevOps: Auto-play music when restored from Firebase after refresh
-            let attempts = 0;
-            const maxAttempts = 5; // ลดจำนวน attempts เพื่อป้องกัน loop
-            let timeoutId: ReturnType<typeof setTimeout> | null = null;
-            
-            const tryPlay = () => {
-                // Check flag อีกครั้งก่อนเล่น
-                if (isManualControlRef.current || !iframeRef.current || !iframeReady) {
-                    return;
-                }
+        // ถ้า musicPlaying = true ให้ auto-play หรือ sync state ตาม readiness
+        if (musicPlaying && iframeReady) {
+            if (!autoPlayAttemptedRef.current) {
+                // 🔧 DevOps: Auto-play music when restored from Firebase after refresh
+                let attempts = 0;
+                const maxAttempts = 5; // ลดจำนวน attempts เพื่อป้องกัน loop
+                let timeoutId: ReturnType<typeof setTimeout> | null = null;
                 
-                attempts++;
-                if (attempts <= maxAttempts) {
-                    sendCommand('playVideo', [], true); // Require ready for auto-play
-                    if (attempts < maxAttempts) {
-                        // Retry with increasing delay
-                        timeoutId = setTimeout(tryPlay, 500 + (attempts * 200));
+                // ฟังก์ชันสำหรับลองเล่นเพลง (retry mechanism)
+                const tryPlay = () => {
+                    // Check flag อีกครั้งก่อนเล่น
+                    if (isManualControlRef.current || !iframeRef.current || !iframeReady) {
+                        return;
+                    }
+                    
+                    attempts++;
+                    if (attempts <= maxAttempts) {
+                        sendCommand('playVideo', [], true); // Require ready for auto-play
+                        if (attempts < maxAttempts) {
+                            // Retry with increasing delay
+                            timeoutId = setTimeout(tryPlay, 500 + (attempts * 200));
+                        } else {
+                            // Mark ว่าได้พยายาม auto-play แล้ว
+                            autoPlayAttemptedRef.current = true;
+                        }
                     } else {
-                        // Mark ว่าได้พยายาม auto-play แล้ว
                         autoPlayAttemptedRef.current = true;
                     }
-                } else {
-                    autoPlayAttemptedRef.current = true;
-                }
-            };
-            
-            // Start trying after iframe is ready (delay เพื่อให้ iframe พร้อม)
-            timeoutId = setTimeout(() => {
-                tryPlay();
-            }, 800);
-            
-            return () => {
-                if (timeoutId) clearTimeout(timeoutId);
-            };
+                };
+                
+                // Start trying after iframe is ready (delay เพื่อให้ iframe พร้อม)
+                timeoutId = setTimeout(() => {
+                    tryPlay();
+                }, 800);
+                
+                return () => {
+                    if (timeoutId) clearTimeout(timeoutId);
+                };
+            }
+
+            // Sync play state (backup)
+            sendCommand('playVideo', [], false);
         } else if (!musicPlaying && iframeReady) {
             // Pause music
             sendCommand('pauseVideo', [], false);
             autoPlayAttemptedRef.current = false; // Reset flag เมื่อ pause
-        } else if (musicPlaying && iframeReady && !autoPlayAttemptedRef.current) {
-            // Sync play state (backup)
-            sendCommand('playVideo', [], false);
         }
         
         // Reset autoPlayAttemptedRef เมื่อ state เปลี่ยนจาก true เป็น false
@@ -2797,32 +2819,6 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
             autoPlayAttemptedRef.current = false;
         }
     }, [musicPlaying, showIntro, iframeReady, sendCommand]);
-
-    // Listen for YouTube player state changes to sync UI
-    useEffect(() => {
-        if (!showIntro && iframeRef.current) {
-            const handleMessage = (event: MessageEvent) => {
-                if (event.origin !== 'https://www.youtube.com') return;
-                
-                try {
-                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                    if (data.event === 'onStateChange') {
-                        // 0 = ended, 1 = playing, 2 = paused, 3 = buffering
-                        if (data.info === 1) {
-                            setMusicPlaying(true);
-                        } else if (data.info === 2) {
-                            setMusicPlaying(false);
-                        }
-                    }
-                } catch (e) {
-                    // Ignore parse errors
-                }
-            };
-            
-            window.addEventListener('message', handleMessage);
-            return () => window.removeEventListener('message', handleMessage);
-        }
-    }, [showIntro]);
 
     return (
 

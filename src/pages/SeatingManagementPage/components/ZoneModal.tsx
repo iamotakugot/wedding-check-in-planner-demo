@@ -25,7 +25,8 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ visible, onClose, zoneToEdit, onS
         },
       );
     }
-  }, [visible, zoneToEdit, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, zoneToEdit]); // form is stable, no need in deps
 
   const handleFinish = (values: Zone) => {
     const newZone: Zone = {

@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:loops": "eslint . --ext ts,tsx --format compact",
+    "check:loops": "npm run lint:loops",
     "typecheck": "tsc --noEmit",
     "audit:ci": "npm audit --audit-level=high",
     "preview": "vite preview"

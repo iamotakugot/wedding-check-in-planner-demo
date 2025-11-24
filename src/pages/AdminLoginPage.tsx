@@ -1,40 +1,52 @@
+// นำเข้า React hooks
 import React, { useState, useEffect } from 'react';
+// นำเข้า Ant Design components
 import { Layout, Card, Form, Input, Button, Typography, Alert, App } from 'antd';
+// นำเข้า icons จาก Ant Design
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { loginWithEmail, checkIsAdmin, logout, getCurrentUser } from '@/services/firebaseService';
+// นำเข้า Firebase service functions สำหรับ authentication
+import { AuthService } from '@/services/firebase/AuthService';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
+// Interface สำหรับ props ของ AdminLoginPage
 interface AdminLoginPageProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: () => void; // Callback เมื่อ login สำเร็จ
 }
 
+// Interface สำหรับ form fields
 interface LoginFieldType {
-  username?: string;
-  password?: string;
+  username?: string; // อีเมล
+  password?: string; // รหัสผ่าน
 }
 
+// Component สำหรับหน้า Admin Login
 const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
+  // State สำหรับสถานะการโหลด
   const [loading, setLoading] = useState(false);
+  // State สำหรับข้อความ error
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // ใช้ message API จาก Ant Design
   const { message } = App.useApp();
   
   // 🔧 DevOps: ถ้ามี Guest login อยู่แล้ว → แสดงข้อความแนะนำให้ logout ก่อน
   useEffect(() => {
-    const currentUser = getCurrentUser();
+    const currentUser = AuthService.getInstance().getCurrentUser();
     if (currentUser) {
-      checkIsAdmin(currentUser.uid).then((isAdmin) => {
+      // ตรวจสอบว่าเป็น admin หรือไม่
+      AuthService.getInstance().checkIsAdmin(currentUser.uid).then((isAdmin) => {
         if (!isAdmin) {
           // Guest ที่ล็อคอินแล้ว → แสดงข้อความแนะนำ
           setErrorMsg('คุณล็อคอินด้วยบัญชี Guest อยู่ กรุณาลงชื่อออกก่อน หรือใช้บัญชี Admin ในการเข้าสู่ระบบ');
         }
       }).catch(() => {
-        // Ignore error
+        // Ignore error - ไม่แสดง error ถ้าตรวจสอบไม่ได้
       });
     }
   }, []);
 
+  // ฟังก์ชันสำหรับจัดการเมื่อ submit form
   const onFinish = async (values: LoginFieldType) => {
     setLoading(true);
     setErrorMsg(null); // Reset error message
@@ -44,6 +56,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
       const email = values.username?.trim() || '';
       const password = values.password || '';
 
+      // ตรวจสอบว่ามีข้อมูลครบถ้วนหรือไม่
       if (!email || !password) {
         const errorMsg = 'กรุณากรอกอีเมลและรหัสผ่าน';
         setErrorMsg(errorMsg);
@@ -53,25 +66,25 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
       }
 
       // 🔧 DevOps: ถ้ามี Guest login อยู่แล้ว → logout ก่อน login ด้วย admin account
-      const currentUser = getCurrentUser();
+      const currentUser = AuthService.getInstance().getCurrentUser();
       if (currentUser) {
-        const currentIsAdmin = await checkIsAdmin(currentUser.uid);
+        const currentIsAdmin = await AuthService.getInstance().checkIsAdmin(currentUser.uid);
         if (!currentIsAdmin) {
           // Guest ที่ล็อคอินแล้ว → logout ก่อน
           console.log('ℹ️ [Admin Login] Logging out Guest account before admin login');
-          await logout();
+          await AuthService.getInstance().logout();
         }
       }
       
       // Login ด้วย Firebase
-      const user = await loginWithEmail(email, password);
+      const user = await AuthService.getInstance().loginWithEmail(email, password);
 
       // ตรวจสอบว่าเป็น admin หรือไม่
-      const isAdmin = await checkIsAdmin(user.uid);
+      const isAdmin = await AuthService.getInstance().checkIsAdmin(user.uid);
       
       if (!isAdmin) {
         // ถ้าไม่ใช่ admin ให้ logout และแสดง error
-        await logout();
+        await AuthService.getInstance().logout();
         const errorMsg = 'บัญชีนี้ไม่มีสิทธิ์เข้าถึง Admin Panel';
         setErrorMsg(errorMsg);
         message.error(errorMsg);
@@ -82,7 +95,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
       // Login สำเร็จ
       message.success('เข้าสู่ระบบสำเร็จ กำลังนำไปยัง Dashboard...');
       setLoading(false);
-      onLoginSuccess();
+      onLoginSuccess(); // เรียก callback เพื่อบอก parent component
     } catch (error: unknown) {
       console.error('Login error:', error);
       
@@ -90,7 +103,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
       let errorMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
       
       if (error && typeof error === 'object' && 'code' in error) {
-        // Firebase Auth error codes
+        // Firebase Auth error codes - แปลง error code เป็นข้อความภาษาไทย
         switch ((error as { code: string }).code) {
           case 'auth/user-not-found':
             errorMessage = 'ไม่พบผู้ใช้นี้ในระบบ';
@@ -136,6 +149,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
     <Layout className="min-h-screen bg-gray-50 flex items-center justify-center">
       <Content className="w-full max-w-md p-4">
         <Card className="shadow-lg rounded-xl overflow-hidden" variant="borderless">
+          {/* Header section - แสดงชื่อแอปและไอคอน */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-pink-100 text-pink-600 rounded-full mb-4">
               <UserOutlined style={{ fontSize: '32px' }} />
@@ -156,17 +170,19 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
               onClose={() => setErrorMsg(null)}
             />
           )}
+          {/* Login Form */}
           <Form
             layout="vertical"
             onFinish={onFinish}
             size="large"
             onValuesChange={() => {
-              // Clear error when user starts typing
+              // Clear error when user starts typing - ลบ error เมื่อผู้ใช้เริ่มพิมพ์
               if (errorMsg) {
                 setErrorMsg(null);
               }
             }}
           >
+            {/* Email input field */}
             <Form.Item
               name="username"
               rules={[
@@ -181,6 +197,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
                 autoComplete="email"
               />
             </Form.Item>
+            {/* Password input field */}
             <Form.Item
               name="password"
               rules={[
@@ -194,6 +211,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
                 autoComplete="current-password"
               />
             </Form.Item>
+            {/* Submit button */}
             <Form.Item>
               <Button
                 type="primary"

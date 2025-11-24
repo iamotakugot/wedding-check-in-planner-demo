@@ -34,7 +34,8 @@ const TableModal: React.FC<TableModalProps> = ({
         },
       );
     }
-  }, [visible, tableToEdit, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, tableToEdit]); // form is stable, no need in deps
 
   const handleFinish = (values: TableData) => {
     const nextOrder = isEditMode ? tableToEdit!.order : values.order;

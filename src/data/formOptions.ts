@@ -1,10 +1,11 @@
 // ============================================================================
 // FORM OPTIONS & AUTOCOMPLETE DATA
-// ============================================================================
 // ไฟล์นี้เก็บ options สำหรับ form autocomplete และ select dropdowns
+// ============================================================================
 
 // ============================================================================
 // RSVP CARD OPTIONS (หน้า Guest RSVP)
+// Options สำหรับเลือกความสัมพันธ์ในหน้า Guest RSVP
 // ============================================================================
 
 export const RSVP_RELATION_OPTIONS = [
@@ -36,6 +37,7 @@ export const RSVP_RELATION_OPTIONS = [
   { value: 'เพื่อนในชมรม/สมาคม' },
 ];
 
+// Options สำหรับเลือกความสัมพันธ์ของผู้ติดตาม (Accompanying Guests)
 export const RSVP_GUEST_RELATION_OPTIONS = [
   { value: 'แฟน/คู่รัก', label: 'แฟน/คู่รัก' },
   { value: 'พ่อ/แม่', label: 'พ่อ/แม่' },
@@ -47,20 +49,24 @@ export const RSVP_GUEST_RELATION_OPTIONS = [
 
 // ============================================================================
 // ADMIN PANEL OPTIONS
+// Options สำหรับใช้ใน Admin Panel
 // ============================================================================
 
+// Options สำหรับเลือกฝ่าย (เจ้าบ่าว/เจ้าสาว)
 export const SIDE_OPTIONS = [
   { value: 'groom', label: 'ฝ่ายเจ้าบ่าว' },
   { value: 'bride', label: 'ฝ่ายเจ้าสาว' },
   { value: 'both', label: 'แขกทั้งสองฝ่าย' },
 ];
 
+// Options สำหรับเลือกเพศ
 export const GENDER_OPTIONS = [
   { value: 'male', label: 'ชาย' },
   { value: 'female', label: 'หญิง' },
   { value: 'other', label: 'อื่น ๆ' },
 ];
 
+// Options สำหรับเลือกชื่อโซน (Autocomplete)
 export const ZONE_NAME_OPTIONS = [
   { value: 'โซน VIP' },
   { value: 'โซน VIP หน้าเวที' },
@@ -78,6 +84,7 @@ export const ZONE_NAME_OPTIONS = [
   { value: 'โซนพิเศษ' },
 ];
 
+// Options สำหรับเลือกชื่อโต๊ะ (Autocomplete)
 export const TABLE_NAME_OPTIONS = [
   { value: 'VIP 1' },
   { value: 'VIP 2' },

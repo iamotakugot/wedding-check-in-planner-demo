@@ -16,7 +16,15 @@
       { "allowConstantExport": true }
     ],
     "security/detect-object-injection": "warn",
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": [
+      "warn",
+      {
+        "additionalHooks": "(useMemo|useCallback)",
+        "enableDangerousAutofixThisMayCauseInfiniteLoops": false
+      }
+    ]
   },
   "settings": {
     "react": {

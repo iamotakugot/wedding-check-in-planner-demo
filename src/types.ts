@@ -6,6 +6,8 @@ export type Side = 'groom' | 'bride' | 'both';
 
 export interface Guest {
   id: string;
+  rsvpId?: string | null; // Link back to RSVP (ถ้ามี) - ใช้แทน rsvpUid ในโครงสร้างใหม่
+  rsvpUid?: string | null; // Deprecated: เก็บไว้เพื่อ backward compatibility
   firstName: string;
   lastName: string;
   nickname: string;
@@ -24,7 +26,6 @@ export interface Guest {
   groupName?: string | null;
   checkedInAt?: string | null;
   checkInMethod?: 'manual' | 'qr' | null;
-  rsvpUid?: string | null; // UID ของผู้สร้าง Guest ผ่าน RSVP (สำหรับตรวจสอบสิทธิ์)
   createdAt: string;
   updatedAt: string;
 }
