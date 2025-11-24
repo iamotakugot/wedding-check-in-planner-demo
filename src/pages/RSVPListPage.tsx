@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Table, Typography, Tag, Button, Modal, Descriptions, Space, Avatar } from 'antd';
 import { EyeOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons';
-import type { RSVPData } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import type { TableProps } from 'antd';
 
 const { Title, Text } = Typography;

@@ -39,7 +39,8 @@ import { Guest, Zone, TableData } from '@/types';
 import DraggableTable from '@/pages/SeatingManagementPage/components/DraggableTable';
 import ZoneModal from '@/pages/SeatingManagementPage/components/ZoneModal';
 import TableModal from '@/pages/SeatingManagementPage/components/TableModal';
-import { createZone, updateZone, deleteZone, createTable, updateTable, deleteTable, updateGuest, type RSVPData } from '@/services/firebaseService';
+import { createZone, updateZone, deleteZone, createTable, updateTable, deleteTable, updateGuest } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import { getGuestsFromRSVP } from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;

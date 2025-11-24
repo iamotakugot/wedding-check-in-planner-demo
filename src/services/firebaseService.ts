@@ -11,7 +11,36 @@ import {
   FacebookAuthProvider
 } from 'firebase/auth';
 import { database, auth } from '@/firebase/config';
-import { Guest, Zone, TableData } from '@/types';
+import { Guest, Zone, TableData, RSVPData } from '@/types';
+
+// ============================================================================
+// TYPE GUARDS & HELPERS
+// ============================================================================
+
+interface FirebaseError {
+  code?: string;
+  message?: string;
+}
+
+function isFirebaseError(error: unknown): error is FirebaseError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    ('code' in error || 'message' in error)
+  );
+}
+
+function isError(error: unknown): error is Error {
+  return error instanceof Error;
+}
+
+interface NavigatorStandalone {
+  standalone?: boolean;
+}
+
+interface WindowWithReactNative {
+  ReactNativeWebView?: unknown;
+}
 
 // ============================================================================
 // GUESTS
@@ -251,25 +280,6 @@ export const subscribeTables = (callback: (tables: TableData[]) => void): () => 
 // RSVP
 // ============================================================================
 
-export interface RSVPData {
-  id?: string;
-  uid?: string;
-  firstName: string;
-  lastName: string;
-  fullName?: string; // เพิ่ม field สำหรับเก็บชื่อ-นามสกุลรวมกัน
-  photoURL?: string | null; // เพิ่ม field สำหรับเก็บ URL ภาพจาก Facebook/Google
-  nickname: string;
-  isComing: 'yes' | 'no';
-  side: 'groom' | 'bride';
-  relation: string;
-  note: string;
-  accompanyingGuestsCount: number;
-  accompanyingGuests: { name: string; relationToMain: string }[];
-  guestId?: string | null; // Link to Guest if exists
-  createdAt: string;
-  updatedAt: string;
-}
-
 export const rsvpsRef = () => ref(database, 'rsvps');
 
 export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
@@ -327,8 +337,9 @@ export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'upda
     
     // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
     Object.keys(rsvpData).forEach(key => {
-      if ((rsvpData as any)[key] === undefined) {
-        delete (rsvpData as any)[key];
+      const value = (rsvpData as Record<string, unknown>)[key];
+      if (value === undefined) {
+        delete (rsvpData as Record<string, unknown>)[key];
       }
     });
     
@@ -341,26 +352,28 @@ export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'upda
       await set(newRef, rsvpData);
       console.log('✅ [RSVP] สร้าง RSVP สำเร็จ ID:', newRef.key);
       return newRef.key!;
-    } catch (firebaseError: any) {
+    } catch (firebaseError: unknown) {
       console.error('❌ [RSVP] เกิดข้อผิดพลาดจาก Firebase:', firebaseError);
-      console.error('📋 [RSVP] Error code:', firebaseError.code);
-      console.error('📋 [RSVP] Error message:', firebaseError.message);
-      
-      if (firebaseError.code === 'PERMISSION_DENIED' || firebaseError.code === 'PERMISSION_DENIED') {
-        console.error('🚫 [RSVP] PERMISSION_DENIED - Firebase Rules อาจบล็อกการเขียน');
-        console.error('👤 [RSVP] Current user UID:', user.uid);
-        console.error('📋 [RSVP] Rules ควรอนุญาต: auth != null && user is logged in');
-        throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
+      if (isFirebaseError(firebaseError)) {
+        console.error('📋 [RSVP] Error code:', firebaseError.code);
+        console.error('📋 [RSVP] Error message:', firebaseError.message);
+        
+        if (firebaseError.code === 'PERMISSION_DENIED') {
+          console.error('🚫 [RSVP] PERMISSION_DENIED - Firebase Rules อาจบล็อกการเขียน');
+          console.error('👤 [RSVP] Current user UID:', user.uid);
+          console.error('📋 [RSVP] Rules ควรอนุญาต: auth != null && user is logged in');
+          throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
+        }
       }
       throw firebaseError;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ [RSVP] เกิดข้อผิดพลาดในการสร้าง RSVP:', error);
-    if (error.code === 'PERMISSION_DENIED' || error.code === 'PERMISSION_DENIED') {
+    if (isFirebaseError(error) && error.code === 'PERMISSION_DENIED') {
       throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules');
     }
     // Re-throw error ที่มี message แล้ว
-    if (error.message) {
+    if (isError(error)) {
       throw error;
     }
     throw new Error('เกิดข้อผิดพลาดในการบันทึกข้อมูล RSVP');
@@ -426,9 +439,9 @@ export const getRSVPByUid = async (_uid?: string): Promise<RSVPData | null> => {
     
     console.log('RSVP found for user:', mostRecent.id);
     return mostRecent;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching RSVP by UID:', error);
-    if (error.code === 'PERMISSION_DENIED') {
+    if (isFirebaseError(error) && error.code === 'PERMISSION_DENIED') {
       console.error('Permission denied when fetching RSVP. Check Firebase Rules.');
     }
     throw error;
@@ -474,8 +487,9 @@ export const updateRSVP = async (id: string, updates: Partial<RSVPData>): Promis
 
     // Remove undefined fields ก่อนบันทึก
     Object.keys(updates).forEach(key => {
-      if ((updates as any)[key] === undefined) {
-        delete (updates as any)[key];
+      const value = (updates as Record<string, unknown>)[key];
+      if (value === undefined) {
+        delete (updates as Record<string, unknown>)[key];
       }
     });
 
@@ -507,22 +521,24 @@ export const updateRSVP = async (id: string, updates: Partial<RSVPData>): Promis
     try {
       await update(ref(database, `rsvps/${id}`), updateData);
       console.log('✅ [RSVP] อัปเดต RSVP สำเร็จ');
-    } catch (firebaseError: any) {
+    } catch (firebaseError: unknown) {
       console.error('❌ [RSVP] เกิดข้อผิดพลาดจาก Firebase:', firebaseError);
-      console.error('📋 [RSVP] Error code:', firebaseError.code);
-      console.error('📋 [RSVP] Error message:', firebaseError.message);
-      
-      if (firebaseError.code === 'PERMISSION_DENIED' || firebaseError.code === 'PERMISSION_DENIED') {
-        console.error('🚫 [RSVP] PERMISSION_DENIED - Firebase Rules อาจบล็อกการเขียน');
-        console.error('👤 [RSVP] Current user UID:', user.uid);
-        console.error('📋 [RSVP] Rules ควรอนุญาต: auth != null && user is logged in');
-        throw new Error('ไม่มีสิทธิ์ในการแก้ไขข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
+      if (isFirebaseError(firebaseError)) {
+        console.error('📋 [RSVP] Error code:', firebaseError.code);
+        console.error('📋 [RSVP] Error message:', firebaseError.message);
+        
+        if (firebaseError.code === 'PERMISSION_DENIED') {
+          console.error('🚫 [RSVP] PERMISSION_DENIED - Firebase Rules อาจบล็อกการเขียน');
+          console.error('👤 [RSVP] Current user UID:', user.uid);
+          console.error('📋 [RSVP] Rules ควรอนุญาต: auth != null && user is logged in');
+          throw new Error('ไม่มีสิทธิ์ในการแก้ไขข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
+        }
       }
       throw firebaseError;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating RSVP:', error);
-    if (error.code === 'PERMISSION_DENIED' || error.code === 'PERMISSION_DENIED') {
+    if (isFirebaseError(error) && error.code === 'PERMISSION_DENIED') {
       throw new Error('ไม่มีสิทธิ์ในการแก้ไขข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules');
     }
     throw error;
@@ -776,10 +792,10 @@ const isInWebView = (): boolean => {
   const isOtherWebView = otherWebViewPatterns.some(pattern => pattern.test(userAgent));
   
   // เช็ค window.navigator.standalone (iOS)
-  const isIOSStandalone = (window.navigator as any).standalone === true;
+  const isIOSStandalone = (window.navigator as NavigatorStandalone).standalone === true;
   
   // เช็คว่ามี window.ReactNativeWebView (React Native WebView)
-  const isReactNativeWebView = typeof (window as any).ReactNativeWebView !== 'undefined';
+  const isReactNativeWebView = typeof (window as WindowWithReactNative).ReactNativeWebView !== 'undefined';
   
   // 🔧 DevOps: เช็ค Android WebView โดยดูจาก userAgent
   // Android WebView มักจะมี "wv" ใน userAgent และไม่มี "Chrome" หรือ "Version"
@@ -894,13 +910,14 @@ export const signInWithGoogle = async (): Promise<void> => {
     await signInWithPopup(auth, googleProvider);
     console.log('✅ [Google Login] Popup สำเร็จ');
     return;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // ถ้า popup ถูกบล็อกหรือไม่รองรับ → throw error พร้อม link ให้คัดลอก
-    if (error.code === 'auth/popup-blocked' || 
-        error.code === 'auth/popup-closed-by-user' ||
-        error.code === 'auth/cancelled-popup-request' ||
-        error.code === 'auth/operation-not-supported-in-this-environment') {
-      
+    if (isFirebaseError(error) && (
+      error.code === 'auth/popup-blocked' || 
+      error.code === 'auth/popup-closed-by-user' ||
+      error.code === 'auth/cancelled-popup-request' ||
+      error.code === 'auth/operation-not-supported-in-this-environment'
+    )) {
       // 🔧 DevOps: ไม่ redirect → throw error พร้อม link
       const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
       throw new Error(`POPUP_BLOCKED|${currentUrl}`);
@@ -930,23 +947,26 @@ export const signInWithFacebook = async (): Promise<void> => {
     await signInWithPopup(auth, facebookProvider);
     console.log('✅ [Facebook Login] Popup สำเร็จ');
     return;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // ถ้า popup ถูกบล็อกหรือไม่รองรับ → throw error พร้อม link ให้คัดลอก
-    if (error.code === 'auth/popup-blocked' || 
-        error.code === 'auth/popup-closed-by-user' ||
-        error.code === 'auth/cancelled-popup-request' ||
-        error.code === 'auth/operation-not-supported-in-this-environment') {
-      
+    if (isFirebaseError(error) && (
+      error.code === 'auth/popup-blocked' || 
+      error.code === 'auth/popup-closed-by-user' ||
+      error.code === 'auth/cancelled-popup-request' ||
+      error.code === 'auth/operation-not-supported-in-this-environment'
+    )) {
       // 🔧 DevOps: ไม่ redirect → throw error พร้อม link
       const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
       throw new Error(`POPUP_BLOCKED|${currentUrl}`);
     }
     
     // 🔧 DevOps Fix: จัดการ error "missing initial state" หรือ sessionStorage errors
-    if (error.message?.includes('sessionStorage') ||
-        error.message?.includes('initial state') ||
-        error.message?.includes('missing initial state') ||
-        error.message?.includes('storage-partitioned')) {
+    if (isFirebaseError(error) && error.message && (
+      error.message.includes('sessionStorage') ||
+      error.message.includes('initial state') ||
+      error.message.includes('missing initial state') ||
+      error.message.includes('storage-partitioned')
+    )) {
       console.warn('⚠️ [Facebook Login] SessionStorage error - แสดง link ให้คัดลอก');
       const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
       throw new Error(`POPUP_BLOCKED|${currentUrl}`);
@@ -972,28 +992,31 @@ export const checkRedirectResult = async (): Promise<User | null> => {
     // No redirect result - user didn't come from a redirect
     console.log('ℹ️ [Redirect] ไม่มี redirect result');
     return null;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 🔧 IMPORTANT: Handle critical errors - re-throw เพื่อให้ component จัดการ
-    if (error.code === 'auth/account-exists-with-different-credential') {
-      console.error('❌ [Redirect] มี account อื่นใช้ email เดียวกัน');
-      throw error; // Re-throw เพื่อให้ component จัดการ
-    }
-    if (error.code === 'auth/email-already-in-use') {
-      console.error('❌ [Redirect] Email ถูกใช้งานแล้ว');
-      throw error; // Re-throw เพื่อให้ component จัดการ
-    }
-    
-    // 🔧 DevOps Fix: สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
-    // ไม่ควร throw error เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการ)
-    if (error.message?.includes('sessionStorage') || 
-        error.message?.includes('initial state') ||
-        error.message?.includes('missing initial state') ||
-        error.message?.includes('storage-partitioned') ||
-        error.message?.includes('localStorage') ||
-        error.code === 'auth/operation-not-supported-in-this-environment') {
-      console.warn('⚠️ [Redirect] SessionStorage/localStorage error - อาจเกิดใน WebView (Messenger) ระบบจะใช้ auth state check แทน');
-      // Return null เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการต่อ)
-      return null;
+    if (isFirebaseError(error)) {
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        console.error('❌ [Redirect] มี account อื่นใช้ email เดียวกัน');
+        throw error; // Re-throw เพื่อให้ component จัดการ
+      }
+      if (error.code === 'auth/email-already-in-use') {
+        console.error('❌ [Redirect] Email ถูกใช้งานแล้ว');
+        throw error; // Re-throw เพื่อให้ component จัดการ
+      }
+      
+      // 🔧 DevOps Fix: สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
+      // ไม่ควร throw error เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการ)
+      if (error.message && (
+        error.message.includes('sessionStorage') || 
+        error.message.includes('initial state') ||
+        error.message.includes('missing initial state') ||
+        error.message.includes('storage-partitioned') ||
+        error.message.includes('localStorage')
+      ) || error.code === 'auth/operation-not-supported-in-this-environment') {
+        console.warn('⚠️ [Redirect] SessionStorage/localStorage error - อาจเกิดใน WebView (Messenger) ระบบจะใช้ auth state check แทน');
+        // Return null เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการต่อ)
+        return null;
+      }
     }
     
     // 🔧 สำหรับ error อื่นๆ - return null แทน throw เพื่อไม่ให้ block UI

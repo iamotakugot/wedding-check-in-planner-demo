@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import { Guest, Zone, TableData, Side } from '@/types';
-import type { RSVPData } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import { getGuestsFromRSVP, getTotalPeopleFromRSVP } from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Typography, Input, Button, Divider, Tooltip, message, Statistic, QRCode } from 'antd';
 import { LinkOutlined, CopyOutlined, EyeOutlined, QrcodeOutlined } from '@ant-design/icons';
 import { getConfig, getRSVPs, onAuthStateChange, logout } from '@/services/firebaseService';
-import type { WeddingConfig, RSVPData } from '@/services/firebaseService';
+import type { WeddingConfig } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 
 const { Title, Text } = Typography;
 

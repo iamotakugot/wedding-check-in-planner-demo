@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ConfigProvider, App as AntApp, Spin, message } from 'antd';
-import { Guest, Zone, TableData } from '@/types';
+import { Guest, Zone, TableData, RSVPData } from '@/types';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import MainLayout from '@/components/Layout/MainLayout';
 import DashboardPage from '@/pages/DashboardPage';
@@ -17,7 +17,6 @@ import {
   subscribeRSVPs,
   createGuest,
   updateRSVP,
-  type RSVPData,
   onAuthStateChange,
   checkIsAdmin,
   logout,

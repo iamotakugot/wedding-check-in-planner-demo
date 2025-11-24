@@ -7,7 +7,7 @@
  * - Main guest และ accompanying guests ใช้ groupId เดียวกัน
  */
 
-import type { RSVPData } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import type { Guest } from '@/types';
 
 /**

@@ -3,7 +3,8 @@ import { Card, Row, Col, Typography, Input, Select, Table, Tag, Button, Space, S
 import type { ColumnsType } from 'antd/es/table';
 import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ThunderboltOutlined, FileTextOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { Guest, Zone, TableData, Side } from '@/types';
-import { updateGuest, type RSVPData } from '@/services/firebaseService';
+import { updateGuest } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import { groupRSVPsWithGuests, getGuestsFromRSVP } from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;

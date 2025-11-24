@@ -62,7 +62,7 @@ import {
 } from '@/services/firebaseService';
 import { get, ref, set, onValue, remove } from 'firebase/database';
 import { database } from '@/firebase/config';
-import type { RSVPData as FirebaseRSVPData } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import type { User } from 'firebase/auth';
 import { Guest, Side } from '@/types';
 import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formOptions';
@@ -430,27 +430,7 @@ const PLAYLIST = [
 
 
 
-// Types
-
-interface RSVPData {
-
-    uid?: string;
-
-    firstName: string; lastName: string; 
-    fullName?: string; // เพิ่ม field สำหรับเก็บชื่อ-นามสกุลรวมกัน
-    photoURL?: string | null; // เพิ่ม field สำหรับเก็บ URL ภาพจาก Facebook/Google
-    nickname: string;
-
-    isComing: 'yes' | 'no'; side: 'groom' | 'bride'; relation: string;
-
-    note: string; accompanyingGuestsCount: number;
-
-    accompanyingGuests: { name: string; relationToMain: string }[];
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    updatedAt?: any;
-
-}
+// Types - RSVPData is imported from @/types
 
 
 
@@ -1672,7 +1652,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 lastName = nameParts.slice(1).join(' ') || '';
             }
 
-            const rsvpData: Omit<FirebaseRSVPData, 'id' | 'createdAt' | 'updatedAt'> = {
+            const rsvpData: Omit<RSVPData, 'id' | 'createdAt' | 'updatedAt'> = {
                 uid: effectiveUserId, // ใช้ effectiveUserId แทน currentUser
                 isComing: values.isComing,
                 firstName: firstName,
@@ -1689,11 +1669,15 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             };
 
             // Remove undefined fields to prevent Firebase error
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            Object.keys(rsvpData).forEach(key => (rsvpData as any)[key] === undefined && delete (rsvpData as any)[key]);
+            Object.keys(rsvpData).forEach(key => {
+              const value = (rsvpData as Record<string, unknown>)[key];
+              if (value === undefined) {
+                delete (rsvpData as Record<string, unknown>)[key];
+              }
+            });
 
             // ตรวจสอบว่ามี RSVP อยู่แล้วหรือไม่ - ใช้ effectiveUserId
-            let existingRSVP: FirebaseRSVPData | null = null;
+            let existingRSVP: RSVPData | null = null;
             try {
                 existingRSVP = await getRSVPByUid(effectiveUserId);
             } catch (error) {
@@ -1715,11 +1699,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         id: existingRSVP.id, 
                         createdAt: existingRSVP.createdAt, 
                         updatedAt: new Date().toISOString() 
-                    } as FirebaseRSVPData);
+                    } as RSVPData);
                     message.success('อัพเดทข้อมูลเรียบร้อย');
-                } catch (error: any) {
+                } catch (error: unknown) {
                     console.error('Error updating RSVP:', error);
-                    const errorMessage = error?.message || 'เกิดข้อผิดพลาดในการอัพเดทข้อมูล RSVP';
+                    const errorMessage = (error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัพเดทข้อมูล RSVP');
                     message.error(errorMessage);
                     setLoading(false);
                     return;
@@ -1736,11 +1720,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         id: rsvpId,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
-                    } as FirebaseRSVPData);
+                    } as RSVPData);
                     message.success('บันทึกข้อมูลเรียบร้อย');
-                } catch (error: any) {
+                } catch (error: unknown) {
                     console.error('Error creating RSVP:', error);
-                    const errorMessage = error?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล RSVP';
+                    const errorMessage = (error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล RSVP');
                     message.error(errorMessage);
                     setLoading(false);
                     return;
@@ -1905,8 +1889,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                             }
                             
                             // 🔧 DevOps Fix: ลบ Guests ที่ไม่ตรงกับ RSVP อีกต่อไป (ถ้ามี)
-                            const expectedNames = rsvpData.accompanyingGuests.map(g => g.name);
-                            const guestsToRemove = existingAccGuests.filter(g => !expectedNames.includes(g.firstName));
+                            const expectedNames = rsvpData.accompanyingGuests.map((g: { name: string; relationToMain: string }) => g.name);
+                            const guestsToRemove = existingAccGuests.filter((g: Guest) => !expectedNames.includes(g.firstName));
                             
                             for (const guestToRemove of guestsToRemove) {
                                 try {
@@ -2188,7 +2172,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                             <li className="text-gray-500">ตัวท่านเอง</li>
 
-                                            {submittedData.accompanyingGuests.map((g, i) => (
+                                            {submittedData.accompanyingGuests.map((g: { name: string; relationToMain: string }, i: number) => (
 
                                                 <li key={i}>{g.relationToMain} {g.name ? `(${g.name})` : ''}</li>
 

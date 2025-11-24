@@ -28,7 +28,8 @@ import { message } from 'antd';
 import { Guest, Zone, TableData, Side } from '@/types';
 import { SIDE_OPTIONS } from '@/data/formOptions';
 import GuestFormDrawer from '@/pages/GuestListPage/components/GuestFormDrawer';
-import { createGuest, updateGuest, deleteGuest, type RSVPData } from '@/services/firebaseService';
+import { createGuest, updateGuest, deleteGuest } from '@/services/firebaseService';
+import type { RSVPData } from '@/types';
 import { groupRSVPsWithGuests, getGuestsFromRSVP } from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;

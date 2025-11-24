@@ -51,3 +51,22 @@ export interface TableData {
   y: number; // Percent from top (0-100)
 }
 
+export interface RSVPData {
+  id?: string;
+  uid?: string; // Firebase Auth UID ของผู้สร้าง RSVP
+  firstName: string;
+  lastName: string;
+  fullName?: string; // Denormalized: ชื่อ-นามสกุลรวมกัน
+  photoURL?: string | null; // URL ภาพจาก Facebook/Google
+  nickname: string;
+  isComing: 'yes' | 'no';
+  side: 'groom' | 'bride';
+  relation: string;
+  note: string;
+  accompanyingGuestsCount: number;
+  accompanyingGuests: { name: string; relationToMain: string }[];
+  guestId?: string | null; // Link to Guest if exists
+  createdAt: string;
+  updatedAt: string;
+}
+
