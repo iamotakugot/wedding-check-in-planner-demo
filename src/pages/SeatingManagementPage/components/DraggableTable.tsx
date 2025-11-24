@@ -54,12 +54,15 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
       const elementWidth = 120;
       const elementHeight = 100;
 
+      // Calculate position relative to canvas
       let newLeftPx = e.clientX - canvasRect.left - offset.x;
       let newTopPx = e.clientY - canvasRect.top - offset.y;
 
+      // Clamp to canvas bounds
       newLeftPx = Math.max(0, Math.min(newLeftPx, canvasRect.width - elementWidth));
       newTopPx = Math.max(0, Math.min(newTopPx, canvasRect.height - elementHeight));
 
+      // Convert to normalized percentage (0-100) based on canvas dimensions
       const newX = (newLeftPx / canvasRect.width) * 100;
       const newY = (newTopPx / canvasRect.height) * 100;
 
@@ -84,18 +87,30 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
       const elementWidth = 120;
       const elementHeight = 100;
 
+      // Calculate final position
       let finalLeftPx = e.clientX - canvasRect.left - offset.x;
       let finalTopPx = e.clientY - canvasRect.top - offset.y;
 
+      // Clamp to canvas bounds
       finalLeftPx = Math.max(0, Math.min(finalLeftPx, canvasRect.width - elementWidth));
       finalTopPx = Math.max(0, Math.min(finalTopPx, canvasRect.height - elementHeight));
 
-      const finalX = (finalLeftPx / canvasRect.width) * 100;
-      const finalY = (finalTopPx / canvasRect.height) * 100;
+      // Convert to normalized percentage (0-100)
+      const finalX = Math.max(0, Math.min(100, (finalLeftPx / canvasRect.width) * 100));
+      const finalY = Math.max(0, Math.min(100, (finalTopPx / canvasRect.height) * 100));
 
-      const snappedX = findNearest(finalX, GRID_X_POSITIONS);
+      // Snap to grid in normalized space
+      const snappedX = Math.max(0, Math.min(100, findNearest(finalX, GRID_X_POSITIONS)));
       const snappedY = findNearestYSnap(finalY);
 
+      // Update visual position immediately for smooth feedback
+      const target = document.getElementById(`table-${table.id}`);
+      if (target) {
+        target.style.left = `${snappedX}%`;
+        target.style.top = `${snappedY}%`;
+      }
+
+      // Update position in database
       onTablePositionUpdate(table.id, snappedX, snappedY);
     },
     [isDragging, offset, onTablePositionUpdate, table.id],

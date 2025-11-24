@@ -70,8 +70,8 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                   </Avatar>
                 </Badge>
               }
-              title={`${guest.firstName} ${guest.lastName} (${guest.nickname})`}
-              description={guest.relationToCouple}
+              title={`${guest.firstName} ${guest.lastName}${guest.nickname ? ` (${guest.nickname})` : ''}`}
+              description={guest.relationToCouple || 'ไม่มีข้อมูล'}
             />
           </List.Item>
         )}

@@ -237,7 +237,8 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     }
     try {
       await updateGuest(guestId, { zoneId: activeTable.zoneId, tableId: activeTable.tableId });
-      // 🔧 DevOps: ไม่ต้องเรียก setGuests เพราะ Firebase subscription จะอัปเดต state อัตโนมัติ
+      // Note: Firebase subscription will update the guests prop automatically
+      // The guestsByTable memo will recompute when guests change
       message.success('เพิ่มเข้าโต๊ะสำเร็จ');
     } catch (error) {
       console.error('Error adding guest to table:', error);
@@ -260,7 +261,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     [setTables],
   );
 
-  const handleOpenDetailModal = (table: TableData /*, seatedGuests: Guest[] */) => {
+  const handleOpenDetailModal = (table: TableData) => {
     setActiveTable(table);
     setUnassignedSearchText('');
     setIsDetailModalOpen(true);
@@ -367,21 +368,39 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
   };
 
   // --- Sub-views ---
-  const LayoutMap = () => (
-    <div
-      id="layout-canvas"
-      style={{
-        position: 'relative',
-        width: '100%',
-        height: '600px',
-        minHeight: '400px',
-        border: `2px dashed ${currentZone?.color || '#ccc'}`,
-        borderRadius: 8,
-        backgroundColor: '#fff',
-        overflow: 'hidden',
-        touchAction: 'none',
-      }}
-    >
+  const LayoutMap = () => {
+    // Maintain consistent aspect ratio (16:9) for coordinate system stability
+    const ASPECT_RATIO = 16 / 9;
+    const MIN_HEIGHT = 400; // Minimum height in pixels for smaller screens
+
+    return (
+      <div
+        style={{
+          width: '100%',
+          position: 'relative',
+          paddingBottom: `${(1 / ASPECT_RATIO) * 100}%`, // Maintain aspect ratio
+          minHeight: MIN_HEIGHT,
+          backgroundColor: '#f5f5f5',
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          id="layout-canvas"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            minHeight: MIN_HEIGHT,
+            border: `2px dashed ${currentZone?.color || '#ccc'}`,
+            borderRadius: 8,
+            backgroundColor: '#fff',
+            overflow: 'hidden',
+            touchAction: 'none',
+          }}
+        >
       {tablesInCurrentZone.length === 0 ? (
         <Empty
           description={`โซน ${currentZone?.zoneName || 'นี้'} ยังไม่มีโต๊ะ`}
@@ -409,27 +428,29 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
         })
       )}
 
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: '200px',
-          height: '50px',
-          backgroundColor: '#333',
-          color: '#fff',
-          borderRadius: '0 0 8px 8px',
-          textAlign: 'center',
-          padding: 8,
-          fontSize: 12,
-          boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
-        }}
-      >
-        เวที (Stage)
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '200px',
+              height: '50px',
+              backgroundColor: '#333',
+              color: '#fff',
+              borderRadius: '0 0 8px 8px',
+              textAlign: 'center',
+              padding: 8,
+              fontSize: 12,
+              boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
+            }}
+          >
+            เวที (Stage)
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const ManagementList = () => {
     const tableColumns: TableProps<TableData>['columns'] = [
@@ -641,30 +662,35 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
         onCancel={() => setIsDetailModalOpen(false)}
         footer={null}
         width={800}
+        key={activeTable?.id} // Force re-render when table changes
       >
-        {activeTable && (
-          <Row gutter={[24, 24]}>
-            {/* Left: current guests */}
-            <Col xs={24} md={12} style={{ borderRight: '1px solid #f0f0f0' }}>
-              <Divider orientation="left" style={{ margin: '0 0 16px 0' }}>
-                <Text type="success">นั่งอยู่ที่นี่</Text>
-              </Divider>
-              <List
-                itemLayout="horizontal"
-                dataSource={guestsByTable.get(activeTable.tableId) || []}
-                locale={{ emptyText: 'ยังไม่มีใครนั่งโต๊ะนี้' }}
-                renderItem={(guest) => (
-                  <List.Item key={guest.id} actions={[<Button key="delete" type="text" danger icon={<DeleteOutlined />} onClick={() => handleUnassignGuest(guest.id)} />]}>
-                    <List.Item.Meta
-                      avatar={<Avatar style={{ backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96' }}>{guest.nickname ? guest.nickname[0] : guest.firstName[0]}</Avatar>}
-                      title={`${guest.firstName} ${guest.lastName}${guest.nickname ? ` (${guest.nickname})` : ''}`}
-                      description={guest.relationToCouple}
-                    />
-                  </List.Item>
-                )}
-                style={{ maxHeight: 400, overflowY: 'auto' }}
-              />
-            </Col>
+        {activeTable && (() => {
+          // Get current guests for this table - ensure we use the latest data
+          const currentTableGuests = guests.filter((g) => g.tableId === activeTable.tableId);
+          
+          return (
+            <Row gutter={[24, 24]}>
+              {/* Left: current guests */}
+              <Col xs={24} md={12} style={{ borderRight: '1px solid #f0f0f0' }}>
+                <Divider orientation="left" style={{ margin: '0 0 16px 0' }}>
+                  <Text type="success">นั่งอยู่ที่นี่</Text>
+                </Divider>
+                <List
+                  itemLayout="horizontal"
+                  dataSource={currentTableGuests}
+                  locale={{ emptyText: 'ยังไม่มีใครนั่งโต๊ะนี้' }}
+                  renderItem={(guest) => (
+                    <List.Item key={guest.id} actions={[<Button key="delete" type="text" danger icon={<DeleteOutlined />} onClick={() => handleUnassignGuest(guest.id)} />]}>
+                      <List.Item.Meta
+                        avatar={<Avatar style={{ backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96' }}>{guest.nickname ? guest.nickname[0] : guest.firstName[0]}</Avatar>}
+                        title={`${guest.firstName} ${guest.lastName}${guest.nickname ? ` (${guest.nickname})` : ''}`}
+                        description={guest.relationToCouple}
+                      />
+                    </List.Item>
+                  )}
+                  style={{ maxHeight: 400, overflowY: 'auto' }}
+                />
+              </Col>
 
             {/* Right: available guests */}
             <Col xs={24} md={12}>
@@ -678,7 +704,8 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
                 locale={{ emptyText: 'ไม่พบ RSVP ที่ยังว่าง' }}
                 renderItem={(item) => {
                   const { guest, rsvp, groupName, isMainGuest, accompanyingIndex, accompanyingName } = item;
-                  const currentTableCount = (guestsByTable.get(activeTable.tableId) || []).length;
+                  // Use current guests count directly from filtered list for accurate count
+                  const currentTableCount = guests.filter((g) => g.tableId === activeTable.tableId).length;
                   const canAdd = currentTableCount < activeTable.capacity;
                   
                   // กำหนด title ตามประเภท
@@ -768,7 +795,8 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
               />
             </Col>
           </Row>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Zone modal */}

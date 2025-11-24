@@ -9,6 +9,7 @@ export const GRID_Y_START = 1;
 
 // Find nearest value in array (for X-axis snapping)
 export const findNearest = (value: number, array: number[]): number => {
+  if (array.length === 0) return value;
   return array.reduce((prev, curr) => 
     (Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev)
   );
@@ -16,8 +17,12 @@ export const findNearest = (value: number, array: number[]): number => {
 
 // Find nearest Y position with step snapping
 export const findNearestYSnap = (y: number): number => {
-  if (y < GRID_Y_START) return GRID_Y_START;
-  const relativeY = y - GRID_Y_START;
+  // Clamp to valid range (0-100)
+  const clampedY = Math.max(0, Math.min(100, y));
+  if (clampedY < GRID_Y_START) return GRID_Y_START;
+  const relativeY = clampedY - GRID_Y_START;
   const closestMultiple = Math.round(relativeY / GRID_Y_STEP) * GRID_Y_STEP;
-  return GRID_Y_START + closestMultiple;
+  const snapped = GRID_Y_START + closestMultiple;
+  // Ensure snapped value is within bounds
+  return Math.max(GRID_Y_START, Math.min(100, snapped));
 };
