@@ -337,9 +337,9 @@ export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'upda
     
     // Remove undefined fields ก่อนบันทึก (Firebase ไม่ยอมรับ undefined)
     Object.keys(rsvpData).forEach(key => {
-      const value = (rsvpData as Record<string, unknown>)[key];
+      const value = (rsvpData as unknown as Record<string, unknown>)[key];
       if (value === undefined) {
-        delete (rsvpData as Record<string, unknown>)[key];
+        delete (rsvpData as unknown as Record<string, unknown>)[key];
       }
     });
     
@@ -1040,172 +1040,8 @@ export const adminSessionIsOnlineRef = (uid: string) => ref(database, `adminSess
 export const adminSessionStartedAtRef = (uid: string) => ref(database, `adminSessions/${uid}/startedAt`);
 export const adminSessionIdRef = (uid: string) => ref(database, `adminSessions/${uid}/sessionId`);
 
-/**
- * 🔧 DevOps: Memory storage สำหรับ session ID (fallback เมื่อ storage ไม่ได้)
- */
-let memorySessionId: string | null = null;
-let firebaseSessionIdCache: { [uid: string]: string } = {};
-
-/**
- * 🔧 DevOps: ดึง Session ID จาก Firebase (ไม่พึ่งพา browser storage)
- * วิธีนี้จะไม่ถูกล้างโดย browser และทำงานได้ในทุก environment
- * 🔒 Security: ใช้ path ตาม role (userSessions สำหรับ guest, adminSessions สำหรับ admin)
- */
-const getSessionIdFromFirebase = async (uid: string, isAdmin: boolean = false): Promise<string | null> => {
-  try {
-    // ตรวจสอบ cache ก่อน
-    if (firebaseSessionIdCache[uid]) {
-      return firebaseSessionIdCache[uid];
-    }
-    
-    // 🔒 Security: ใช้ path ตาม role
-    const sessionIdRef = isAdmin ? adminSessionIdRef(uid) : userSessionIdRef(uid);
-    
-    // ดึงจาก Firebase
-    const snapshot = await get(sessionIdRef);
-    if (snapshot.exists()) {
-      const sessionId = snapshot.val();
-      // เก็บใน cache
-      firebaseSessionIdCache[uid] = sessionId;
-      return sessionId;
-    }
-    return null;
-  } catch (error) {
-    console.warn('⚠️ [Session ID] ไม่สามารถดึงจาก Firebase ได้:', error);
-    return null;
-  }
-};
-
-/**
- * 🔧 DevOps: บันทึก Session ID ลง Firebase (ไม่พึ่งพา browser storage)
- * 🔒 Security: ใช้ path ตาม role (userSessions สำหรับ guest, adminSessions สำหรับ admin)
- */
-const saveSessionIdToFirebase = async (uid: string, sessionId: string, isAdmin: boolean = false): Promise<void> => {
-  try {
-    // 🔒 Security: ใช้ path ตาม role
-    const sessionIdRef = isAdmin ? adminSessionIdRef(uid) : userSessionIdRef(uid);
-    await set(sessionIdRef, sessionId);
-    // เก็บใน cache
-    firebaseSessionIdCache[uid] = sessionId;
-  } catch (error) {
-    console.warn('⚠️ [Session ID] ไม่สามารถบันทึกลง Firebase ได้:', error);
-  }
-};
-
-/**
- * 🔧 DevOps: สร้าง Session ID ที่ unique สำหรับแต่ละ tab/window
- * ใช้ Firebase Realtime Database เป็นหลัก (ไม่พึ่งพา browser storage)
- * Priority:
- * 1. Firebase Realtime Database (หลัก) - ไม่ถูกล้างโดย browser
- * 2. Browser storage (cache) - เพิ่มความเร็ว
- * 3. Memory storage (fallback) - สำหรับกรณีที่ยังไม่ login
- * 🔒 Security: ใช้ path ตาม role (userSessions สำหรับ guest, adminSessions สำหรับ admin)
- */
-const getOrCreateSessionId = async (uid?: string, isAdmin: boolean = false): Promise<string> => {
-  const STORAGE_KEY = '__wedding_session_id__';
-  
-  // 🔧 DevOps Fix: ถ้ามี user login → ใช้ Firebase เป็นหลัก
-  if (uid) {
-    try {
-      // 1. ลองดึงจาก Firebase ก่อน (ไม่พึ่งพา browser storage)
-      const firebaseSessionId = await getSessionIdFromFirebase(uid, isAdmin);
-      if (firebaseSessionId) {
-        // เก็บใน browser storage เป็น cache (ถ้าใช้ได้)
-        try {
-          if (isSessionStorageAvailable()) {
-            sessionStorage.setItem(STORAGE_KEY, firebaseSessionId);
-          } else if (isLocalStorageAvailable()) {
-            localStorage.setItem(STORAGE_KEY, firebaseSessionId);
-          }
-        } catch (e) {
-          // ไม่เป็นไร ถ้า storage ไม่ได้
-        }
-        memorySessionId = firebaseSessionId;
-        return firebaseSessionId;
-      }
-      
-      // 2. ถ้าไม่มีใน Firebase → สร้างใหม่และบันทึกลง Firebase
-      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await saveSessionIdToFirebase(uid, newSessionId, isAdmin);
-      
-      // เก็บใน browser storage เป็น cache (ถ้าใช้ได้)
-      try {
-        if (isSessionStorageAvailable()) {
-          sessionStorage.setItem(STORAGE_KEY, newSessionId);
-        } else if (isLocalStorageAvailable()) {
-          localStorage.setItem(STORAGE_KEY, newSessionId);
-        }
-      } catch (e) {
-        // ไม่เป็นไร ถ้า storage ไม่ได้
-      }
-      memorySessionId = newSessionId;
-      return newSessionId;
-    } catch (error) {
-      console.warn('⚠️ [Session ID] Firebase error, ใช้ fallback:', error);
-      // Fallback ไปใช้ browser storage
-    }
-  }
-  
-  // 🔧 Fallback: ใช้ browser storage (สำหรับกรณีที่ยังไม่ login)
-  // 1. ลองดึงจาก sessionStorage ก่อน
-  try {
-    const existingId = sessionStorage.getItem(STORAGE_KEY);
-    if (existingId) {
-      memorySessionId = existingId;
-      return existingId;
-    }
-  } catch (e) {
-    // sessionStorage ไม่ได้ → ข้ามไป
-  }
-  
-  // 2. ลองดึงจาก localStorage
-  try {
-    if (isLocalStorageAvailable()) {
-      const existingId = localStorage.getItem(STORAGE_KEY);
-      if (existingId) {
-        memorySessionId = existingId;
-        return existingId;
-      }
-    }
-  } catch (e) {
-    // localStorage ไม่ได้ → ข้ามไป
-  }
-  
-  // 3. ลองดึงจาก memory
-  if (memorySessionId) {
-    return memorySessionId;
-  }
-  
-  // 4. สร้าง session ID ใหม่
-  const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  memorySessionId = newSessionId;
-  
-  // 🔧 DevOps Fix: ถ้ามี uid (Firebase failed แต่มี user) → พยายาม sync กลับไป Firebase
-  // เพื่อป้องกัน mismatch ระหว่าง browser storage กับ Firebase
-  if (uid) {
-    try {
-      await saveSessionIdToFirebase(uid, newSessionId, isAdmin);
-      console.log('✅ [Session ID] Synced fallback session ID to Firebase');
-    } catch (error) {
-      // Firebase ยังไม่พร้อม → ไม่เป็นไร, เก็บใน browser storage ไว้ก่อน
-      // registerSession จะ sync ให้ทีหลังเมื่อ Firebase พร้อม
-      console.warn('⚠️ [Session ID] Could not sync fallback session ID to Firebase (will retry later):', error);
-    }
-  }
-  
-  // พยายามเก็บใน storage (ถ้าใช้ได้)
-  try {
-    if (isSessionStorageAvailable()) {
-      sessionStorage.setItem(STORAGE_KEY, newSessionId);
-    } else if (isLocalStorageAvailable()) {
-      localStorage.setItem(STORAGE_KEY, newSessionId);
-    }
-  } catch (e) {
-    // ไม่เป็นไร ถ้า storage ไม่ได้
-  }
-  
-  return newSessionId;
-};
+// Session ID helper functions removed - not used in the codebase
+// (memorySessionId, firebaseSessionIdCache, getSessionIdFromFirebase, saveSessionIdToFirebase)
 
 /**
  * สร้าง session ใหม่หลังจาก login สำเร็จ

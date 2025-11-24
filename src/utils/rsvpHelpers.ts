@@ -150,7 +150,6 @@ export const groupRSVPsWithGuests = (
     // กรองตาม search (ถ้ามี filter) - รองรับภาษาไทย
     if (filter?.search && filter.search.trim()) {
       const searchTerm = filter.search.trim();
-      const lower = searchTerm.toLowerCase();
       // สร้าง search pattern ที่รองรับทั้งตัวพิมพ์เล็ก-ใหญ่และภาษาไทย
       const normalizeText = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       const normalizedSearch = normalizeText(searchTerm);

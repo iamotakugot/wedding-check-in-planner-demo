@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   getUserAppState, 
   updateUserAppState, 
@@ -31,7 +31,7 @@ interface MusicPlayerProps {
   children: (controls: MusicPlayerControls) => React.ReactNode;
 }
 
-export const MusicPlayer: React.FC<MusicPlayerProps> = ({ showIntro, onStart, children }) => {
+export const MusicPlayer: React.FC<MusicPlayerProps> = ({ showIntro, onStart: _onStart, children }) => {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
@@ -142,19 +142,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ showIntro, onStart, ch
     return () => clearTimeout(timeoutId);
   }, [currentTrackIndex]);
 
-  const handleStart = () => {
-    isManualControlRef.current = true;
-    setMusicPlaying(true);
-    lastMusicStateRef.current = true;
-    autoPlayAttemptedRef.current = false;
-    setTimeout(() => {
-      sendCommand('playVideo', [], false);
-      setTimeout(() => {
-        isManualControlRef.current = false;
-      }, 500);
-    }, 100);
-    onStart();
-  };
+  // handleStart function removed - not used in the component
 
   const onToggleMusic = () => {
     isManualControlRef.current = true;

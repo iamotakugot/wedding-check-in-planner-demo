@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { message } from 'antd';
 import { RSVPData, Guest } from '@/types';
 import {
   subscribeRSVPs,
