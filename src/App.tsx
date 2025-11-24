@@ -8,7 +8,7 @@ import GuestListPage from '@/pages/GuestListPage';
 import SeatingManagementPage from '@/pages/SeatingManagementPage';
 import GuestRSVPApp from '@/components/RSVP/GuestRSVPApp';
 import CheckInPage from '@/pages/CheckInPage';
-import LinkManagementPage from '@/pages/LinkManagementPage';
+import CardManagementPage from '@/pages/CardManagementPage';
 import RSVPListPage from '@/pages/RSVPListPage';
 import {
   subscribeGuests,
@@ -25,6 +25,7 @@ import {
   updateAdminAppState,
   subscribeAdminAppState,
   getCurrentUser,
+  getGuestByRsvpUid,
 } from '@/services/firebaseService';
 
 const App: React.FC = () => {
@@ -44,6 +45,9 @@ const App: React.FC = () => {
   
   // Track ว่า initial state โหลดเสร็จแล้วหรือยัง (ป้องกัน race condition ระหว่าง load และ save)
   const isInitialStateLoadedRef = useRef(false);
+  
+  // 🔧 DevOps Fix: Track ว่า user เปลี่ยนหน้าเองหรือไม่ (ป้องกัน navigation bounce)
+  const isManualNavigationRef = useRef(false);
 
   // Also check URL path on mount (for navigation)
   useEffect(() => {
@@ -80,8 +84,31 @@ const App: React.FC = () => {
           .then((adminStatus) => {
             setIsAuthenticated(adminStatus);
             
+            // 🔒 Security: ถ้าอยู่ในหน้า /admin แต่ไม่ใช่ admin
+            const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+            const isAdminPath = currentPathname.startsWith('/admin');
+            const isAdminLoginPage = currentPathname === '/admin' || currentPathname === '/admin/';
+            
+            // อนุญาตให้ Guest เข้าหน้า Admin Login ได้ (เพื่อ logout และ login ด้วย admin account)
+            // แต่ถ้าไม่ใช่หน้า Admin Login และไม่ใช่ admin → redirect ไปหน้า guest
+            if (isAdminPath && !adminStatus && !isAdminLoginPage) {
+              console.log('🚫 [Security] User ทั่วไปพยายามเข้า Admin Panel - redirect ไปหน้า guest');
+              message.warning('คุณไม่มีสิทธิ์เข้าถึงหน้า Admin Panel');
+              window.location.href = '/';
+              return;
+            }
+            
+            // ถ้าเป็น Guest ที่ล็อคอินแล้วและอยู่ที่หน้า Admin Login → อนุญาตให้เข้าหน้า login ได้
+            // (ไม่ต้อง redirect เพื่อให้สามารถ logout และ login ด้วย admin account ได้)
+            // Note: isAuthenticated จะเป็น false สำหรับ Guest (เพราะ adminStatus เป็น false)
+            // ดังนั้นจะแสดง AdminLoginPage เพื่อให้ logout และ login ใหม่
+            
+            // 🔧 DevOps: อนุญาตให้ Admin เข้าหน้า Guest ได้ (เพื่อดูหน้าการ์ด)
+            // ไม่ redirect admin จาก / ไป /admin (ให้ admin สามารถดูหน้าการ์ดได้)
+            
             // ถ้าเป็น admin ให้ load และ subscribe app state
             if (adminStatus) {
+              
               // Load initial state จาก Firebase
               getAdminAppState(user.uid)
                 .then((state) => {
@@ -99,7 +126,8 @@ const App: React.FC = () => {
 
               // Subscribe to state changes จาก Firebase (sync ระหว่างแท็บ/อุปกรณ์)
               unsubscribeState = subscribeAdminAppState(user.uid, (state) => {
-                if (state?.currentView) {
+                // 🔧 DevOps Fix: ไม่ load currentView ถ้า user เปลี่ยนหน้าเอง
+                if (!isManualNavigationRef.current && state?.currentView) {
                   setCurrentView(state.currentView);
                 }
               });
@@ -158,6 +186,7 @@ const App: React.FC = () => {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [tables, setTables] = useState<TableData[]>([]);
+  const [rsvps, setRsvps] = useState<RSVPData[]>([]); // 🔧 DevOps: เพิ่ม RSVP state
 
   // Initialize Firebase and load data
   useEffect(() => {
@@ -186,12 +215,19 @@ const App: React.FC = () => {
       setTables(data);
     });
 
+    // 🔧 DevOps: Subscribe to RSVPs
+    const unsubscribeRSVPs = subscribeRSVPs((data) => {
+      console.log('📊 [Dashboard] รับข้อมูล RSVP:', data.length, 'รายการ');
+      setRsvps(data);
+    });
+
     // Cleanup on unmount
     return () => {
       clearTimeout(loadingTimeout);
       unsubscribeGuests();
       unsubscribeZones();
       unsubscribeTables();
+      unsubscribeRSVPs();
     };
   }, [appMode, isAuthenticated]);
 
@@ -207,147 +243,68 @@ const App: React.FC = () => {
     );
   }, [tables]);
 
-  // Track RSVPs being processed to prevent duplicate imports
-  const processingRSVPsRef = useRef<Set<string>>(new Set());
-  // Use ref to store latest guests to avoid re-subscribing on every guests change
-  const guestsRef = useRef<Guest[]>([]);
+  // 🔧 DevOps Fix: ปิด auto-import เพราะ GuestRSVPApp สร้าง Guest เองแล้ว
+  // เพื่อป้องกัน duplicate Guest creation และ race condition
+  // GuestRSVPApp จะสร้าง Guest อัตโนมัติเมื่อ isComing === 'yes'
+  // Admin สามารถ import RSVP แบบ manual ได้ที่ RSVPListPage
 
-  // Update guestsRef whenever guests changes
-  useEffect(() => {
-    guestsRef.current = guests;
-  }, [guests]);
-
-  // Auto-import RSVP to Guest when RSVP is created/updated with isComing === 'yes'
-  useEffect(() => {
-    if (!isAuthenticated || appMode !== 'admin') return; // Only run when admin is authenticated
-
-    const unsubscribeRSVPs = subscribeRSVPs(async (rsvps: RSVPData[]) => {
-      for (const rsvp of rsvps) {
-        // Skip if already imported or not coming
-        if (rsvp.guestId || rsvp.isComing !== 'yes') {
-          processingRSVPsRef.current.delete(rsvp.id || '');
-          continue;
-        }
-
-        // Skip if already processing this RSVP
-        if (rsvp.id && processingRSVPsRef.current.has(rsvp.id)) {
-          continue;
-        }
-
-        // Mark as processing
-        if (rsvp.id) {
-          processingRSVPsRef.current.add(rsvp.id);
-        }
-
-        // Check if guest already exists (prevent duplicate) - use ref to get latest guests
-        const existingGuest = guestsRef.current.find(
-          (g) =>
-            g.firstName === rsvp.firstName &&
-            g.lastName === rsvp.lastName &&
-            g.nickname === rsvp.nickname
-        );
-
-        if (existingGuest) {
-          // Link RSVP to existing guest
-          if (rsvp.id) {
-            await updateRSVP(rsvp.id, { guestId: existingGuest.id });
-            processingRSVPsRef.current.delete(rsvp.id);
-          }
-          continue;
-        }
-
-        // Create new guest from RSVP
-        try {
-          const newGuestId = `G${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          
-          const newGuest: Guest = {
-            id: newGuestId,
-            firstName: rsvp.firstName,
-            lastName: rsvp.lastName,
-            nickname: rsvp.nickname,
-            age: null,
-            gender: 'other',
-            relationToCouple: rsvp.relation,
-            side: rsvp.side, // RSVP side is 'groom' | 'bride', which matches Guest side
-            zoneId: null,
-            tableId: null,
-            note: rsvp.note || '',
-            isComing: true,
-            accompanyingGuestsCount: rsvp.accompanyingGuestsCount || 0,
-            groupId: null,
-            groupName: null,
-            checkedInAt: null,
-            checkInMethod: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-
-          await createGuest(newGuest);
-          
-          // Link RSVP to new guest
-          if (rsvp.id) {
-            await updateRSVP(rsvp.id, { guestId: newGuestId });
-            processingRSVPsRef.current.delete(rsvp.id);
-          }
-        } catch (error) {
-          console.error('Error auto-importing RSVP:', error);
-          if (rsvp.id) {
-            processingRSVPsRef.current.delete(rsvp.id);
-          }
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeRSVPs();
-    };
-  }, [isAuthenticated, appMode]); // Removed guests from dependency array
+  // 🔧 DevOps Fix: Handler สำหรับเปลี่ยนหน้า (ป้องกัน navigation bounce)
+  const handlePageChange = (key: string) => {
+    isManualNavigationRef.current = true;
+    setCurrentView(key);
+    // Reset flag หลังจาก 1 วินาที
+    setTimeout(() => {
+      isManualNavigationRef.current = false;
+    }, 1000);
+  };
 
   const renderAdminContent = () => {
     switch (currentView) {
       case '1':
         return (
           <DashboardPage
-            onChangePage={setCurrentView}
+            onChangePage={handlePageChange}
             guests={guests}
             zones={zones}
             tables={tables}
+            rsvps={rsvps}
           />
         );
-      case '2':
-        return (
-          <GuestListPage
-            guests={guests}
-            setGuests={setGuests}
-            zones={zones}
-            tables={tables}
-          />
-        );
+          case '2':
+            return (
+              <GuestListPage
+                guests={guests}
+                zones={zones}
+                tables={tables}
+                rsvps={rsvps}
+              />
+            );
       case '3':
         return (
           <SeatingManagementPage
             guests={guests}
-            setGuests={setGuests}
             zones={zones}
             setZones={setZones}
             tables={tables}
             setTables={setTables}
+            rsvps={rsvps}
           />
         );
-      case '4':
-        return (
-          <CheckInPage
-            guests={guests}
-            setGuests={setGuests}
-            zones={zones}
-            tables={tables}
-          />
-        );
+          case '4':
+            return (
+              <CheckInPage
+                guests={guests}
+                zones={zones}
+                tables={tables}
+                rsvps={rsvps}
+              />
+            );
       case '5':
-        return <LinkManagementPage onPreview={() => setAppMode('guest')} />;
+        return <CardManagementPage onPreview={() => setAppMode('guest')} />;
       case '6':
         return (
           <RSVPListPage
+            rsvps={rsvps}
             onImportToGuests={async (rsvp) => {
               try {
                 if (rsvp.guestId) {
@@ -355,36 +312,100 @@ const App: React.FC = () => {
                   return;
                 }
 
-                const newGuestId = `G${Date.now()}`; // Simple ID generation
+                // 🔧 DevOps Fix: เช็ค idempotency ก่อนสร้าง Guest
+                const existingGuest = await getGuestByRsvpUid(rsvp.uid || '');
+                
+                if (existingGuest) {
+                  // ถ้ามี Guest อยู่แล้ว → link RSVP กับ Guest ที่มีอยู่
+                  if (rsvp.id) {
+                    await updateRSVP(rsvp.id, { guestId: existingGuest.id });
+                  }
+                  message.success('นำเข้าข้อมูลเรียบร้อย (เชื่อมโยงกับ Guest ที่มีอยู่แล้ว)');
+                  return;
+                }
 
-                const newGuest: Guest = {
-                  id: newGuestId,
+                // 🔧 DevOps: สร้างกลุ่ม (Group) จาก RSVP
+                const timestamp = Date.now();
+                const random = Math.floor(Math.random() * 1000000); // เพิ่ม random เพื่อป้องกัน ID ซ้ำ
+                const groupId = `GROUP_${timestamp}_${random}`;
+                const groupName = `${rsvp.firstName} ${rsvp.lastName}`;
+                const totalGuests = 1 + (rsvp.accompanyingGuestsCount || 0);
+                
+                // 1. สร้าง Guest หลัก (ตัวเอง)
+                const mainGuestId = `G${timestamp}_${random}`;
+                const mainGuest: Guest = {
+                  id: mainGuestId,
                   firstName: rsvp.firstName,
                   lastName: rsvp.lastName,
-                  nickname: rsvp.nickname,
+                  nickname: rsvp.nickname || '',
                   age: null,
                   gender: 'other',
-                  relationToCouple: rsvp.relation,
+                  relationToCouple: rsvp.relation || '',
                   side: rsvp.side as 'groom' | 'bride' | 'both',
                   zoneId: null,
                   tableId: null,
-                  note: rsvp.note,
+                  note: rsvp.note || '',
                   isComing: rsvp.isComing === 'yes',
-                  accompanyingGuestsCount: rsvp.accompanyingGuestsCount,
-                  groupId: null,
-                  groupName: null,
+                  accompanyingGuestsCount: rsvp.accompanyingGuestsCount || 0,
+                  groupId: groupId,
+                  groupName: groupName,
                   checkedInAt: null,
                   checkInMethod: null,
-                  rsvpUid: rsvp.uid || null, // เซ็ต rsvpUid เพื่อให้ผู้ใช้เจ้าของ RSVP สามารถแก้ไขได้
+                  rsvpUid: rsvp.uid || null,
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
 
-                await createGuest(newGuest);
-                if (rsvp.id) {
-                  await updateRSVP(rsvp.id, { guestId: newGuestId });
+                await createGuest(mainGuest);
+
+                // 2. สร้าง Guest สำหรับผู้ติดตาม (accompanyingGuests)
+                if (rsvp.accompanyingGuests && rsvp.accompanyingGuests.length > 0) {
+                  console.log(`🔄 [Import] กำลังสร้าง Guest ผู้ติดตาม ${rsvp.accompanyingGuests.length} คน...`);
+                  for (let i = 0; i < rsvp.accompanyingGuests.length; i++) {
+                    try {
+                      const accGuest = rsvp.accompanyingGuests[i];
+                      const accGuestId = `G${timestamp}_${random}_${i}`; // ใช้ timestamp และ random เดียวกัน
+                      const accGuestData: Guest = {
+                        id: accGuestId,
+                        firstName: accGuest.name || `คนที่ ${i + 1}`,
+                        lastName: '',
+                        nickname: '',
+                        age: null,
+                        gender: 'other',
+                        relationToCouple: accGuest.relationToMain || '',
+                        side: rsvp.side as 'groom' | 'bride' | 'both',
+                        zoneId: null,
+                        tableId: null,
+                        note: '',
+                        isComing: true,
+                        accompanyingGuestsCount: 0,
+                        groupId: groupId,
+                        groupName: groupName,
+                        checkedInAt: null,
+                        checkInMethod: null,
+                        rsvpUid: rsvp.uid || null,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      };
+                      await createGuest(accGuestData);
+                      console.log(`✅ [Import] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvp.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
+                    } catch (accError: unknown) {
+                      console.error(`❌ [Import] เกิดข้อผิดพลาดในการสร้าง Guest ผู้ติดตาม ${i + 1}:`, accError);
+                      // ยังคงดำเนินการต่อแม้ว่าจะเกิด error (ไม่ throw เพื่อให้สร้าง Guest คนอื่นต่อได้)
+                      if (accError && typeof accError === 'object' && 'code' in accError && accError.code === 'PERMISSION_DENIED') {
+                        console.error(`🚫 [Import] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
+                      }
+                    }
+                  }
+                  console.log(`✅ [Import] สร้าง Guest ผู้ติดตามเสร็จสิ้น (${rsvp.accompanyingGuests.length} คน)`);
                 }
-                message.success('นำเข้าข้อมูลเรียบร้อย');
+
+                // 3. Link RSVP กับ Guest หลัก
+                if (rsvp.id) {
+                  await updateRSVP(rsvp.id, { guestId: mainGuestId });
+                }
+                
+                message.success(`นำเข้าข้อมูลเรียบร้อย (${totalGuests} คน)`);
               } catch (error) {
                 console.error('Import error:', error);
                 message.error('เกิดข้อผิดพลาดในการนำเข้า');
@@ -399,6 +420,7 @@ const App: React.FC = () => {
             guests={guests}
             zones={zones}
             tables={tables}
+            rsvps={rsvps} // 🔧 DevOps: ส่ง RSVP data
           />
         );
     }
@@ -437,7 +459,7 @@ const App: React.FC = () => {
           
           <MainLayout
             currentView={currentView}
-            setCurrentView={setCurrentView}
+            setCurrentView={handlePageChange}
             onLogout={async () => {
               try {
                 await logout();

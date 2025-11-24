@@ -1,43 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Table, Typography, Tag, Button, Modal, Descriptions, message, Space, Avatar } from 'antd';
+import React, { useState } from 'react';
+import { Card, Table, Typography, Tag, Button, Modal, Descriptions, Space, Avatar } from 'antd';
 import { EyeOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons';
-import { subscribeRSVPs } from '@/services/firebaseService';
 import type { RSVPData } from '@/services/firebaseService';
 import type { TableProps } from 'antd';
 
 const { Title, Text } = Typography;
 
 interface RSVPListPageProps {
-  onImportToGuests?: (rsvp: RSVPData) => void;
+  rsvps: RSVPData[]; // ✅ รับจาก App.tsx (single source of truth)
+  onImportToGuests?: (rsvp: RSVPData) => void; // Deprecated: ไม่ใช้แล้ว, data sync อัตโนมัติ
 }
 
-const RSVPListPage: React.FC<RSVPListPageProps> = ({ onImportToGuests }) => {
-  const [rsvps, setRsvps] = useState<RSVPData[]>([]);
-  const [loading, setLoading] = useState(true);
+const RSVPListPage: React.FC<RSVPListPageProps> = ({ rsvps }) => {
+  // 🔧 DevOps: ไม่ต้องมี subscription เอง เพราะ App.tsx เป็น single source of truth
   const [selectedRSVP, setSelectedRSVP] = useState<RSVPData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = subscribeRSVPs((data) => {
-      setRsvps(data);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const handleViewDetails = (rsvp: RSVPData) => {
     setSelectedRSVP(rsvp);
     setModalVisible(true);
-  };
-
-  const handleImportToGuests = (rsvp: RSVPData) => {
-    if (onImportToGuests) {
-      onImportToGuests(rsvp);
-      message.success('นำเข้าข้อมูลไปยังรายชื่อแขกแล้ว');
-    } else {
-      message.info('ฟังก์ชันนำเข้าข้อมูลยังไม่พร้อมใช้งาน');
-    }
   };
 
   const columns: TableProps<RSVPData>['columns'] = [
@@ -131,31 +112,33 @@ const RSVPListPage: React.FC<RSVPListPageProps> = ({ onImportToGuests }) => {
       },
     },
     {
+      title: 'สถานะการนำเข้า',
+      key: 'importStatus',
+      width: 120,
+      render: (_, record) => (
+        record.isComing === 'yes' ? (
+          record.guestId ? (
+            <Tag color="success" icon={<TeamOutlined />}>นำเข้าแล้ว</Tag>
+          ) : (
+            <Tag color="default">ยังไม่นำเข้า</Tag>
+          )
+        ) : (
+          <Tag color="default">-</Tag>
+        )
+      ),
+    },
+    {
       title: 'จัดการ',
       key: 'actions',
-      width: 150,
+      width: 100,
       render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetails(record)}
-          >
-            ดูรายละเอียด
-          </Button>
-          {record.isComing === 'yes' && onImportToGuests && (
-            record.guestId ? (
-              <Tag color="success">นำเข้าแล้ว</Tag>
-            ) : (
-              <Button
-                type="link"
-                onClick={() => handleImportToGuests(record)}
-              >
-                นำเข้า
-              </Button>
-            )
-          )}
-        </Space>
+        <Button
+          type="link"
+          icon={<EyeOutlined />}
+          onClick={() => handleViewDetails(record)}
+        >
+          ดูรายละเอียด
+        </Button>
       ),
     },
   ];
@@ -173,7 +156,7 @@ const RSVPListPage: React.FC<RSVPListPageProps> = ({ onImportToGuests }) => {
         <Table
           columns={columns}
           dataSource={rsvps}
-          loading={loading}
+          loading={false}
           rowKey="id"
           pagination={{
             pageSize: 10,
@@ -191,27 +174,7 @@ const RSVPListPage: React.FC<RSVPListPageProps> = ({ onImportToGuests }) => {
           <Button key="close" onClick={() => setModalVisible(false)}>
             ปิด
           </Button>,
-          selectedRSVP?.isComing === 'yes' && onImportToGuests ? (
-            selectedRSVP.guestId ? (
-              <Button key="imported" disabled>
-                นำเข้าแล้ว
-              </Button>
-            ) : (
-              <Button
-                key="import"
-                type="primary"
-                onClick={() => {
-                  if (selectedRSVP) {
-                    handleImportToGuests(selectedRSVP);
-                    setModalVisible(false);
-                  }
-                }}
-              >
-                นำเข้าข้อมูลไปยังรายชื่อแขก
-              </Button>
-            )
-          ) : null,
-        ].filter(Boolean)}
+        ]}
         width={700}
       >
         {selectedRSVP && (

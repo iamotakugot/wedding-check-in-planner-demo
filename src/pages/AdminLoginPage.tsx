@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout, Card, Form, Input, Button, Typography, Alert, App } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { loginWithEmail, checkIsAdmin, logout } from '@/services/firebaseService';
+import { loginWithEmail, checkIsAdmin, logout, getCurrentUser } from '@/services/firebaseService';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -19,6 +19,21 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { message } = App.useApp();
+  
+  // 🔧 DevOps: ถ้ามี Guest login อยู่แล้ว → แสดงข้อความแนะนำให้ logout ก่อน
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      checkIsAdmin(currentUser.uid).then((isAdmin) => {
+        if (!isAdmin) {
+          // Guest ที่ล็อคอินแล้ว → แสดงข้อความแนะนำ
+          setErrorMsg('คุณล็อคอินด้วยบัญชี Guest อยู่ กรุณาลงชื่อออกก่อน หรือใช้บัญชี Admin ในการเข้าสู่ระบบ');
+        }
+      }).catch(() => {
+        // Ignore error
+      });
+    }
+  }, []);
 
   const onFinish = async (values: LoginFieldType) => {
     setLoading(true);
@@ -37,6 +52,17 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
         return;
       }
 
+      // 🔧 DevOps: ถ้ามี Guest login อยู่แล้ว → logout ก่อน login ด้วย admin account
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const currentIsAdmin = await checkIsAdmin(currentUser.uid);
+        if (!currentIsAdmin) {
+          // Guest ที่ล็อคอินแล้ว → logout ก่อน
+          console.log('ℹ️ [Admin Login] Logging out Guest account before admin login');
+          await logout();
+        }
+      }
+      
       // Login ด้วย Firebase
       const user = await loginWithEmail(email, password);
 

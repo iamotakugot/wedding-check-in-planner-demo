@@ -5,7 +5,6 @@ import {
   signOut, 
   onAuthStateChanged, 
   User,
-  signInWithRedirect,
   getRedirectResult,
   signInWithPopup,
   GoogleAuthProvider,
@@ -33,6 +32,38 @@ export const getGuest = async (id: string): Promise<Guest | null> => {
   return { id, ...snapshot.val() };
 };
 
+/**
+ * 🔧 DevOps: เช็คว่ามี Guest ที่มี rsvpUid นี้อยู่แล้วหรือไม่ (Idempotency Check)
+ * ใช้เพื่อป้องกัน duplicate Guest creation
+ */
+export const getGuestByRsvpUid = async (rsvpUid: string): Promise<Guest | null> => {
+  try {
+    console.log('🔍 [Idempotency Check] กำลังค้นหา Guest ที่มี rsvpUid:', rsvpUid);
+    const snapshot = await get(guestsRef());
+    if (!snapshot.exists()) {
+      console.log('✅ [Idempotency Check] ไม่พบ Guest ใดๆ ในระบบ');
+      return null;
+    }
+    
+    const data = snapshot.val();
+    const guests = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    
+    // หา Guest ที่มี rsvpUid ตรงกัน
+    const existingGuest = guests.find((g: Guest) => g.rsvpUid === rsvpUid);
+    
+    if (existingGuest) {
+      console.log('✅ [Idempotency Check] พบ Guest ที่มีอยู่แล้ว:', existingGuest.id);
+      return existingGuest;
+    }
+    
+    console.log('✅ [Idempotency Check] ไม่พบ Guest ที่มี rsvpUid นี้ สามารถสร้างใหม่ได้');
+    return null;
+  } catch (error) {
+    console.error('❌ [Idempotency Check] เกิดข้อผิดพลาดในการค้นหา Guest:', error);
+    throw error;
+  }
+};
+
 export const createGuest = async (guest: Guest): Promise<void> => {
   await requireAdmin();
   await set(ref(database, `guests/${guest.id}`), guest);
@@ -56,17 +87,37 @@ export const deleteGuest = async (id: string): Promise<void> => {
  * สร้าง Guest จาก RSVP flow (แขกทั่วไปสามารถใช้ได้)
  * จะเพิ่ม rsvpUid เพื่อติดตามว่าใครสร้าง
  */
+/**
+ * 🔧 DevOps: สร้าง Guest จาก RSVP พร้อม Idempotency Check
+ * ป้องกัน duplicate Guest creation
+ */
 export const createGuestFromRSVP = async (guest: Guest, rsvpUid: string): Promise<void> => {
   const user = getCurrentUser();
   if (!user) {
+    console.error('❌ [Guest Creation] ไม่พบผู้ใช้ที่เข้าสู่ระบบ');
     throw new Error('ต้องเข้าสู่ระบบก่อน');
   }
   if (user.uid !== rsvpUid) {
+    console.error('❌ [Guest Creation] UID ไม่ตรงกัน:', { userUid: user.uid, rsvpUid });
     throw new Error('ไม่สามารถสร้าง Guest สำหรับ RSVP ของผู้อื่นได้');
   }
+  
+  // 🔧 Idempotency Check: เช็คว่ามี Guest ที่มี rsvpUid นี้อยู่แล้วหรือไม่
+  console.log('🔍 [Guest Creation] กำลังตรวจสอบ Guest ที่มีอยู่แล้ว...');
+  const existingGuest = await getGuestByRsvpUid(rsvpUid);
+  
+  if (existingGuest) {
+    console.log('⚠️ [Guest Creation] พบ Guest ที่มีอยู่แล้ว ไม่ต้องสร้างซ้ำ:', existingGuest.id);
+    // ไม่ต้อง throw error - แค่ log และ return
+    // ให้ caller จัดการต่อ (อาจจะต้อง link RSVP กับ Guest ที่มีอยู่)
+    return;
+  }
+  
   // เพิ่ม rsvpUid เพื่อติดตาม
   const guestWithRsvpUid = { ...guest, rsvpUid };
+  console.log('✅ [Guest Creation] กำลังสร้าง Guest ใหม่:', guest.id);
   await set(ref(database, `guests/${guest.id}`), guestWithRsvpUid);
+  console.log('✅ [Guest Creation] สร้าง Guest สำเร็จ:', guest.id);
 };
 
 /**
@@ -223,18 +274,36 @@ export const rsvpsRef = () => ref(database, 'rsvps');
 
 export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   try {
-    // ตรวจสอบว่า user login แล้วหรือไม่
+    // 🔧 DevOps: Validation - ตรวจสอบว่า user login แล้วหรือไม่
     const user = getCurrentUser();
     if (!user) {
-      console.error('No user logged in when creating RSVP');
+      console.error('❌ [RSVP Validation] ไม่พบผู้ใช้ที่เข้าสู่ระบบ');
       throw new Error('ต้องเข้าสู่ระบบก่อนบันทึกข้อมูล RSVP');
     }
 
-    console.log('Current user:', { uid: user.uid, email: user.email, providerId: user.providerData?.[0]?.providerId });
+    console.log('👤 [RSVP] ผู้ใช้ปัจจุบัน:', { uid: user.uid, email: user.email, providerId: user.providerData?.[0]?.providerId });
+
+    // 🔧 DevOps: Validation - ตรวจสอบข้อมูลที่จำเป็น
+    if (!rsvp.firstName || !rsvp.firstName.trim()) {
+      console.error('❌ [RSVP Validation] ไม่พบชื่อ (firstName)');
+      throw new Error('กรุณากรอกชื่อ');
+    }
+    if (!rsvp.lastName || !rsvp.lastName.trim()) {
+      console.error('❌ [RSVP Validation] ไม่พบนามสกุล (lastName)');
+      throw new Error('กรุณากรอกนามสกุล');
+    }
+    if (!rsvp.isComing || (rsvp.isComing !== 'yes' && rsvp.isComing !== 'no')) {
+      console.error('❌ [RSVP Validation] สถานะการร่วมงานไม่ถูกต้อง:', rsvp.isComing);
+      throw new Error('กรุณาเลือกสถานะการร่วมงาน');
+    }
+    if (rsvp.isComing === 'yes' && !rsvp.side) {
+      console.error('❌ [RSVP Validation] ไม่พบฝ่าย (side) เมื่อ isComing === yes');
+      throw new Error('กรุณาเลือกฝ่าย (เจ้าบ่าว/เจ้าสาว)');
+    }
 
     // ตรวจสอบว่า rsvp.uid ตรงกับ user.uid หรือไม่
     if (rsvp.uid && rsvp.uid !== user.uid) {
-      console.warn('RSVP UID does not match current user UID. Using current user UID.');
+      console.warn('⚠️ [RSVP] RSVP UID ไม่ตรงกับผู้ใช้ปัจจุบัน ใช้ UID จากผู้ใช้ปัจจุบันแทน');
     }
 
     // ใช้ currentUser.uid แทน rsvp.uid เพื่อความปลอดภัย
@@ -243,10 +312,14 @@ export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'upda
       uid: user.uid, // ใช้ uid จาก currentUser เสมอ
     };
 
+    // 🔧 NoSQL Data Modeling: Denormalize fullName เพื่อ query เร็ว
+    const fullName = `${rsvpWithUid.firstName.trim()} ${rsvpWithUid.lastName.trim()}`.trim();
+
     const newRef = push(rsvpsRef());
     const now = new Date().toISOString();
     const rsvpData: RSVPData = {
       ...rsvpWithUid,
+      fullName: fullName, // 🔧 Denormalize: เก็บ fullName เพื่อ query เร็ว
       id: newRef.key!,
       createdAt: now,
       updatedAt: now,
@@ -259,34 +332,38 @@ export const createRSVP = async (rsvp: Omit<RSVPData, 'id' | 'createdAt' | 'upda
       }
     });
     
-    console.log('Creating RSVP with data:', JSON.stringify(rsvpData, null, 2));
-    console.log('RSVP path:', `rsvps/${newRef.key}`);
-    console.log('User UID:', user.uid);
-    console.log('Auth state check: auth != null should be true');
+    console.log('📝 [RSVP] ข้อมูล RSVP ที่จะบันทึก:', JSON.stringify(rsvpData, null, 2));
+    console.log('📂 [RSVP] Path:', `rsvps/${newRef.key}`);
+    console.log('👤 [RSVP] User UID:', user.uid);
+    console.log('🔐 [RSVP] Auth state: auth != null (ควรเป็น true)');
     
     try {
       await set(newRef, rsvpData);
-      console.log('✅ RSVP created successfully with ID:', newRef.key);
+      console.log('✅ [RSVP] สร้าง RSVP สำเร็จ ID:', newRef.key);
       return newRef.key!;
     } catch (firebaseError: any) {
-      console.error('❌ Firebase error when creating RSVP:', firebaseError);
-      console.error('Error code:', firebaseError.code);
-      console.error('Error message:', firebaseError.message);
+      console.error('❌ [RSVP] เกิดข้อผิดพลาดจาก Firebase:', firebaseError);
+      console.error('📋 [RSVP] Error code:', firebaseError.code);
+      console.error('📋 [RSVP] Error message:', firebaseError.message);
       
       if (firebaseError.code === 'PERMISSION_DENIED' || firebaseError.code === 'PERMISSION_DENIED') {
-        console.error('PERMISSION_DENIED - Rules may be blocking write access');
-        console.error('Current user UID:', user.uid);
-        console.error('Rules should allow: auth != null && user is logged in');
+        console.error('🚫 [RSVP] PERMISSION_DENIED - Firebase Rules อาจบล็อกการเขียน');
+        console.error('👤 [RSVP] Current user UID:', user.uid);
+        console.error('📋 [RSVP] Rules ควรอนุญาต: auth != null && user is logged in');
         throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
       }
       throw firebaseError;
     }
   } catch (error: any) {
-    console.error('Error creating RSVP:', error);
+    console.error('❌ [RSVP] เกิดข้อผิดพลาดในการสร้าง RSVP:', error);
     if (error.code === 'PERMISSION_DENIED' || error.code === 'PERMISSION_DENIED') {
       throw new Error('ไม่มีสิทธิ์ในการบันทึกข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules');
     }
-    throw error;
+    // Re-throw error ที่มี message แล้ว
+    if (error.message) {
+      throw error;
+    }
+    throw new Error('เกิดข้อผิดพลาดในการบันทึกข้อมูล RSVP');
   }
 };
 
@@ -402,30 +479,43 @@ export const updateRSVP = async (id: string, updates: Partial<RSVPData>): Promis
       }
     });
 
-    const updateData = { 
+    // 🔧 NoSQL Data Modeling: Denormalize fullName ถ้ามี firstName หรือ lastName เปลี่ยน
+    let updateData: Partial<RSVPData> = { 
       ...updates, 
       uid: user.uid, // ใช้ uid จาก currentUser เสมอ
       updatedAt: new Date().toISOString() 
     };
 
-    console.log('Updating RSVP with ID:', id);
-    console.log('Update data:', JSON.stringify(updateData, null, 2));
-    console.log('RSVP path:', `rsvps/${id}`);
-    console.log('User UID:', user.uid);
-    console.log('Auth state check: auth != null should be true');
+    // ถ้ามี firstName หรือ lastName เปลี่ยน → อัพเดท fullName
+    if (updates.firstName || updates.lastName) {
+      // ต้องดึงข้อมูลเดิมก่อนเพื่อสร้าง fullName
+      const currentSnapshot = await get(ref(database, `rsvps/${id}`));
+      if (currentSnapshot.exists()) {
+        const currentData = currentSnapshot.val();
+        const firstName = updates.firstName || currentData.firstName || '';
+        const lastName = updates.lastName || currentData.lastName || '';
+        updateData.fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      }
+    }
+
+    console.log('🔄 [RSVP] กำลังอัปเดต RSVP ID:', id);
+    console.log('📝 [RSVP] ข้อมูลที่อัปเดต:', JSON.stringify(updateData, null, 2));
+    console.log('📂 [RSVP] Path:', `rsvps/${id}`);
+    console.log('👤 [RSVP] User UID:', user.uid);
+    console.log('🔐 [RSVP] Auth state: auth != null (ควรเป็น true)');
     
     try {
       await update(ref(database, `rsvps/${id}`), updateData);
-      console.log('✅ RSVP updated successfully');
+      console.log('✅ [RSVP] อัปเดต RSVP สำเร็จ');
     } catch (firebaseError: any) {
-      console.error('❌ Firebase error when updating RSVP:', firebaseError);
-      console.error('Error code:', firebaseError.code);
-      console.error('Error message:', firebaseError.message);
+      console.error('❌ [RSVP] เกิดข้อผิดพลาดจาก Firebase:', firebaseError);
+      console.error('📋 [RSVP] Error code:', firebaseError.code);
+      console.error('📋 [RSVP] Error message:', firebaseError.message);
       
       if (firebaseError.code === 'PERMISSION_DENIED' || firebaseError.code === 'PERMISSION_DENIED') {
-        console.error('PERMISSION_DENIED - Rules may be blocking write access');
-        console.error('Current user UID:', user.uid);
-        console.error('Rules should allow: auth != null && user is logged in');
+        console.error('🚫 [RSVP] PERMISSION_DENIED - Firebase Rules อาจบล็อกการเขียน');
+        console.error('👤 [RSVP] Current user UID:', user.uid);
+        console.error('📋 [RSVP] Rules ควรอนุญาต: auth != null && user is logged in');
         throw new Error('ไม่มีสิทธิ์ในการแก้ไขข้อมูล RSVP กรุณาตรวจสอบ Firebase Rules และ Authentication state');
       }
       throw firebaseError;
@@ -463,6 +553,54 @@ export const getConfig = async (): Promise<WeddingConfig | null> => {
 export const updateConfig = async (config: Partial<WeddingConfig>): Promise<void> => {
   await requireAdmin();
   await update(configRef(), config);
+};
+
+// ============================================================================
+// WEDDING CARD CONFIGURATION
+// ============================================================================
+
+export interface WeddingCardConfigFirebase {
+  groom: {
+    firstName: string;
+    lastName: string;
+    nickname: string;
+    fullNameThai: string;
+  };
+  bride: {
+    firstName: string;
+    lastName: string;
+    nickname: string;
+    fullNameThai: string;
+  };
+  parents: {
+    groom: {
+      father: string;
+      mother: string;
+    };
+    bride: {
+      father: string;
+      mother: string;
+    };
+  };
+  nameOrder: 'bride-first' | 'groom-first';
+  showParentsAtTop: boolean;
+  dressCode?: {
+    colors: string[];
+    label?: string;
+  };
+}
+
+export const weddingCardConfigRef = () => ref(database, 'config/weddingCard');
+
+export const getWeddingCardConfig = async (): Promise<WeddingCardConfigFirebase | null> => {
+  const snapshot = await get(weddingCardConfigRef());
+  if (!snapshot.exists()) return null;
+  return snapshot.val();
+};
+
+export const updateWeddingCardConfig = async (config: Partial<WeddingCardConfigFirebase>): Promise<void> => {
+  await requireAdmin();
+  await update(weddingCardConfigRef(), config);
 };
 
 // ============================================================================
@@ -565,6 +703,53 @@ export const onAuthStateChange = (callback: (user: User | null) => void): (() =>
 // ============================================================================
 
 /**
+ * ตรวจสอบว่าอยู่ใน Facebook WebView หรือไม่
+ */
+const isFacebookWebView = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  
+  const userAgent = window.navigator.userAgent || '';
+  
+  // ตรวจสอบ Facebook Messenger WebView (ครอบคลุมทุกกรณี)
+  const facebookWebViewPatterns = [
+    /FBAN/i,                // Facebook App (Android)
+    /FBAV/i,                // Facebook App (iOS)
+    /FB_IAB/i,              // Facebook In-App Browser
+    /FB4A/i,                 // Facebook for Android
+    /Messenger/i,            // Facebook Messenger
+    /FBMD/i,                 // Facebook Mobile
+    /FBSV/i,                 // Facebook Service
+  ];
+  
+  return facebookWebViewPatterns.some(pattern => pattern.test(userAgent));
+};
+
+/**
+ * ตรวจสอบว่าเป็น Android หรือไม่
+ */
+const isAndroid = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  return /Android/i.test(userAgent);
+};
+
+/**
+ * ตรวจสอบว่าเป็น iOS หรือไม่
+ */
+const isIOS = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  return /iPhone|iPad|iPod/i.test(userAgent);
+};
+
+/**
+ * ตรวจสอบว่าเป็น Mobile Device หรือไม่ (Android หรือ iOS)
+ */
+const isMobileDevice = (): boolean => {
+  return isAndroid() || isIOS();
+};
+
+/**
  * ตรวจสอบว่าอยู่ใน webview environment หรือไม่
  * เช่น LINE, Facebook Messenger, Instagram, Twitter ฯลฯ
  */
@@ -572,17 +757,43 @@ const isInWebView = (): boolean => {
   if (typeof window === 'undefined') return false;
   
   const userAgent = window.navigator.userAgent || '';
-  const webViewPatterns = [
-    /FBAN|FBAV/i,           // Facebook
+  
+  // ตรวจสอบ WebView อื่นๆ
+  const otherWebViewPatterns = [
     /Line/i,                // LINE
     /Instagram/i,           // Instagram
     /Twitter/i,             // Twitter/X
     /LinkedInApp/i,         // LinkedIn
     /wv/i,                  // Android WebView
-    /Mobile.*Safari/i       // iOS WebView (บางกรณี)
+    /Mobile.*Safari/i,      // iOS WebView (บางกรณี)
+    /WebView/i,             // Generic WebView
   ];
   
-  return webViewPatterns.some(pattern => pattern.test(userAgent));
+  // เช็ค Facebook WebView ก่อน (สำคัญมาก)
+  const isFBWebView = isFacebookWebView();
+  
+  // เช็ค WebView อื่นๆ
+  const isOtherWebView = otherWebViewPatterns.some(pattern => pattern.test(userAgent));
+  
+  // เช็ค window.navigator.standalone (iOS)
+  const isIOSStandalone = (window.navigator as any).standalone === true;
+  
+  // เช็คว่ามี window.ReactNativeWebView (React Native WebView)
+  const isReactNativeWebView = typeof (window as any).ReactNativeWebView !== 'undefined';
+  
+  // 🔧 DevOps: เช็ค Android WebView โดยดูจาก userAgent
+  // Android WebView มักจะมี "wv" ใน userAgent และไม่มี "Chrome" หรือ "Version"
+  const isAndroidWebView = /Android/i.test(userAgent) && 
+                           /wv/i.test(userAgent) && 
+                           !/Chrome/i.test(userAgent);
+  
+  // 🔧 DevOps: เช็ค iOS WebView โดยดูจาก userAgent
+  // iOS WebView มักจะมี "Mobile Safari" แต่ไม่มี "Safari" หรือ "Version" แบบปกติ
+  const isIOSWebView = /iPhone|iPad|iPod/i.test(userAgent) && 
+                       /Mobile/i.test(userAgent) && 
+                       !/Safari/i.test(userAgent);
+  
+  return isFBWebView || isOtherWebView || isIOSStandalone || isReactNativeWebView || isAndroidWebView || isIOSWebView;
 };
 
 /**
@@ -599,6 +810,52 @@ const isSessionStorageAvailable = (): boolean => {
   }
 };
 
+/**
+ * ตรวจสอบว่า localStorage สามารถใช้งานได้หรือไม่
+ */
+const isLocalStorageAvailable = (): boolean => {
+  try {
+    const testKey = '__localStorage_test__';
+    localStorage.setItem(testKey, 'test');
+    localStorage.removeItem(testKey);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
+ * Export helper functions สำหรับใช้ใน components
+ */
+export const getWebViewInfo = () => {
+  const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : '';
+  const isAndroidDevice = isAndroid();
+  const isIOSDevice = isIOS();
+  const isMobile = isMobileDevice();
+  const inWebView = isInWebView();
+  const isFBWebView = isFacebookWebView();
+  const sessionStorageAvailable = isSessionStorageAvailable();
+  const localStorageAvailable = isLocalStorageAvailable();
+  
+  // 🔧 DevOps: ตรวจสอบ platform และ environment
+  const platform = isAndroidDevice ? 'android' : isIOSDevice ? 'ios' : 'desktop';
+  const environment = inWebView ? 'webview' : 'browser';
+  
+  return {
+    isInWebView: inWebView,
+    isFacebookWebView: isFBWebView,
+    sessionStorageAvailable: sessionStorageAvailable,
+    localStorageAvailable: localStorageAvailable,
+    userAgent: userAgent,
+    // 🔧 DevOps: เพิ่มข้อมูล platform และ environment
+    platform: platform,
+    isAndroid: isAndroidDevice,
+    isIOS: isIOSDevice,
+    isMobile: isMobile,
+    environment: environment,
+  };
+};
+
 // Social Authentication
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider();
@@ -612,85 +869,90 @@ googleProvider.setCustomParameters({
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
 facebookProvider.addScope('email');
+facebookProvider.addScope('public_profile');
+// ปรับปรุง custom parameters สำหรับ WebView
 facebookProvider.setCustomParameters({
   display: 'popup',
+  auth_type: 'rerequest', // ขอ permission ใหม่ทุกครั้ง
 });
 
 export const signInWithGoogle = async (): Promise<void> => {
-  // Google: ใช้ redirect เลยเพื่อให้เด้งออกไป browser ภายนอก
-  // เพราะ Google popup มักมีปัญหาใน webview (LINE, Messenger ฯลฯ)
-  // และ redirect จะทำให้เด้งออกไป browser ที่ใช้งานได้ดีกว่า
+  const webViewInfo = getWebViewInfo();
+  const { isInWebView, isFacebookWebView, sessionStorageAvailable, platform, isMobile } = webViewInfo;
+
+  // 🔧 DevOps: Log platform และ environment
+  console.log(`📱 [Google Login] Platform: ${platform}, Mobile: ${isMobile}, WebView: ${isInWebView}, SessionStorage: ${sessionStorageAvailable}, LocalStorage: ${webViewInfo.localStorageAvailable}`);
+
+  // 🔧 DevOps: ใช้ popup เท่านั้น (ไม่ redirect) - ห้ามเด้งเว็บ
+  // สำหรับ WebView และ Browser ปกติ - ใช้ popup เท่านั้น
   try {
-    // ใช้ redirect โดยตรง - จะเด้งออกไป browser ภายนอก
-    await signInWithRedirect(auth, googleProvider);
-    // หน้าเพจจะ redirect ไป Google และกลับมาหลัง login สำเร็จ
+    if (isFacebookWebView || (isInWebView && !sessionStorageAvailable)) {
+      console.log('🔍 [Google Login] กำลังใช้ popup ใน WebView...');
+    } else {
+      console.log('🔍 [Google Login] กำลังใช้ popup...');
+    }
+    await signInWithPopup(auth, googleProvider);
+    console.log('✅ [Google Login] Popup สำเร็จ');
     return;
   } catch (error: any) {
-    // ถ้า redirect ล้มเหลวเพราะ sessionStorage ให้ลอง popup
-    if (error.message?.includes('sessionStorage') || 
-        error.message?.includes('initial state') ||
-        error.message?.includes('missing initial state')) {
-      console.warn('Redirect failed, trying popup instead...');
-      try {
-        await signInWithPopup(auth, googleProvider);
-        return;
-      } catch (popupError: any) {
-        // ถ้า popup ก็ไม่ได้ ให้ throw error
-        throw new Error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองเปิดในเบราว์เซอร์ภายนอก (Chrome, Safari)');
-      }
+    // ถ้า popup ถูกบล็อกหรือไม่รองรับ → throw error พร้อม link ให้คัดลอก
+    if (error.code === 'auth/popup-blocked' || 
+        error.code === 'auth/popup-closed-by-user' ||
+        error.code === 'auth/cancelled-popup-request' ||
+        error.code === 'auth/operation-not-supported-in-this-environment') {
+      
+      // 🔧 DevOps: ไม่ redirect → throw error พร้อม link
+      const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+      throw new Error(`POPUP_BLOCKED|${currentUrl}`);
     }
+    
+    // ถ้าเป็น error อื่นๆ ให้ throw ต่อ
     throw error;
   }
 };
 
 export const signInWithFacebook = async (): Promise<void> => {
-  // Facebook: พยายามใช้ popup ก่อน (ทำงานได้ดีใน Messenger)
-  // ถ้าไม่ได้ค่อย fallback เป็น redirect (จะเด้งออกไป browser)
-  const inWebView = isInWebView();
-  const sessionStorageAvailable = isSessionStorageAvailable();
+  const webViewInfo = getWebViewInfo();
+  const { isInWebView, isFacebookWebView, sessionStorageAvailable, platform, isMobile } = webViewInfo;
   
-  // ถ้า sessionStorage ไม่ได้และอยู่ใน webview ให้ใช้ popup เท่านั้น
-  if (!sessionStorageAvailable && inWebView) {
-    try {
-      await signInWithPopup(auth, facebookProvider);
-      return;
-    } catch (error: any) {
-      // ถ้า popup ถูกบล็อก ให้แนะนำผู้ใช้
-      if (error.code === 'auth/popup-blocked') {
-        throw new Error('กรุณาอนุญาตป๊อปอัป หรือกดปุ่ม "เปิดในเบราว์เซอร์" เพื่อเข้าสู่ระบบ');
-      }
-      throw error;
-    }
-  }
+  // 🔧 DevOps: Log platform และ environment
+  console.log(`📱 [Facebook Login] Platform: ${platform}, Mobile: ${isMobile}, WebView: ${isInWebView}, SessionStorage: ${sessionStorageAvailable}, LocalStorage: ${webViewInfo.localStorageAvailable}`);
   
-  // ถ้า sessionStorage ได้ ให้ลอง popup ก่อน
+  // 🔧 DevOps: ใช้ popup เท่านั้น (ไม่ redirect) - ห้ามเด้งเว็บ
+  // Facebook Messenger เป็น Incognito แต่ถ้า user login Facebook ไว้แล้ว → popup จะใช้ session นั้นได้
+  // สำหรับ WebView และ Browser ปกติ - ใช้ popup เท่านั้น
   try {
+    if (isFacebookWebView || (isInWebView && !sessionStorageAvailable)) {
+      console.log('🔍 [Facebook Login] กำลังใช้ popup ใน WebView...');
+    } else {
+      console.log('🔍 [Facebook Login] กำลังใช้ popup...');
+    }
     await signInWithPopup(auth, facebookProvider);
+    console.log('✅ [Facebook Login] Popup สำเร็จ');
     return;
   } catch (error: any) {
-    // Fallback เป็น redirect สำหรับกรณี popup ถูกบล็อกหรือ environment ไม่รองรับ
-    const fallbackCodes = new Set([
-      'auth/popup-blocked',
-      'auth/popup-closed-by-user',
-      'auth/cancelled-popup-request',
-      'auth/operation-not-supported-in-this-environment',
-    ]);
-    
-    if (error && error.code && fallbackCodes.has(error.code)) {
-      try {
-        // ใช้ redirect - จะเด้งออกไป browser ภายนอก
-        await signInWithRedirect(auth, facebookProvider);
-        return;
-      } catch (redirectError: any) {
-        // ถ้า redirect ล้มเหลวเพราะ sessionStorage
-        if (redirectError.message?.includes('sessionStorage') || 
-            redirectError.message?.includes('initial state') ||
-            redirectError.message?.includes('missing initial state')) {
-          throw new Error('กรุณากดปุ่ม "เปิดในเบราว์เซอร์" เพื่อเข้าสู่ระบบ (Chrome, Safari)');
-        }
-        throw redirectError;
-      }
+    // ถ้า popup ถูกบล็อกหรือไม่รองรับ → throw error พร้อม link ให้คัดลอก
+    if (error.code === 'auth/popup-blocked' || 
+        error.code === 'auth/popup-closed-by-user' ||
+        error.code === 'auth/cancelled-popup-request' ||
+        error.code === 'auth/operation-not-supported-in-this-environment') {
+      
+      // 🔧 DevOps: ไม่ redirect → throw error พร้อม link
+      const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+      throw new Error(`POPUP_BLOCKED|${currentUrl}`);
     }
+    
+    // 🔧 DevOps Fix: จัดการ error "missing initial state" หรือ sessionStorage errors
+    if (error.message?.includes('sessionStorage') ||
+        error.message?.includes('initial state') ||
+        error.message?.includes('missing initial state') ||
+        error.message?.includes('storage-partitioned')) {
+      console.warn('⚠️ [Facebook Login] SessionStorage error - แสดง link ให้คัดลอก');
+      const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+      throw new Error(`POPUP_BLOCKED|${currentUrl}`);
+    }
+    
+    // ถ้าเป็น error อื่นๆ ให้ throw ต่อ
     throw error;
   }
 };
@@ -704,27 +966,32 @@ export const checkRedirectResult = async (): Promise<User | null> => {
     const result = await getRedirectResult(auth);
     if (result) {
       // User successfully signed in via redirect
+      console.log('✅ [Redirect] Login สำเร็จ');
       return result.user;
     }
     // No redirect result - user didn't come from a redirect
+    console.log('ℹ️ [Redirect] ไม่มี redirect result');
     return null;
   } catch (error: any) {
     // 🔧 IMPORTANT: Handle critical errors - re-throw เพื่อให้ component จัดการ
     if (error.code === 'auth/account-exists-with-different-credential') {
-      console.error('An account already exists with the same email address but different sign-in credentials');
+      console.error('❌ [Redirect] มี account อื่นใช้ email เดียวกัน');
       throw error; // Re-throw เพื่อให้ component จัดการ
     }
     if (error.code === 'auth/email-already-in-use') {
-      console.error('The email address is already in use by another account');
+      console.error('❌ [Redirect] Email ถูกใช้งานแล้ว');
       throw error; // Re-throw เพื่อให้ component จัดการ
     }
     
-    // 🔧 สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
+    // 🔧 DevOps Fix: สำหรับ WebView (Messenger) - sessionStorage อาจจะไม่ได้
     // ไม่ควร throw error เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการ)
     if (error.message?.includes('sessionStorage') || 
         error.message?.includes('initial state') ||
-        error.message?.includes('missing initial state')) {
-      console.warn('SessionStorage error during redirect - this may happen in webview, continuing...');
+        error.message?.includes('missing initial state') ||
+        error.message?.includes('storage-partitioned') ||
+        error.message?.includes('localStorage') ||
+        error.code === 'auth/operation-not-supported-in-this-environment') {
+      console.warn('⚠️ [Redirect] SessionStorage/localStorage error - อาจเกิดใน WebView (Messenger) ระบบจะใช้ auth state check แทน');
       // Return null เพื่อให้ระบบทำงานต่อ (onAuthStateChanged จะจัดการต่อ)
       return null;
     }
@@ -743,69 +1010,243 @@ export const checkRedirectResult = async (): Promise<User | null> => {
 export const userSessionsRef = (uid: string) => ref(database, `userSessions/${uid}`);
 export const userSessionIsOnlineRef = (uid: string) => ref(database, `userSessions/${uid}/isOnline`);
 export const userSessionStartedAtRef = (uid: string) => ref(database, `userSessions/${uid}/startedAt`);
+export const userSessionIdRef = (uid: string) => ref(database, `userSessions/${uid}/sessionId`);
+
+// 🔒 Security: แยก session path สำหรับ admin
+export const adminSessionsRef = (uid: string) => ref(database, `adminSessions/${uid}`);
+export const adminSessionIsOnlineRef = (uid: string) => ref(database, `adminSessions/${uid}/isOnline`);
+export const adminSessionStartedAtRef = (uid: string) => ref(database, `adminSessions/${uid}/startedAt`);
+export const adminSessionIdRef = (uid: string) => ref(database, `adminSessions/${uid}/sessionId`);
+
+/**
+ * 🔧 DevOps: Memory storage สำหรับ session ID (fallback เมื่อ storage ไม่ได้)
+ */
+let memorySessionId: string | null = null;
+let firebaseSessionIdCache: { [uid: string]: string } = {};
+
+/**
+ * 🔧 DevOps: ดึง Session ID จาก Firebase (ไม่พึ่งพา browser storage)
+ * วิธีนี้จะไม่ถูกล้างโดย browser และทำงานได้ในทุก environment
+ * 🔒 Security: ใช้ path ตาม role (userSessions สำหรับ guest, adminSessions สำหรับ admin)
+ */
+const getSessionIdFromFirebase = async (uid: string, isAdmin: boolean = false): Promise<string | null> => {
+  try {
+    // ตรวจสอบ cache ก่อน
+    if (firebaseSessionIdCache[uid]) {
+      return firebaseSessionIdCache[uid];
+    }
+    
+    // 🔒 Security: ใช้ path ตาม role
+    const sessionIdRef = isAdmin ? adminSessionIdRef(uid) : userSessionIdRef(uid);
+    
+    // ดึงจาก Firebase
+    const snapshot = await get(sessionIdRef);
+    if (snapshot.exists()) {
+      const sessionId = snapshot.val();
+      // เก็บใน cache
+      firebaseSessionIdCache[uid] = sessionId;
+      return sessionId;
+    }
+    return null;
+  } catch (error) {
+    console.warn('⚠️ [Session ID] ไม่สามารถดึงจาก Firebase ได้:', error);
+    return null;
+  }
+};
+
+/**
+ * 🔧 DevOps: บันทึก Session ID ลง Firebase (ไม่พึ่งพา browser storage)
+ * 🔒 Security: ใช้ path ตาม role (userSessions สำหรับ guest, adminSessions สำหรับ admin)
+ */
+const saveSessionIdToFirebase = async (uid: string, sessionId: string, isAdmin: boolean = false): Promise<void> => {
+  try {
+    // 🔒 Security: ใช้ path ตาม role
+    const sessionIdRef = isAdmin ? adminSessionIdRef(uid) : userSessionIdRef(uid);
+    await set(sessionIdRef, sessionId);
+    // เก็บใน cache
+    firebaseSessionIdCache[uid] = sessionId;
+  } catch (error) {
+    console.warn('⚠️ [Session ID] ไม่สามารถบันทึกลง Firebase ได้:', error);
+  }
+};
+
+/**
+ * 🔧 DevOps: สร้าง Session ID ที่ unique สำหรับแต่ละ tab/window
+ * ใช้ Firebase Realtime Database เป็นหลัก (ไม่พึ่งพา browser storage)
+ * Priority:
+ * 1. Firebase Realtime Database (หลัก) - ไม่ถูกล้างโดย browser
+ * 2. Browser storage (cache) - เพิ่มความเร็ว
+ * 3. Memory storage (fallback) - สำหรับกรณีที่ยังไม่ login
+ * 🔒 Security: ใช้ path ตาม role (userSessions สำหรับ guest, adminSessions สำหรับ admin)
+ */
+const getOrCreateSessionId = async (uid?: string, isAdmin: boolean = false): Promise<string> => {
+  const STORAGE_KEY = '__wedding_session_id__';
+  
+  // 🔧 DevOps Fix: ถ้ามี user login → ใช้ Firebase เป็นหลัก
+  if (uid) {
+    try {
+      // 1. ลองดึงจาก Firebase ก่อน (ไม่พึ่งพา browser storage)
+      const firebaseSessionId = await getSessionIdFromFirebase(uid, isAdmin);
+      if (firebaseSessionId) {
+        // เก็บใน browser storage เป็น cache (ถ้าใช้ได้)
+        try {
+          if (isSessionStorageAvailable()) {
+            sessionStorage.setItem(STORAGE_KEY, firebaseSessionId);
+          } else if (isLocalStorageAvailable()) {
+            localStorage.setItem(STORAGE_KEY, firebaseSessionId);
+          }
+        } catch (e) {
+          // ไม่เป็นไร ถ้า storage ไม่ได้
+        }
+        memorySessionId = firebaseSessionId;
+        return firebaseSessionId;
+      }
+      
+      // 2. ถ้าไม่มีใน Firebase → สร้างใหม่และบันทึกลง Firebase
+      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await saveSessionIdToFirebase(uid, newSessionId, isAdmin);
+      
+      // เก็บใน browser storage เป็น cache (ถ้าใช้ได้)
+      try {
+        if (isSessionStorageAvailable()) {
+          sessionStorage.setItem(STORAGE_KEY, newSessionId);
+        } else if (isLocalStorageAvailable()) {
+          localStorage.setItem(STORAGE_KEY, newSessionId);
+        }
+      } catch (e) {
+        // ไม่เป็นไร ถ้า storage ไม่ได้
+      }
+      memorySessionId = newSessionId;
+      return newSessionId;
+    } catch (error) {
+      console.warn('⚠️ [Session ID] Firebase error, ใช้ fallback:', error);
+      // Fallback ไปใช้ browser storage
+    }
+  }
+  
+  // 🔧 Fallback: ใช้ browser storage (สำหรับกรณีที่ยังไม่ login)
+  // 1. ลองดึงจาก sessionStorage ก่อน
+  try {
+    const existingId = sessionStorage.getItem(STORAGE_KEY);
+    if (existingId) {
+      memorySessionId = existingId;
+      return existingId;
+    }
+  } catch (e) {
+    // sessionStorage ไม่ได้ → ข้ามไป
+  }
+  
+  // 2. ลองดึงจาก localStorage
+  try {
+    if (isLocalStorageAvailable()) {
+      const existingId = localStorage.getItem(STORAGE_KEY);
+      if (existingId) {
+        memorySessionId = existingId;
+        return existingId;
+      }
+    }
+  } catch (e) {
+    // localStorage ไม่ได้ → ข้ามไป
+  }
+  
+  // 3. ลองดึงจาก memory
+  if (memorySessionId) {
+    return memorySessionId;
+  }
+  
+  // 4. สร้าง session ID ใหม่
+  const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  memorySessionId = newSessionId;
+  
+  // 🔧 DevOps Fix: ถ้ามี uid (Firebase failed แต่มี user) → พยายาม sync กลับไป Firebase
+  // เพื่อป้องกัน mismatch ระหว่าง browser storage กับ Firebase
+  if (uid) {
+    try {
+      await saveSessionIdToFirebase(uid, newSessionId, isAdmin);
+      console.log('✅ [Session ID] Synced fallback session ID to Firebase');
+    } catch (error) {
+      // Firebase ยังไม่พร้อม → ไม่เป็นไร, เก็บใน browser storage ไว้ก่อน
+      // registerSession จะ sync ให้ทีหลังเมื่อ Firebase พร้อม
+      console.warn('⚠️ [Session ID] Could not sync fallback session ID to Firebase (will retry later):', error);
+    }
+  }
+  
+  // พยายามเก็บใน storage (ถ้าใช้ได้)
+  try {
+    if (isSessionStorageAvailable()) {
+      sessionStorage.setItem(STORAGE_KEY, newSessionId);
+    } else if (isLocalStorageAvailable()) {
+      localStorage.setItem(STORAGE_KEY, newSessionId);
+    }
+  } catch (e) {
+    // ไม่เป็นไร ถ้า storage ไม่ได้
+  }
+  
+  return newSessionId;
+};
 
 /**
  * สร้าง session ใหม่หลังจาก login สำเร็จ
- * จะเช็คว่ามี session อื่น active อยู่หรือไม่ (เช็ค isOnline === 1)
+ * จะเช็คว่ามี session อื่น active อยู่หรือไม่ (เช็ค isOnline === 1 และ sessionId ไม่ตรงกัน)
+ * 🔒 Security: ใช้สำหรับ guest เท่านั้น (isAdmin = false)
  */
-export const registerSession = async (user: User): Promise<{ hasOtherActiveSession: boolean; otherSessionStartedAt?: string; startedAt: string }> => {
+export const registerSession = async (user: User, isAdmin: boolean = false): Promise<{ hasOtherActiveSession: boolean; otherSessionStartedAt?: string; startedAt: string }> => {
   const uid = user.uid;
   const startedAt = new Date().toISOString();
+  const currentSessionId = await getOrCreateSessionId(uid, isAdmin); // 🔧 DevOps: ใช้ session ID จาก Firebase (ไม่พึ่งพา browser storage) + 🔒 Security: ส่ง isAdmin parameter
+  
+  // 🔒 Security: ใช้ path ตาม role
+  const sessionRef = isAdmin ? adminSessionsRef(uid) : userSessionsRef(uid);
+  const isOnlineRef = isAdmin ? adminSessionIsOnlineRef(uid) : userSessionIsOnlineRef(uid);
   
   // เช็คว่ามี session อื่น active อยู่หรือไม่ (isOnline === 1)
-  const isOnline = await getIsOnline(uid);
+  const isOnline = await getIsOnline(uid, isAdmin);
   let otherSessionStartedAt: string | undefined;
+  let hasOtherActiveSession = false;
   
   if (isOnline) {
-    // มี session อื่น active อยู่ - ดึงเวลาเริ่มต้นของ session อื่น
-    const sessionInfo = await getSessionInfo(uid);
-    otherSessionStartedAt = sessionInfo?.startedAt;
+    // มี session active อยู่ - ดึงข้อมูล session
+    const sessionInfo = await getSessionInfo(uid, isAdmin);
+    const existingSessionId = sessionInfo?.sessionId;
     
-    // ใช้ atomic update เพื่อ set ทั้ง isOnline และ startedAt พร้อมกัน
-    // ไม่ต้อง set isOnline = 0 ก่อน เพื่อป้องกัน session อื่น logout โดยไม่ตั้งใจ
-    // Session listener จะเช็ค startedAt เปลี่ยนหรือไม่เพื่อตรวจจับการยึด session
-    const sessionRef = userSessionsRef(uid);
-    await update(sessionRef, {
-      isOnline: 1,
-      startedAt: startedAt,
-    });
-    
-    // ตั้งค่า onDisconnect เพื่อ set isOnline = 0 เมื่อแท็บปิด
-    // await เพื่อให้แน่ใจว่า server ได้รับการยืนยันและจัดการ error ได้
-    const isOnlineRef = userSessionIsOnlineRef(uid);
-    await onDisconnect(isOnlineRef).set(0);
-    
-    return {
-      hasOtherActiveSession: true,
-      otherSessionStartedAt,
-      startedAt,
-    };
+    // 🔧 DevOps Fix: เช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
+    if (existingSessionId && existingSessionId === currentSessionId) {
+      // Session ของตัวเอง → ไม่ถือว่าเป็น session อื่น
+      console.log('✅ [Session] Session ที่ active อยู่เป็นของตัวเอง ไม่ต้องแสดง warning');
+      hasOtherActiveSession = false;
+    } else {
+      // Session ของคนอื่น → แสดง warning
+      otherSessionStartedAt = sessionInfo?.startedAt;
+      hasOtherActiveSession = true;
+      console.log('⚠️ [Session] พบ session อื่น active อยู่:', existingSessionId);
+    }
   }
   
-  // ไม่มี session อื่น active อยู่ - ใช้ atomic update เพื่อ set ทั้ง isOnline และ startedAt พร้อมกัน
-  const sessionRef = userSessionsRef(uid);
+  // ใช้ atomic update เพื่อ set ทั้ง isOnline, startedAt และ sessionId พร้อมกัน
   await update(sessionRef, {
     isOnline: 1,
     startedAt: startedAt,
+    sessionId: currentSessionId, // 🔧 DevOps: เก็บ session ID
   });
   
   // ตั้งค่า onDisconnect เพื่อ set isOnline = 0 เมื่อแท็บปิด
-  // await เพื่อให้แน่ใจว่า server ได้รับการยืนยันและจัดการ error ได้
-  const isOnlineRef = userSessionIsOnlineRef(uid);
   await onDisconnect(isOnlineRef).set(0);
   
   return {
-    hasOtherActiveSession: false,
+    hasOtherActiveSession,
+    otherSessionStartedAt,
     startedAt,
   };
 };
 
 /**
  * เช็คว่ามี session active อยู่หรือไม่ (isOnline === 1)
+ * 🔒 Security: ใช้ path ตาม role
  */
-export const getIsOnline = async (uid: string): Promise<boolean> => {
+export const getIsOnline = async (uid: string, isAdmin: boolean = false): Promise<boolean> => {
   try {
-    const snapshot = await get(userSessionIsOnlineRef(uid));
+    const isOnlineRef = isAdmin ? adminSessionIsOnlineRef(uid) : userSessionIsOnlineRef(uid);
+    const snapshot = await get(isOnlineRef);
     if (!snapshot.exists()) return false;
     return snapshot.val() === 1;
   } catch (error) {
@@ -815,13 +1256,19 @@ export const getIsOnline = async (uid: string): Promise<boolean> => {
 };
 
 /**
- * ดึงข้อมูล session (isOnline และ startedAt)
+ * ดึงข้อมูล session (isOnline, startedAt และ sessionId)
+ * 🔒 Security: ใช้ path ตาม role
  */
-export const getSessionInfo = async (uid: string): Promise<{ isOnline: boolean; startedAt?: string } | null> => {
+export const getSessionInfo = async (uid: string, isAdmin: boolean = false): Promise<{ isOnline: boolean; startedAt?: string; sessionId?: string } | null> => {
   try {
-    const [isOnlineSnapshot, startedAtSnapshot] = await Promise.all([
-      get(userSessionIsOnlineRef(uid)),
-      get(userSessionStartedAtRef(uid)),
+    const isOnlineRef = isAdmin ? adminSessionIsOnlineRef(uid) : userSessionIsOnlineRef(uid);
+    const startedAtRef = isAdmin ? adminSessionStartedAtRef(uid) : userSessionStartedAtRef(uid);
+    const sessionIdRef = isAdmin ? adminSessionIdRef(uid) : userSessionIdRef(uid);
+    
+    const [isOnlineSnapshot, startedAtSnapshot, sessionIdSnapshot] = await Promise.all([
+      get(isOnlineRef),
+      get(startedAtRef),
+      get(sessionIdRef),
     ]);
     
     if (!isOnlineSnapshot.exists()) return null;
@@ -829,6 +1276,7 @@ export const getSessionInfo = async (uid: string): Promise<{ isOnline: boolean; 
     return {
       isOnline: isOnlineSnapshot.val() === 1,
       startedAt: startedAtSnapshot.exists() ? startedAtSnapshot.val() : undefined,
+      sessionId: sessionIdSnapshot.exists() ? sessionIdSnapshot.val() : undefined,
     };
   } catch (error) {
     console.error('Error getting session info:', error);
@@ -839,9 +1287,10 @@ export const getSessionInfo = async (uid: string): Promise<{ isOnline: boolean; 
 /**
  * ปิด session (set isOnline = 0)
  * ใช้เมื่อ logout หรือเมื่อต้องการปิด session
+ * 🔒 Security: ใช้ path ตาม role
  */
-export const endSession = async (uid: string): Promise<void> => {
-  const isOnlineRef = userSessionIsOnlineRef(uid);
+export const endSession = async (uid: string, isAdmin: boolean = false): Promise<void> => {
+  const isOnlineRef = isAdmin ? adminSessionIsOnlineRef(uid) : userSessionIsOnlineRef(uid);
   await set(isOnlineRef, 0);
   // ไม่ต้องลบ startedAt เพื่อเก็บประวัติ
 };
@@ -861,9 +1310,10 @@ export const forceEndSession = async (uid: string): Promise<void> => {
  */
 export const subscribeSessionChanges = (
   uid: string,
-  callback: (isOnline: boolean, startedAt?: string) => void
+  callback: (isOnline: boolean, startedAt?: string, sessionId?: string) => void,
+  isAdmin: boolean = false
 ): (() => void) => {
-  const sessionRef = userSessionsRef(uid);
+  const sessionRef = isAdmin ? adminSessionsRef(uid) : userSessionsRef(uid);
   
   const unsubscribe = onValue(sessionRef, (snapshot: DataSnapshot) => {
     if (!snapshot.exists()) {
@@ -875,15 +1325,16 @@ export const subscribeSessionChanges = (
     const data = snapshot.val();
     const isOnline = data?.isOnline === 1;
     const startedAt = data?.startedAt;
+    const sessionId = data?.sessionId; // 🔧 DevOps: เพิ่ม sessionId
     
     // ถ้า isOnline === 0 → ถูกลงชื่อออก (logout จริงๆ)
     if (!isOnline) {
-      callback(false, startedAt);
+      callback(false, startedAt, sessionId);
       return;
     }
     
     // isOnline === 1 → ยัง active อยู่ (แต่ต้องเช็ค startedAt ใน component ว่าเปลี่ยนหรือไม่)
-    callback(true, startedAt);
+    callback(true, startedAt, sessionId);
   });
   
   return unsubscribe;

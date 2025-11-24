@@ -19,6 +19,7 @@ import {
   Modal,
   Avatar,
   Input,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined,
@@ -30,27 +31,30 @@ import {
   QuestionCircleOutlined,
   ArrowRightOutlined,
   TeamOutlined,
+  FileTextOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import { Guest, Zone, TableData } from '@/types';
 import DraggableTable from '@/pages/SeatingManagementPage/components/DraggableTable';
 import ZoneModal from '@/pages/SeatingManagementPage/components/ZoneModal';
 import TableModal from '@/pages/SeatingManagementPage/components/TableModal';
-import { createZone, updateZone, deleteZone, createTable, updateTable, deleteTable, updateGuest } from '@/services/firebaseService';
+import { createZone, updateZone, deleteZone, createTable, updateTable, deleteTable, updateGuest, type RSVPData } from '@/services/firebaseService';
+import { getGuestsFromRSVP } from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;
 
 interface SeatingManagementPageProps {
   guests: Guest[];
-  setGuests: React.Dispatch<React.SetStateAction<Guest[]>>;
   zones: Zone[];
   setZones: React.Dispatch<React.SetStateAction<Zone[]>>;
   tables: TableData[];
   setTables: React.Dispatch<React.SetStateAction<TableData[]>>;
+  rsvps?: RSVPData[];
 }
 
 const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
-  const { guests, setGuests, zones, setZones, tables, setTables } = props;
+  const { guests, zones, setZones, tables, setTables, rsvps = [] } = props;
   const [selectedZoneId, setSelectedZoneId] = useState<string>(
     zones[0]?.id || '',
   );
@@ -81,10 +85,21 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     [selectedZoneId, tables],
   );
 
-  const unassignedGuests = useMemo(
-    () => guests.filter((g) => g.zoneId === null || g.tableId === null),
-    [guests],
-  );
+  // 🔧 DevOps: หา Guests ที่มาจาก RSVP และยังไม่ได้จัดโต๊ะ
+  const unassignedGuests = useMemo(() => {
+    const guestSet = new Set<string>();
+    rsvps.forEach(rsvp => {
+      if (rsvp.isComing === 'yes') {
+        const relatedGuests = getGuestsFromRSVP(rsvp, guests);
+        relatedGuests.forEach(g => {
+          if (g.zoneId === null || g.tableId === null) {
+            guestSet.add(g.id);
+          }
+        });
+      }
+    });
+    return guests.filter(g => guestSet.has(g.id));
+  }, [guests, rsvps]);
 
   const guestsByTable = useMemo(() => {
     const map = new Map<string, Guest[]>();
@@ -99,24 +114,112 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     return map;
   }, [guests, tables]);
 
-  const filteredUnassignedGuests = useMemo(() => {
+  // 🔧 DevOps: คำนวณ RSVP statistics
+  const rsvpsNotImported = useMemo(() => {
+    if (!rsvps || rsvps.length === 0) return 0;
+    const guestsList = guests || [];
+    
+    return rsvps.filter(r => {
+      if (!r || r.isComing !== 'yes') return false;
+      const relatedGuests = getGuestsFromRSVP(r, guestsList);
+      return relatedGuests.length === 0;
+    }).length;
+  }, [rsvps, guests]);
+
+  const rsvpsComing = useMemo(() => {
+    if (!rsvps || rsvps.length === 0) return 0;
+    return rsvps.filter(r => r && r.isComing === 'yes').length;
+  }, [rsvps]);
+
+  // 🔧 DevOps: แสดง Guests แบบรายบุคคล (ไม่ใช่แบบกลุ่ม) สำหรับ modal
+  // แต่ยังคงแสดงข้อมูล RSVP และชื่อกลุ่ม
+  type UnassignedGuestItem = {
+    guest: Guest;
+    rsvp: RSVPData;
+    groupName: string;
+    isMainGuest: boolean;
+    accompanyingIndex?: number; // index ของผู้ติดตาม (0-based)
+    accompanyingName?: string; // ชื่อผู้ติดตามจาก RSVP
+  };
+
+  const unassignedGuestItems = useMemo(() => {
+    const items: UnassignedGuestItem[] = [];
+    
+    // วน loop ผ่าน RSVPs ที่ตอบรับเข้างาน
+    rsvps.forEach(rsvp => {
+      if (!rsvp || rsvp.isComing !== 'yes') return;
+      
+      // หา Guests ที่ link กับ RSVP นี้
+      const relatedGuests = getGuestsFromRSVP(rsvp, guests);
+      
+      // กรองเฉพาะ Guests ที่ยังไม่ได้จัดโต๊ะ
+      const unassignedGuests = relatedGuests.filter(g => g.zoneId === null || g.tableId === null);
+      
+      if (unassignedGuests.length === 0) return;
+      
+      const groupName = rsvp.fullName || `${rsvp.firstName} ${rsvp.lastName}`;
+      
+      // หา main guest (ตัวแรกที่ match กับ RSVP)
+      const mainGuest = unassignedGuests.find(g => 
+        g.rsvpUid === rsvp.uid && 
+        (g.firstName === rsvp.firstName || g.id === rsvp.guestId)
+      ) || unassignedGuests[0];
+      
+      // เพิ่ม main guest
+      if (mainGuest) {
+        items.push({
+          guest: mainGuest,
+          rsvp,
+          groupName,
+          isMainGuest: true,
+        });
+      }
+      
+      // เพิ่ม accompanying guests
+      if (rsvp.accompanyingGuests && rsvp.accompanyingGuests.length > 0) {
+        rsvp.accompanyingGuests.forEach((accGuest, index) => {
+          // หา Guest ที่ match กับ accompanying guest
+          const relatedGuest = unassignedGuests.find(g => 
+            g.rsvpUid === rsvp.uid && 
+            g.firstName === accGuest.name &&
+            g.id !== mainGuest?.id
+          );
+          
+          if (relatedGuest) {
+            items.push({
+              guest: relatedGuest,
+              rsvp,
+              groupName,
+              isMainGuest: false,
+              accompanyingIndex: index,
+              accompanyingName: accGuest.name,
+            });
+          }
+        });
+      }
+    });
+    
+    return items;
+  }, [rsvps, guests]);
+
+  const filteredUnassignedGuestItems = useMemo(() => {
     const q = unassignedSearchText.trim().toLowerCase();
-    if (!q) return unassignedGuests;
-    return unassignedGuests.filter((g) =>
-      g.firstName.toLowerCase().includes(q) ||
-      g.lastName.toLowerCase().includes(q) ||
-      g.nickname.toLowerCase().includes(q) ||
-      (g.relationToCouple || '').toLowerCase().includes(q),
-    );
-  }, [unassignedGuests, unassignedSearchText]);
+    if (!q) return unassignedGuestItems;
+    return unassignedGuestItems.filter((item) => {
+      const rsvpName = (item.rsvp.fullName || `${item.rsvp.firstName} ${item.rsvp.lastName}`).toLowerCase();
+      const guestName = `${item.guest.firstName} ${item.guest.lastName} ${item.guest.nickname || ''}`.toLowerCase();
+      return (
+        rsvpName.includes(q) ||
+        guestName.includes(q) ||
+        item.groupName.toLowerCase().includes(q)
+      );
+    });
+  }, [unassignedGuestItems, unassignedSearchText]);
 
   // --- Handlers ---
   const handleUnassignGuest = async (guestId: string) => {
     try {
       await updateGuest(guestId, { zoneId: null, tableId: null });
-      setGuests((prev) =>
-        prev.map((g) => (g.id === guestId ? { ...g, zoneId: null, tableId: null } : g)),
-      );
       message.success('ย้ายออกจากโต๊ะแล้ว');
     } catch (error) {
       console.error('Error unassigning guest:', error);
@@ -133,13 +236,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     }
     try {
       await updateGuest(guestId, { zoneId: activeTable.zoneId, tableId: activeTable.tableId });
-      setGuests((prev) =>
-        prev.map((g) =>
-          g.id === guestId
-            ? { ...g, zoneId: activeTable.zoneId, tableId: activeTable.tableId }
-            : g,
-        ),
-      );
+      // 🔧 DevOps: ไม่ต้องเรียก setGuests เพราะ Firebase subscription จะอัปเดต state อัตโนมัติ
       message.success('เพิ่มเข้าโต๊ะสำเร็จ');
     } catch (error) {
       console.error('Error adding guest to table:', error);
@@ -214,14 +311,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
       for (const guest of guestsToUpdate) {
         await updateGuest(guest.id, { zoneId: null, tableId: null });
       }
-      setGuests((prevGuests) =>
-        prevGuests.map((g) => {
-          if (g.zoneId === zone.zoneId) {
-            return { ...g, zoneId: null, tableId: null };
-          }
-          return g;
-        }),
-      );
+      // 🔧 DevOps: ไม่ต้องเรียก setGuests เพราะ Firebase subscription จะอัปเดต state อัตโนมัติ
 
       if (selectedZoneId === id) {
         setSelectedZoneId(zones.filter((z) => z.id !== id)[0]?.id || '');
@@ -267,9 +357,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
       for (const guest of guestsToUpdate) {
         await updateGuest(guest.id, { tableId: null, zoneId: null });
       }
-      setGuests((prevGuests) =>
-        prevGuests.map((g) => (g.tableId === id ? { ...g, tableId: null, zoneId: null } : g)),
-      );
+      // 🔧 DevOps: ไม่ต้องเรียก setGuests เพราะ Firebase subscription จะอัปเดต state อัตโนมัติ
       message.success(`ลบโต๊ะ ${name} แล้ว`);
     } catch (error) {
       console.error('Error deleting table:', error);
@@ -408,6 +496,46 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
         <TableOutlined /> จัดการผังโต๊ะ & โซน
       </Title>
 
+      {/* 🔧 DevOps: แสดง Alert ถ้ามี RSVP ที่ยังไม่ได้ import */}
+      {rsvpsNotImported > 0 && (
+        <Alert
+          message={`มี RSVP ที่ยังไม่ได้นำเข้า ${rsvpsNotImported} รายการ`}
+          description="RSVP ที่ยังไม่ได้นำเข้าจะไม่สามารถจัดโต๊ะได้ กรุณานำเข้าผ่านหน้า รายการตอบรับ ก่อน"
+          type="warning"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          className="mb-4"
+          closable
+        />
+      )}
+
+      {/* 🔧 DevOps: RSVP Statistics Section */}
+      <Card
+        title={
+          <Space>
+            <FileTextOutlined />
+            <span>สรุปข้อมูล RSVP</span>
+          </Space>
+        }
+        className="mb-4"
+        size="small"
+      >
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} lg={6}>
+            <Space direction="vertical" size={0}>
+              <Text type="secondary" style={{ fontSize: '12px' }}>RSVP ตอบรับเข้างาน</Text>
+              <Text strong style={{ fontSize: '20px', color: '#1890ff' }}>{rsvpsComing}</Text>
+            </Space>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Space direction="vertical" size={0}>
+              <Text type="secondary" style={{ fontSize: '12px' }}>ยังไม่ได้นำเข้า</Text>
+              <Text strong style={{ fontSize: '20px', color: rsvpsNotImported > 0 ? '#faad14' : '#52c41a' }}>{rsvpsNotImported}</Text>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
       <Row gutter={[24, 24]}>
         {/* Left Sidebar (zones) */}
         <Col xs={24} md={6} lg={5}>
@@ -542,24 +670,99 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
               <Divider orientation="left" style={{ margin: '0 0 16px 0' }}>
                 <Text type="warning">เลือกคนเข้าโต๊ะ</Text>
               </Divider>
-              <Input placeholder="ค้นหาชื่อ/ชื่อเล่น/ความสัมพันธ์" value={unassignedSearchText} onChange={(e) => setUnassignedSearchText(e.target.value)} style={{ marginBottom: 16 }} />
+              <Input placeholder="ค้นหาชื่อจาก RSVP" value={unassignedSearchText} onChange={(e) => setUnassignedSearchText(e.target.value)} style={{ marginBottom: 16 }} />
               <List
                 itemLayout="horizontal"
-                dataSource={filteredUnassignedGuests}
-                locale={{ emptyText: 'ไม่พบแขกที่ยังว่าง' }}
-                renderItem={(guest) => (
-                  <List.Item key={guest.id} actions={[
-                    <Button key="select" type="primary" ghost size="small" icon={<ArrowRightOutlined />} onClick={() => handleAddGuestToTable(guest.id)} disabled={(guestsByTable.get(activeTable.tableId)?.length || 0) >= activeTable.capacity}>
-                      เลือก
-                    </Button>
-                  ]}>
-                    <List.Item.Meta
-                      avatar={<Avatar size="small" style={{ backgroundColor: '#d9d9d9' }}>{guest.nickname ? guest.nickname[0] : guest.firstName[0]}</Avatar>}
-                      title={<Text style={{ fontSize: 13 }}>{guest.firstName} {guest.lastName}{guest.nickname ? ` (${guest.nickname})` : ''}</Text>}
-                      description={<Tag style={{ fontSize: 10, lineHeight: '16px' }}>{guest.side === 'groom' ? 'บ่าว' : guest.side === 'bride' ? 'สาว' : 'ทั้งคู่'}</Tag>}
-                    />
-                  </List.Item>
-                )}
+                dataSource={filteredUnassignedGuestItems}
+                locale={{ emptyText: 'ไม่พบ RSVP ที่ยังว่าง' }}
+                renderItem={(item) => {
+                  const { guest, rsvp, groupName, isMainGuest, accompanyingIndex, accompanyingName } = item;
+                  const currentTableCount = (guestsByTable.get(activeTable.tableId) || []).length;
+                  const canAdd = currentTableCount < activeTable.capacity;
+                  
+                  // กำหนด title ตามประเภท
+                  let displayTitle = '';
+                  if (isMainGuest) {
+                    displayTitle = `${groupName} (ข้อมูลผู้แจ้ง)`;
+                  } else if (accompanyingIndex !== undefined && accompanyingName) {
+                    displayTitle = `${groupName} (ผู้ติดตามคนที่ ${accompanyingIndex + 1}: ${accompanyingName})`;
+                  } else {
+                    displayTitle = `${groupName} (${guest.firstName} ${guest.lastName})`;
+                  }
+                  
+                  return (
+                    <List.Item 
+                      key={guest.id}
+                      actions={[
+                        <Button 
+                          key="select" 
+                          type="primary" 
+                          ghost 
+                          size="small" 
+                          icon={<ArrowRightOutlined />} 
+                          onClick={() => handleAddGuestToTable(guest.id)} 
+                          disabled={!canAdd}
+                        >
+                          เลือก
+                        </Button>
+                      ]}
+                    >
+                      <List.Item.Meta
+                        avatar={
+                          <Avatar 
+                            size="small" 
+                            style={{ 
+                              backgroundColor: isMainGuest ? '#722ed1' : '#52c41a',
+                            }}
+                          >
+                            {isMainGuest ? '👤' : `${(accompanyingIndex || 0) + 1}`}
+                          </Avatar>
+                        }
+                        title={
+                          <div>
+                            <Space>
+                              <Text strong style={{ fontSize: 14, color: isMainGuest ? '#722ed1' : '#52c41a' }}>
+                                {displayTitle}
+                              </Text>
+                              <Tag color="blue" icon={<FileTextOutlined />} style={{ fontSize: 10 }}>
+                                RSVP
+                              </Tag>
+                            </Space>
+                            <div style={{ marginTop: 4 }}>
+                              <Text style={{ fontSize: 12, color: '#666' }}>
+                                {guest.firstName} {guest.lastName} {guest.nickname ? `(${guest.nickname})` : ''}
+                              </Text>
+                              {guest.relationToCouple && (
+                                <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                                  {guest.relationToCouple}
+                                </div>
+                              )}
+                            </div>
+                            {/* 🔧 DevOps: แสดงข้อมูล RSVP */}
+                            <div style={{ marginTop: 8, padding: 8, backgroundColor: '#f0faff', borderRadius: 4, fontSize: 11 }}>
+                              <Text type="secondary" strong>ข้อมูล RSVP:</Text>
+                              <div style={{ marginTop: 4 }}>
+                                <Text type="secondary">
+                                  {isMainGuest ? 'ข้อมูลผู้แจ้ง' : `ผู้ติดตามคนที่ ${(accompanyingIndex || 0) + 1}`}
+                                </Text>
+                                {rsvp.note && (
+                                  <div style={{ marginTop: 2 }}>
+                                    <Text type="secondary">หมายเหตุ: {rsvp.note}</Text>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        }
+                        description={
+                          <Tag style={{ fontSize: 10, lineHeight: '16px' }}>
+                            {rsvp.side === 'groom' ? 'บ่าว' : rsvp.side === 'bride' ? 'สาว' : 'ทั้งคู่'} • {groupName}
+                          </Tag>
+                        }
+                      />
+                    </List.Item>
+                  );
+                }}
                 style={{ maxHeight: 350, overflowY: 'auto' }}
               />
             </Col>

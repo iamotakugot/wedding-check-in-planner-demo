@@ -1,94 +1,91 @@
 import React, { useMemo, useState } from 'react';
 import { Card, Row, Col, Typography, Input, Select, Table, Tag, Button, Space, Statistic, Divider, message, Timeline, Progress, Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ThunderboltOutlined, FileTextOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { Guest, Zone, TableData, Side } from '@/types';
-import { updateGuest } from '@/services/firebaseService';
+import { updateGuest, type RSVPData } from '@/services/firebaseService';
+import { groupRSVPsWithGuests, getGuestsFromRSVP } from '@/utils/rsvpHelpers';
 
 const { Title, Text } = Typography;
 
 interface CheckInPageProps {
   guests: Guest[];
-  setGuests: React.Dispatch<React.SetStateAction<Guest[]>>;
   zones: Zone[];
   tables: TableData[];
+  rsvps?: RSVPData[];
 }
 
-type GroupRow = {
-  key: string;
-  groupId: string | null;
-  groupName: string;
-  sideSummary: string;
-  total: number;
-  checkedIn: number;
-  members: Guest[];
-};
-
-const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tables }) => {
+const CheckInPage: React.FC<CheckInPageProps> = ({ guests, zones, tables, rsvps = [] }) => {
   const [search, setSearch] = useState('');
   const [quickCheck, setQuickCheck] = useState('');
   const [filterSide, setFilterSide] = useState<Side | 'all'>('all');
   const [filterZone, setFilterZone] = useState<string | 'all'>('all');
   const [filterTable, setFilterTable] = useState<string | 'all'>('all');
 
-  const filteredGuests = useMemo(() => {
-    const lower = search.trim().toLowerCase();
-    return guests.filter(g => {
-      if (filterSide !== 'all' && g.side !== filterSide) return false;
-      if (filterZone !== 'all' && g.zoneId !== filterZone) return false;
-      if (filterTable !== 'all' && g.tableId !== filterTable) return false;
-      if (!lower) return true;
-      return (
-        g.firstName.toLowerCase().includes(lower) ||
-        g.lastName.toLowerCase().includes(lower) ||
-        g.nickname.toLowerCase().includes(lower) ||
-        g.id.toLowerCase().includes(lower)
-      );
+  // 🔧 DevOps: จัดกลุ่มจาก RSVP และเชื่อมกับ Guests
+  const groups = useMemo(() => {
+    return groupRSVPsWithGuests(rsvps, guests, {
+      side: filterSide,
+      zoneId: filterZone,
+      tableId: filterTable,
+      search: search,
     });
-  }, [guests, search, filterSide, filterZone, filterTable]);
+  }, [rsvps, guests, filterSide, filterZone, filterTable, search]);
 
-  const groups: GroupRow[] = useMemo(() => {
-    const map = new Map<string, GroupRow>();
-    for (const g of filteredGuests) {
-      const gid = g.groupId || `SINGLE_${g.id}`;
-      if (!map.has(gid)) {
-        map.set(gid, {
-          key: gid,
-          groupId: g.groupId || null,
-          groupName: g.groupName || `${g.firstName} (${g.nickname})`,
-          sideSummary: g.side,
-          total: 0,
-          checkedIn: 0,
-          members: [],
-        });
-      }
-      const row = map.get(gid)!;
-      row.members.push(g);
-      row.total += 1;
-      if (g.checkedInAt) row.checkedIn += 1;
-    }
-    return Array.from(map.values());
-  }, [filteredGuests]);
-
+  // 🔧 DevOps: คำนวณ totals จาก groups
   const totals = useMemo(() => {
-    const total = filteredGuests.length;
-    const checkedIn = filteredGuests.filter(g => !!g.checkedInAt).length;
+    const total = groups.reduce((acc, g) => acc + g.totalPeople, 0);
+    const checkedIn = groups.reduce((acc, g) => acc + g.checkedIn, 0);
     return { total, checkedIn, notChecked: total - checkedIn };
-  }, [filteredGuests]);
+  }, [groups]);
 
-  // Check-in history (sorted by time)
+  // 🔧 DevOps: คำนวณ RSVP statistics
+  const rsvpsNotImported = useMemo(() => {
+    if (!rsvps || rsvps.length === 0) return 0;
+    const guestsList = guests || [];
+    
+    return rsvps.filter(r => {
+      if (!r || r.isComing !== 'yes') return false;
+      const relatedGuests = getGuestsFromRSVP(r, guestsList);
+      return relatedGuests.length === 0;
+    }).length;
+  }, [rsvps, guests]);
+
+  const totalRSVPsComing = useMemo(() => {
+    if (!rsvps || rsvps.length === 0) return 0;
+    return rsvps.filter(r => r && r.isComing === 'yes').length;
+  }, [rsvps]);
+
+  // Check-in history (sorted by time) - จาก Guests ที่มาจาก RSVP
   const checkInHistory = useMemo(() => {
-    return guests
-      .filter(g => g.checkedInAt)
+    if (!guests || guests.length === 0) return [];
+    if (!rsvps || rsvps.length === 0) return [];
+    
+    const rsvpGuests = guests.filter(g => {
+      return rsvps.some(r => {
+        if (!r || r.isComing !== 'yes') return false;
+        const relatedGuests = getGuestsFromRSVP(r, guests);
+        return relatedGuests.some(rg => rg.id === g.id);
+      });
+    });
+    return rsvpGuests
+      .filter(g => g && g.checkedInAt)
       .sort((a, b) => (b.checkedInAt || '').localeCompare(a.checkedInAt || ''))
       .slice(0, 10) // Latest 10
-      .map(g => ({
-        id: g.id,
-        name: `${g.firstName} ${g.lastName} (${g.nickname})`,
-        time: g.checkedInAt,
-        method: g.checkInMethod || 'manual',
-      }));
-  }, [guests]);
+      .map(g => {
+        const rsvp = rsvps.find(r => {
+          if (!r || r.isComing !== 'yes') return false;
+          const relatedGuests = getGuestsFromRSVP(r, guests);
+          return relatedGuests.some(rg => rg.id === g.id);
+        });
+        return {
+          id: g.id,
+          name: rsvp ? (rsvp.fullName || `${rsvp.firstName} ${rsvp.lastName}`) : `${g.firstName} ${g.lastName} (${g.nickname || ''})`,
+          time: g.checkedInAt,
+          method: g.checkInMethod || 'manual',
+        };
+      });
+  }, [guests, rsvps]);
 
   const formatTime = (isoString: string | null) => {
     if (!isoString) return '-';
@@ -114,11 +111,6 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
         checkedInAt: value ? now : null,
         checkInMethod: value ? 'manual' : null,
       });
-      setGuests(prev => prev.map(g => g.id === guestId ? ({
-        ...g,
-        checkedInAt: value ? now : null,
-        checkInMethod: value ? 'manual' : null,
-      }) : g));
       if (value) {
         message.success('เช็คอินสำเร็จ!');
       }
@@ -128,31 +120,16 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
     }
   };
 
-  const toggleGroup = async (group: GroupRow, value: boolean) => {
+  const toggleGroup = async (group: typeof groups[0], value: boolean) => {
     try {
       const now = new Date().toISOString();
-      const guestsToUpdate = guests.filter(g => {
-        const belongs = (group.groupId ? g.groupId === group.groupId : g.id === group.members[0]?.id);
-        return belongs;
-      });
-
       // Update all guests in the group
-      for (const guest of guestsToUpdate) {
+      for (const guest of group.guests) {
         await updateGuest(guest.id, {
           checkedInAt: value ? now : null,
           checkInMethod: value ? 'manual' : null,
         });
       }
-
-      setGuests(prev => prev.map(g => {
-        const belongs = (group.groupId ? g.groupId === group.groupId : g.id === group.members[0]?.id);
-        if (!belongs) return g;
-        return {
-          ...g,
-          checkedInAt: value ? now : null,
-          checkInMethod: value ? 'manual' : null,
-        };
-      }));
       message.success(value ? `เช็คอินกลุ่ม "${group.groupName}" แล้ว` : `ยกเลิกเช็คอินกลุ่ม "${group.groupName}"`);
     } catch (error) {
       console.error('Error updating group check-in:', error);
@@ -160,40 +137,71 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
     }
   };
 
-  // Quick check-in by name
+  // Quick check-in by name - ค้นหาจาก RSVP
   const handleQuickCheck = () => {
     const name = quickCheck.trim().toLowerCase();
     if (!name) return;
 
-    const found = guests.find(g =>
-      !g.checkedInAt && (
-        g.firstName.toLowerCase().includes(name) ||
-        g.lastName.toLowerCase().includes(name) ||
-        g.nickname.toLowerCase().includes(name) ||
-        g.id.toLowerCase().includes(name)
-      )
-    );
+    // 🔧 DevOps: ค้นหาจาก RSVP ก่อน
+    const foundGroup = groups.find(g => {
+      const fullName = g.groupName.toLowerCase();
+      return fullName.includes(name);
+    });
 
-    if (found) {
-      toggleGuest(found.id, true);
-      setQuickCheck('');
-      message.success(`เช็คอิน ${found.firstName} ${found.lastName} แล้ว`);
+    if (foundGroup) {
+      // หา Guest ที่ยังไม่เช็คอิน
+      const foundGuest = foundGroup.guests.find(g => !g.checkedInAt);
+
+      if (foundGuest) {
+        toggleGuest(foundGuest.id, true);
+        setQuickCheck('');
+        message.success(`เช็คอิน ${foundGroup.groupName} แล้ว`);
+      } else {
+        message.warning('ไม่พบแขกที่ยังไม่เช็คอิน หรือยังไม่ได้นำเข้า RSVP');
+      }
     } else {
-      message.warning('ไม่พบแขกที่ยังไม่เช็คอิน');
+      message.warning('ไม่พบ RSVP ที่ตรงกับชื่อนี้');
     }
   };
 
-  const columns: ColumnsType<GroupRow> = [
+  const columns: ColumnsType<typeof groups[0]> = [
     {
-      title: 'กลุ่ม',
+      title: 'กลุ่ม (จาก RSVP)',
       dataIndex: 'groupName',
       key: 'groupName',
-      render: (text) => <Text strong>{text}</Text>,
+      render: (text, row) => (
+        <div>
+          <Space>
+            <Text strong>{text}</Text>
+            <Tag color="blue" icon={<FileTextOutlined />}>
+              RSVP
+            </Tag>
+          </Space>
+          {/* 🔧 DevOps: แสดงรายการย่อยจาก RSVP */}
+          <div style={{ marginTop: 8, paddingLeft: 16 }}>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              ตัวเอง {row.rsvp.firstName} {row.rsvp.lastName}
+            </div>
+            {row.rsvp.accompanyingGuests && row.rsvp.accompanyingGuests.length > 0 && (
+              <>
+                {row.rsvp.accompanyingGuests.map((acc, index) => {
+                  const relatedGuest = row.guests.find(g => g.firstName === acc.name);
+                  return (
+                    <div key={index} style={{ fontSize: '12px', color: '#666' }}>
+                      คนที่ {index + 1} {acc.name} {relatedGuest?.checkedInAt ? '✓ เช็คอิน' : ''}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </div>
+      ),
     },
     {
       title: 'ฝ่าย',
-      dataIndex: 'sideSummary',
-      key: 'sideSummary',
+      dataIndex: 'side',
+      key: 'side',
       width: 120,
       render: (side: Side) => side === 'groom' ? <Tag color="blue">เจ้าบ่าว</Tag> : side === 'bride' ? <Tag color="magenta">เจ้าสาว</Tag> : <Tag color="purple">ทั้งคู่</Tag>
     },
@@ -203,13 +211,13 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
       width: 140,
       render: (_, row) => (
         <Space>
-          <Text>{row.checkedIn}/{row.total} คน</Text>
-          {row.total > 0 && (
+          <Text>{row.checkedIn}/{row.totalPeople} คน</Text>
+          {row.totalPeople > 0 && (
             <Progress
-              percent={Math.round((row.checkedIn / row.total) * 100)}
+              percent={Math.round((row.checkedIn / row.totalPeople) * 100)}
               size="small"
               showInfo={false}
-              status={row.checkedIn === row.total ? 'success' : 'active'}
+              status={row.checkedIn === row.totalPeople ? 'success' : 'active'}
             />
           )}
         </Space>
@@ -220,7 +228,7 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
       key: 'groupAction',
       width: 160,
       render: (_, row) => {
-        const allIn = row.checkedIn === row.total && row.total > 0;
+        const allIn = row.checkedIn === row.totalPeople && row.totalPeople > 0;
         return (
           <Space>
             <Button type={allIn ? 'default' : 'primary'} onClick={() => toggleGroup(row, !allIn)}>
@@ -234,7 +242,56 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
 
   return (
     <div className="p-4 md:p-6">
-      <Title level={2} className="mb-6">เช็คอินหน้างาน</Title>
+      <div className="mb-6">
+        <Title level={2} style={{ margin: 0 }}>
+          เช็คอินหน้างาน
+        </Title>
+        <Text type="secondary">จัดการการเช็คอินแขกจากรายการตอบรับ (RSVP)</Text>
+      </div>
+
+      {/* 🔧 DevOps: แสดง Alert ถ้ามี RSVP ที่ยังไม่ได้ import */}
+      {rsvpsNotImported > 0 && (
+        <Alert
+          message={`มี RSVP ที่ยังไม่ได้นำเข้า ${rsvpsNotImported} รายการ`}
+          description="RSVP ที่ยังไม่ได้นำเข้าจะไม่สามารถเช็คอินได้ กรุณานำเข้าผ่านหน้า รายการตอบรับ ก่อน"
+          type="warning"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          className="mb-4"
+          closable
+        />
+      )}
+
+      {/* 🔧 DevOps: RSVP Statistics Section */}
+      <Card
+        title={
+          <Space>
+            <FileTextOutlined />
+            <span>สรุปข้อมูล RSVP</span>
+          </Space>
+        }
+        className="mb-4"
+        size="small"
+      >
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} lg={6}>
+            <Statistic
+              title="RSVP ตอบรับเข้างาน"
+              value={totalRSVPsComing}
+              prefix={<FileTextOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Statistic
+              title="ยังไม่ได้นำเข้า"
+              value={rsvpsNotImported}
+              prefix={<ExclamationCircleOutlined />}
+              valueStyle={{ color: rsvpsNotImported > 0 ? '#faad14' : '#52c41a' }}
+            />
+          </Col>
+        </Row>
+      </Card>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8} lg={6}>
@@ -264,7 +321,7 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
 
               <Alert
                 message="Quick Check-in"
-                description="พิมพ์ชื่อแล้วกด Enter"
+                description="พิมพ์ชื่อจาก RSVP แล้วกด Enter"
                 type="info"
                 showIcon
                 icon={<ThunderboltOutlined />}
@@ -273,7 +330,7 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
 
               <Space.Compact style={{ width: '100%' }}>
                 <Input
-                  placeholder="พิมพ์ชื่อ/ชื่อเล่น/ID → Enter"
+                  placeholder="พิมพ์ชื่อจาก RSVP → Enter"
                   value={quickCheck}
                   onChange={(e) => setQuickCheck(e.target.value)}
                   onPressEnter={handleQuickCheck}
@@ -287,7 +344,7 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
               <Input
                 allowClear
                 prefix={<SearchOutlined />}
-                placeholder="ค้นหา: ชื่อ/ชื่อเล่น/ID"
+                placeholder="ค้นหา: ชื่อจาก RSVP"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -344,7 +401,27 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
               expandable={{
                 expandedRowRender: (row) => (
                   <div>
-                    {row.members.map(m => {
+                    {/* 🔧 DevOps: แสดงข้อมูล RSVP */}
+                    <Alert
+                      message="ข้อมูล RSVP"
+                      description={
+                        <Space direction="vertical" size={4}>
+                          <Text>ชื่อ: {row.rsvp.fullName || `${row.rsvp.firstName} ${row.rsvp.lastName}`}</Text>
+                          {row.rsvp.accompanyingGuests && row.rsvp.accompanyingGuests.length > 0 && (
+                            <Text>ผู้ติดตาม: {row.rsvp.accompanyingGuests.length} คน</Text>
+                          )}
+                          {row.rsvp.note && (
+                            <Text type="secondary">หมายเหตุ: {row.rsvp.note}</Text>
+                          )}
+                        </Space>
+                      }
+                      type="info"
+                      showIcon
+                      icon={<FileTextOutlined />}
+                      style={{ marginBottom: 16 }}
+                    />
+                    {/* 🔧 DevOps: แสดงรายละเอียด Guests ที่ link กับ RSVP */}
+                    {row.guests.map(m => {
                       const zone = zones.find(z => z.zoneId === m.zoneId);
                       const table = tables.find(t => t.tableId === m.tableId);
                       const checked = !!m.checkedInAt;
@@ -372,6 +449,15 @@ const CheckInPage: React.FC<CheckInPageProps> = ({ guests, setGuests, zones, tab
                         </div>
                       );
                     })}
+                    {/* 🔧 DevOps: แสดงข้อความถ้ายังไม่มี Guest ที่ link */}
+                    {row.guests.length === 0 && (
+                      <Alert
+                        message="ยังไม่มี Guest ที่ link กับ RSVP นี้"
+                        description="กรุณานำเข้า RSVP ผ่านหน้า รายการตอบรับ ก่อน"
+                        type="warning"
+                        showIcon
+                      />
+                    )}
                   </div>
                 )
               }}

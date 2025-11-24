@@ -14,6 +14,7 @@ import {
   Select,
   Spin,
   Modal,
+  Alert,
 } from 'antd';
 import {
   UsergroupAddOutlined,
@@ -48,6 +49,7 @@ import {
   updateRSVP, // Import updateRSVP
   createGuestFromRSVP, // Import createGuestFromRSVP
   getGuest, // Import getGuest
+  getGuestByRsvpUid, // 🔧 DevOps: Import idempotency check
   updateGuestFromRSVP, // Import updateGuestFromRSVP
   getCurrentUser, // Import getCurrentUser for fallback
   registerSession, // Import registerSession
@@ -55,8 +57,11 @@ import {
   subscribeSessionChanges, // Import subscribeSessionChanges
   getUserAppState, // Import getUserAppState
   updateUserAppState, // Import updateUserAppState
-  subscribeUserAppState // Import subscribeUserAppState
+  subscribeUserAppState, // Import subscribeUserAppState
+  getWebViewInfo, // Import getWebViewInfo
 } from '@/services/firebaseService';
+import { get, ref, set, onValue, remove } from 'firebase/database';
+import { database } from '@/firebase/config';
 import type { RSVPData as FirebaseRSVPData } from '@/services/firebaseService';
 import type { User } from 'firebase/auth';
 import { Guest, Side } from '@/types';
@@ -864,6 +869,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     const [sessionWarning, setSessionWarning] = useState<{ hasOtherSession: boolean; otherSessionStartedAt?: string } | null>(null);
     // เพิ่ม ref เพื่อป้องกันการ logout ซ้ำ
     const isLoggingOutRef = useRef(false);
+    
+    // 🔧 DevOps: เพิ่ม state สำหรับ Modal คัดลอก link
+    const [copyLinkModal, setCopyLinkModal] = useState<{
+        visible: boolean;
+        link: string;
+        provider: 'google' | 'facebook' | null;
+    }>({
+        visible: false,
+        link: '',
+        provider: null,
+    });
     const sessionLogoutTriggeredRef = useRef(false);
     // เพิ่ม flag เพื่อเช็คว่ายังอยู่ใน initial session setup หรือไม่
     const isInitialSessionSetupRef = useRef(true);
@@ -908,35 +924,44 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     setIsCheckingAuth(false);
                     message.success('เข้าสู่ระบบสำเร็จ');
                     
-                    // สร้าง session ใหม่หลังจาก redirect login
-                    // ใช้ async IIFE เพื่อให้สามารถใช้ await ได้
-                    (async () => {
-                        try {
-                            // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
-                            isRegisteringSessionRef.current = true;
-                            
-                            const sessionResult = await registerSession(user);
-                            if (!isMounted) return;
-                            
-                            // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
-                            isInitialSessionSetupRef.current = false;
-                            isRegisteringSessionRef.current = false;
-                            currentSessionStartedAtRef.current = sessionResult.startedAt;
-                            
-                            if (sessionResult.hasOtherActiveSession) {
-                                // มี session อื่น active อยู่ → แสดง warning
-                                setSessionWarning({
-                                    hasOtherSession: true,
-                                    otherSessionStartedAt: sessionResult.otherSessionStartedAt,
-                                });
+                    // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+                    const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+                    const isAdminPath = currentPathname.startsWith('/admin');
+                    
+                    if (!isAdminPath) {
+                        // สร้าง session ใหม่หลังจาก redirect login (เฉพาะหน้า guest)
+                        // ใช้ async IIFE เพื่อให้สามารถใช้ await ได้
+                        (async () => {
+                            try {
+                                // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
+                                isRegisteringSessionRef.current = true;
+                                
+                                // Guest Flow - ใช้ isAdmin = false
+                                const sessionResult = await registerSession(user, false);
+                                if (!isMounted) return;
+                                
+                                // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
+                                isInitialSessionSetupRef.current = false;
+                                isRegisteringSessionRef.current = false;
+                                currentSessionStartedAtRef.current = sessionResult.startedAt;
+                                
+                                if (sessionResult.hasOtherActiveSession) {
+                                    // มี session อื่น active อยู่ → แสดง warning
+                                    setSessionWarning({
+                                        hasOtherSession: true,
+                                        otherSessionStartedAt: sessionResult.otherSessionStartedAt,
+                                    });
+                                }
+                            } catch (sessionError) {
+                                console.error('Error registering session:', sessionError);
+                                // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
+                                isInitialSessionSetupRef.current = false;
+                                isRegisteringSessionRef.current = false;
                             }
-                        } catch (sessionError) {
-                            console.error('Error registering session:', sessionError);
-                            // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
-                            isInitialSessionSetupRef.current = false;
-                            isRegisteringSessionRef.current = false;
-                        }
-                    })();
+                        })();
+                    } else {
+                        console.log('⏭️ [Redirect Login] ข้าม session management - อยู่ในหน้า admin');
+                    }
                 } else {
                     // No redirect result, continue with auth state check
                     // onAuthStateChanged จะจัดการต่อ
@@ -977,9 +1002,23 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         const unsubscribe = onAuthStateChange((user) => {
             if (!isMounted) return;
             
+            // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+            const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+            const isAdminPath = currentPathname.startsWith('/admin');
+            
+            if (isAdminPath) {
+                // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
+                console.log('⏭️ [Auth State Change] ข้าม session management - อยู่ในหน้า admin');
+                setIsCheckingAuth(false);
+                setLoading(false);
+                return;
+            }
+            
             // ถ้าเป็น initial check และไม่มี user ให้ข้าม (ไม่ log "User logged out")
             if (isInitialAuthCheck && !user) {
                 isInitialAuthCheck = false;
+                setIsLoggedIn(false); // 🔧 Fix: ตั้ง isLoggedIn = false เมื่อยังไม่ login
+                setCurrentUser(null); // 🔧 Fix: ตั้ง currentUser = null เมื่อยังไม่ login
                 setIsCheckingAuth(false);
                 return;
             }
@@ -1011,9 +1050,23 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // ถ้าไม่มี redirect result และ auth state เปลี่ยน
             if (user) {
                 console.log('✅ Auth state detected, user:', user.uid);
+                
+                // Guest Flow - ทำงาน session management ตามปกติ
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
                 setUserInfo(user);
+                
+                // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+                const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+                const isAdminPath = currentPathname.startsWith('/admin');
+                
+                if (isAdminPath) {
+                    // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
+                    console.log('⏭️ [Session] ข้าม session management - อยู่ในหน้า admin');
+                    setIsCheckingAuth(false);
+                    setLoading(false);
+                    return;
+                }
                 
                 // สร้าง session ใหม่ (กรณี persistent login)
                 // แต่ถ้ามีการ register session อยู่แล้ว (เช่น จาก handleLogin) → ข้าม
@@ -1025,7 +1078,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                 // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
                                 isRegisteringSessionRef.current = true;
                                 
-                                const sessionResult = await registerSession(user);
+                                // Guest Flow - ใช้ isAdmin = false
+                                const sessionResult = await registerSession(user, false);
                                 if (!isMounted) return;
                                 
                                 // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
@@ -1070,56 +1124,108 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             clearTimeout(authTimeout); // Clear timeout เมื่อ component unmount
             unsubscribe();
         };
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Empty deps array is intentional - only run once on mount
 
-    // ดึงข้อมูล RSVP เมื่อ login หรือเมื่อ currentUser เปลี่ยน
+    // 🔧 DevOps Fix: ดึงข้อมูล RSVP แบบ realtime เมื่อ login หรือเมื่อ currentUser เปลี่ยน
     useEffect(() => {
-        const loadUserRSVP = async () => {
-            if (currentUser && isLoggedIn) {
-                setIsLoadingRSVP(true);
-                try {
-                    const existingRSVP = await getRSVPByUid(currentUser);
-                    if (existingRSVP) {
-                        setSubmittedData(existingRSVP);
-                        // เติมข้อมูลลง form เพื่อให้แก้ไขได้
-                        // ใช้ fullName ถ้ามี หรือสร้างจาก firstName + lastName
-                        const fullName = existingRSVP.fullName || 
-                            (existingRSVP.firstName && existingRSVP.lastName 
-                                ? `${existingRSVP.firstName} ${existingRSVP.lastName}` 
-                                : existingRSVP.firstName || '');
-                        
-                        form.setFieldsValue({
-                            isComing: existingRSVP.isComing,
-                            side: existingRSVP.side,
-                            relation: existingRSVP.relation,
-                            fullName: fullName,
-                            note: existingRSVP.note,
-                            accompanyingGuests: existingRSVP.accompanyingGuests || [],
-                        });
-                    } else if (userInfo) {
-                        // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
+        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนโหลด RSVP
+        const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+        const isAdminPath = currentPathname.startsWith('/admin');
+        
+        if (isAdminPath) {
+            // ถ้าอยู่ในหน้า admin ไม่ต้องโหลด RSVP
+            console.log('⏭️ [RSVP] ข้ามการโหลด RSVP - อยู่ในหน้า admin');
+            setIsLoadingRSVP(false);
+            return;
+        }
+        
+        if (currentUser && isLoggedIn) {
+            setIsLoadingRSVP(true);
+            
+            // 🔧 DevOps Fix: ใช้ realtime subscription แทน one-time fetch
+            const rsvpRef = ref(database, `rsvps`);
+            const unsubscribe = onValue(rsvpRef, (snapshot) => {
+                if (!snapshot.exists()) {
+                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
+                    if (userInfo) {
                         form.setFieldsValue({
                             fullName: userInfo.displayName || '',
                         });
                     }
-                } catch (error) {
-                    console.error('Error loading RSVP:', error);
-                } finally {
                     setIsLoadingRSVP(false);
+                    return;
                 }
-            } else {
-                // ถ้า logout ให้ clear ข้อมูล
-                setSubmittedData(null);
-                form.resetFields();
+                
+                const data = snapshot.val();
+                const rsvps = Object.keys(data).map(key => {
+                    const rsvp = { id: key, ...data[key] };
+                    // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
+                    if ('phoneNumber' in rsvp) {
+                        delete (rsvp as Record<string, unknown>).phoneNumber;
+                    }
+                    return rsvp;
+                });
+                
+                // หา RSVP ของ user นี้
+                const userRSVP = rsvps.find(r => r.uid === currentUser);
+                
+                if (userRSVP) {
+                    console.log('✅ [RSVP] Realtime update - พบ RSVP:', userRSVP.id);
+                    setSubmittedData(userRSVP);
+                    
+                    // เติมข้อมูลลง form เพื่อให้แก้ไขได้
+                    // ใช้ fullName ถ้ามี หรือสร้างจาก firstName + lastName
+                    const fullName = userRSVP.fullName || 
+                        (userRSVP.firstName && userRSVP.lastName 
+                            ? `${userRSVP.firstName} ${userRSVP.lastName}` 
+                            : userRSVP.firstName || '');
+                    
+                    form.setFieldsValue({
+                        isComing: userRSVP.isComing,
+                        side: userRSVP.side,
+                        relation: userRSVP.relation,
+                        fullName: fullName,
+                        note: userRSVP.note,
+                        accompanyingGuests: userRSVP.accompanyingGuests || [],
+                    });
+                } else if (userInfo) {
+                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
+                    form.setFieldsValue({
+                        fullName: userInfo.displayName || '',
+                    });
+                }
+                
                 setIsLoadingRSVP(false);
-            }
-        };
-        loadUserRSVP();
-    }, [currentUser, isLoggedIn, form, userInfo]);
+            }, (error) => {
+                console.error('❌ [RSVP] เกิดข้อผิดพลาดในการ subscribe RSVP:', error);
+                setIsLoadingRSVP(false);
+            });
+            
+            return () => {
+                unsubscribe();
+            };
+        } else {
+            // ถ้า logout ให้ clear ข้อมูล
+            setSubmittedData(null);
+            form.resetFields();
+            setIsLoadingRSVP(false);
+        }
+    }, [currentUser, isLoggedIn, userInfo, form]);
 
     // Subscribe เพื่อเช็คว่า session ถูกเตะออกหรือไม่
     useEffect(() => {
         if (!currentUser) return;
+
+        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+        const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+        const isAdminPath = currentPathname.startsWith('/admin');
+        
+        if (isAdminPath) {
+            // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
+            console.log('⏭️ [Session] ข้าม session subscription - อยู่ในหน้า admin');
+            return;
+        }
 
         // Reset flag เมื่อ currentUser เปลี่ยน
         sessionLogoutTriggeredRef.current = false;
@@ -1135,69 +1241,151 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // เพิ่ม flag เพื่อ log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue)
         let hasLoggedInitialSetup = false;
 
-        const unsubscribe = subscribeSessionChanges(currentUser, (isOnline, startedAt) => {
-            // ป้องกันการเรียกซ้ำ
-            if (sessionLogoutTriggeredRef.current || isLoggingOutRef.current) return;
+        // 🔧 DevOps: เก็บ session ID ของตัวเองเพื่อเช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
+        // ใช้ Firebase เป็นหลัก (ไม่พึ่งพา browser storage)
+        const getCurrentSessionId = async (): Promise<string | null> => {
+            if (!currentUser || typeof currentUser !== 'string') return null;
             
-            // ✅ ถ้ายังอยู่ใน initial setup phase (ยังไม่สร้าง session เสร็จ) → ไม่ต้อง logout
-            // รอให้ registerSession() เสร็จก่อน (isInitialSessionSetupRef จะถูก set เป็น false)
-            if (isInitialSessionSetupRef.current) {
-                // Log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue callback)
-                if (!hasLoggedInitialSetup) {
-                    console.log('⏳ Initial session setup in progress, skipping logout check');
-                    hasLoggedInitialSetup = true;
+            try {
+                // 1. ลองดึงจาก Firebase ก่อน (ไม่พึ่งพา browser storage)
+                const sessionIdRef = ref(database, `userSessions/${currentUser}/sessionId`);
+                const snapshot = await get(sessionIdRef);
+                if (snapshot.exists()) {
+                    return snapshot.val();
                 }
-                // เก็บ startedAt ครั้งแรกเมื่อ session setup เสร็จ
-                if (isOnline && startedAt) {
-                    currentSessionStartedAtRef.current = startedAt;
-                }
-                return;
+            } catch (error) {
+                console.warn('⚠️ [Session ID] ไม่สามารถดึงจาก Firebase ได้:', error);
             }
             
-            // ถ้า isOnline === false แสดงว่า session ถูกปิด (logout จากที่อื่นหรือถูกเตะออก)
-            if (!isOnline) {
-                // Session ถูกลบหรือถูกปิด → ถูกลงชื่อออก
-                sessionLogoutTriggeredRef.current = true;
-                isLoggingOutRef.current = true;
-                
-                message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
-                
-                // เรียก logout (ไม่ต้องรอ finally เพราะ handleLogout จะจัดการ flag เอง)
-                handleLogout();
-                return;
+            // 2. Fallback: ลองดึงจาก browser storage (cache)
+            try {
+                const sessionId = sessionStorage.getItem('__wedding_session_id__');
+                if (sessionId) return sessionId;
+            } catch {
+                // sessionStorage ไม่ได้ → ข้ามไป
             }
             
-            // ✅ เช็คว่า startedAt เปลี่ยนหรือไม่ (ตรวจจับการยึด session)
-            // ถ้า startedAt เปลี่ยนและไม่ใช่ session ของตัวเอง → session ถูกยึด
-            if (startedAt && currentSessionStartedAtRef.current && 
-                startedAt !== currentSessionStartedAtRef.current) {
-                // Session ถูกยึด → ถูกลงชื่อออก
-                sessionLogoutTriggeredRef.current = true;
-                isLoggingOutRef.current = true;
-                
-                message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
-                
-                // เรียก logout
-                handleLogout();
-                return;
+            try {
+                const sessionId = localStorage.getItem('__wedding_session_id__');
+                if (sessionId) return sessionId;
+            } catch {
+                // localStorage ไม่ได้ → ข้ามไป
             }
             
-            // ถ้า isOnline === true และ startedAt ไม่เปลี่ยน → ยัง active อยู่
-            // อัพเดท currentSessionStartedAtRef ถ้ายังไม่มีค่า
-            if (isOnline && startedAt && !currentSessionStartedAtRef.current) {
-                currentSessionStartedAtRef.current = startedAt;
-            }
-        });
+            return null;
+        };
+        
+        // Guest Flow - ใช้ isAdmin = false
+        let unsubscribeSession: (() => void) | null = null;
+        
+        unsubscribeSession = subscribeSessionChanges(currentUser, async (isOnline, startedAt, sessionId) => {
+                    // ป้องกันการเรียกซ้ำ
+                    if (sessionLogoutTriggeredRef.current || isLoggingOutRef.current) return;
+                    
+                    // 🔧 DevOps Fix: เช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
+                    const currentSessionId = await getCurrentSessionId();
+                    const isOwnSession = sessionId && currentSessionId && sessionId === currentSessionId;
+                    
+                    // ✅ ถ้ายังอยู่ใน initial setup phase (ยังไม่สร้าง session เสร็จ) → ไม่ต้อง logout
+                    // รอให้ registerSession() เสร็จก่อน (isInitialSessionSetupRef จะถูก set เป็น false)
+                    if (isInitialSessionSetupRef.current) {
+                        // Log แค่ครั้งแรก (ป้องกัน log ซ้ำจาก Firebase onValue callback)
+                        if (!hasLoggedInitialSetup) {
+                            console.log('⏳ Initial session setup in progress, skipping logout check');
+                            hasLoggedInitialSetup = true;
+                        }
+                        // เก็บ startedAt ครั้งแรกเมื่อ session setup เสร็จ
+                        if (isOnline && startedAt) {
+                            currentSessionStartedAtRef.current = startedAt;
+                        }
+                        return;
+                    }
+                    
+                    // ถ้า isOnline === false แสดงว่า session ถูกปิด (logout จากที่อื่นหรือถูกเตะออก)
+                    if (!isOnline) {
+                        // Session ถูกลบหรือถูกปิด → ถูกลงชื่อออก
+                        sessionLogoutTriggeredRef.current = true;
+                        isLoggingOutRef.current = true;
+                        
+                        message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
+                        
+                        // เรียก logout (ไม่ต้องรอ finally เพราะ handleLogout จะจัดการ flag เอง)
+                        handleLogout();
+                        return;
+                    }
+                    
+                    // 🔧 DevOps Fix: เช็คว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
+                    // ถ้า sessionId ไม่ตรงกับ session ของตัวเอง → session ถูกยึด
+                    // Note: currentSessionId ถูก await แล้วในบรรทัดก่อนหน้า
+                    if (isOnline && sessionId && currentSessionId && sessionId !== currentSessionId) {
+                        // Session ถูกยึด → ถูกลงชื่อออก
+                        sessionLogoutTriggeredRef.current = true;
+                        isLoggingOutRef.current = true;
+                        
+                        console.log('⚠️ [Session] Session ถูกยึด - sessionId ไม่ตรงกัน:', { current: currentSessionId, active: sessionId });
+                        message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
+                        
+                        // เรียก logout
+                        handleLogout();
+                        return;
+                    }
+                    
+                    // ✅ เช็คว่า startedAt เปลี่ยนหรือไม่ (ตรวจจับการยึด session - fallback)
+                    // ถ้า startedAt เปลี่ยนและไม่ใช่ session ของตัวเอง → session ถูกยึด
+                    if (startedAt && currentSessionStartedAtRef.current && 
+                        startedAt !== currentSessionStartedAtRef.current && !isOwnSession) {
+                        // Session ถูกยึด → ถูกลงชื่อออก
+                        sessionLogoutTriggeredRef.current = true;
+                        isLoggingOutRef.current = true;
+                        
+                        console.log('⚠️ [Session] Session ถูกยึด - startedAt เปลี่ยน:', { current: currentSessionStartedAtRef.current, new: startedAt });
+                        message.warning('คุณถูกลงชื่อออกเพราะมีการเข้าสู่ระบบจากที่อื่น');
+                        
+                        // เรียก logout
+                        handleLogout();
+                        return;
+                    }
+                    
+                    // ถ้า isOnline === true และ sessionId ตรงกัน → ยัง active อยู่ (session ของตัวเอง)
+                    // อัพเดท currentSessionStartedAtRef ถ้ายังไม่มีค่า
+                    if (isOnline && startedAt && !currentSessionStartedAtRef.current) {
+                        currentSessionStartedAtRef.current = startedAt;
+                    }
+                    
+                    // 🔧 DevOps Fix: ถ้า session ที่ active อยู่เป็นของตัวเอง → ปิด modal warning ทันที
+                    if (isOnline && isOwnSession) {
+                        console.log('✅ [Session] Session ที่ active อยู่เป็นของตัวเอง ไม่ต้องแสดง warning');
+                        // ปิด modal warning ถ้ามี
+                        if (sessionWarning?.hasOtherSession) {
+                            console.log('🔧 [Session] ปิด modal warning เพราะ session เป็นของตัวเอง');
+                            setSessionWarning(null);
+                        }
+                    }
+                }, false);
 
         return () => {
-            unsubscribe();
+            if (unsubscribeSession) {
+                unsubscribeSession();
+            }
             sessionLogoutTriggeredRef.current = false;
         };
-    }, [currentUser]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser]); // handleLogout is stable and doesn't need to be in deps
 
     const handleLogin = async (provider: 'google' | 'facebook') => {
         // Prevent multiple clicks
         if (loading) return;
+
+        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+        const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+        const isAdminPath = currentPathname.startsWith('/admin');
+        
+        if (isAdminPath) {
+            // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
+            console.log('⏭️ [Login] ข้าม session management - อยู่ในหน้า admin');
+            setLoading(false);
+            return;
+        }
 
         try {
             setLoading(true);
@@ -1214,6 +1402,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
             const firebaseUser = getCurrentUser();
             if (firebaseUser) {
+                // Guest Flow - ทำงาน session management ตามปกติ
                 console.log('✅ Login successful, setting user state:', firebaseUser.uid);
                 setCurrentUser(firebaseUser.uid);
                 setUserInfo(firebaseUser);
@@ -1224,21 +1413,62 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     // ตั้ง flag เพื่อบอกว่า session registration กำลังดำเนินการอยู่
                     isRegisteringSessionRef.current = true;
                     
-                    const sessionResult = await registerSession(firebaseUser);
+                    // Guest Flow - ใช้ isAdmin = false
+                    const sessionResult = await registerSession(firebaseUser, false);
                     
                     // ✅ Session สร้างเสร็จแล้ว → ปิด initial setup flag และเก็บ startedAt
                     isInitialSessionSetupRef.current = false;
                     isRegisteringSessionRef.current = false;
                     currentSessionStartedAtRef.current = sessionResult.startedAt;
                     
-                    if (sessionResult.hasOtherActiveSession) {
-                        // มี session อื่น active อยู่ → แสดง warning
-                        setSessionWarning({
-                            hasOtherSession: true,
-                            otherSessionStartedAt: sessionResult.otherSessionStartedAt,
-                        });
-                        message.warning('มีการเข้าสู่ระบบจากอุปกรณ์อื่นอยู่');
-                    }
+                    // 🔧 DevOps Fix: ตรวจสอบอีกครั้งว่า session ที่ active อยู่เป็นของตัวเองหรือไม่
+                    // (เพราะ registerSession อาจจะ return hasOtherActiveSession: true แม้ว่า session จะเป็นของตัวเอง)
+                    // รอสักครู่เพื่อให้ Firebase sync sessionId ก่อน
+                    setTimeout(async () => {
+                        // ดึง sessionId จาก Firebase เพื่อตรวจสอบ
+                        try {
+                            const sessionIdRef = ref(database, `userSessions/${firebaseUser.uid}/sessionId`);
+                            const snapshot = await get(sessionIdRef);
+                            if (snapshot.exists()) {
+                                const activeSessionId = snapshot.val();
+                                // ดึง currentSessionId จาก browser storage หรือ Firebase
+                                let currentSessionId: string | null = null;
+                                try {
+                                    const currentSessionIdRef = ref(database, `userSessions/${firebaseUser.uid}/sessionId`);
+                                    const currentSnapshot = await get(currentSessionIdRef);
+                                    if (currentSnapshot.exists()) {
+                                        currentSessionId = currentSnapshot.val();
+                                    }
+                                } catch {
+                                    // Fallback: ลองดึงจาก browser storage
+                                    try {
+                                        currentSessionId = sessionStorage.getItem('__wedding_session_id__') || localStorage.getItem('__wedding_session_id__');
+                                    } catch {
+                                        // Ignore
+                                    }
+                                }
+                                
+                                if (activeSessionId && currentSessionId && activeSessionId === currentSessionId) {
+                                    // Session เป็นของตัวเอง → ไม่ต้องแสดง warning
+                                    console.log('✅ [Session] Session ที่ active อยู่เป็นของตัวเอง ไม่ต้องแสดง warning (double check)');
+                                    setSessionWarning(null);
+                                    return;
+                                }
+                            }
+                        } catch (error) {
+                            console.warn('⚠️ [Session] ไม่สามารถตรวจสอบ sessionId จาก Firebase ได้:', error);
+                        }
+                        
+                        // ถ้ายังไม่ปิด warning → แสดง warning ตามปกติ
+                        if (sessionResult.hasOtherActiveSession) {
+                            // มี session อื่น active อยู่ → แสดง warning
+                            setSessionWarning({
+                                hasOtherSession: true,
+                                otherSessionStartedAt: sessionResult.otherSessionStartedAt,
+                            });
+                            message.warning('มีการเข้าสู่ระบบจากอุปกรณ์อื่นอยู่');
+                        }
+                    }, 500); // รอ 500ms เพื่อให้ Firebase sync
                 } catch (sessionError) {
                     console.error('Error registering session:', sessionError);
                     // ถ้า session สร้างไม่สำเร็จ ก็ปิด flag เพื่อให้ระบบทำงานปกติ
@@ -1256,7 +1486,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             
             // Handle specific errors
             if (error.code === 'auth/popup-blocked') {
-                message.error('ป๊อปอัปถูกบล็อก กรุณาอนุญาตป๊อปอัปสำหรับเว็บไซต์นี้');
+                message.error({
+                    content: 'ป๊อปอัปถูกบล็อก กรุณาอนุญาตป๊อปอัปสำหรับเว็บไซต์นี้ หรือเปิดในเบราว์เซอร์ภายนอก',
+                    duration: 5,
+                });
                 setLoading(false);
             } else if (error.code === 'auth/popup-closed-by-user') {
                 message.warning('ยกเลิกการเข้าสู่ระบบ');
@@ -1272,6 +1505,36 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setLoading(false);
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 message.error('อีเมลนี้ถูกเชื่อมกับผู้ให้บริการอื่นอยู่แล้ว กรุณาเข้าสู่ระบบด้วยผู้ให้บริการเดิม');
+                setLoading(false);
+            } else if (error.code === 'auth/operation-not-supported-in-this-environment') {
+                // สำหรับ WebView ที่ไม่รองรับ popup → แสดง Modal พร้อม link
+                const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+                setCopyLinkModal({
+                    visible: true,
+                    link: currentUrl,
+                    provider: provider,
+                });
+                setLoading(false);
+            } else if (error.message?.startsWith('POPUP_BLOCKED|')) {
+                // 🔧 DevOps: ถ้า popup ถูกบล็อก → แสดง Modal พร้อม link ให้คัดลอก
+                const link = error.message.split('|')[1];
+                setCopyLinkModal({
+                    visible: true,
+                    link: link,
+                    provider: provider,
+                });
+                setLoading(false);
+            } else if (error.message?.includes('เปิดในเบราว์เซอร์') || 
+                       error.message?.includes('sessionStorage') ||
+                       error.message?.includes('initial state') ||
+                       error.message?.includes('missing initial state')) {
+                // สำหรับ WebView ที่ sessionStorage ไม่ทำงาน → แสดง Modal พร้อม link
+                const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+                setCopyLinkModal({
+                    visible: true,
+                    link: currentUrl,
+                    provider: provider,
+                });
                 setLoading(false);
             } else {
                 // ไม่ทราบสาเหตุ → แสดงข้อความผิดพลาดและเคลียร์ loading
@@ -1300,7 +1563,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // ปิด session ก่อน logout
             if (currentUser) {
                 try {
-                    await endSession(currentUser);
+                    // Guest Flow - ใช้ isAdmin = false
+                    await endSession(currentUser, false);
                 } catch (sessionError) {
                     console.error('Error ending session:', sessionError);
                     // ไม่ต้องบล็อกการทำงาน ถ้า session end ล้มเหลว
@@ -1441,9 +1705,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             if (existingRSVP && existingRSVP.id) {
                 // Update RSVP ที่มีอยู่แล้ว
                 try {
-                    console.log('Updating existing RSVP with ID:', existingRSVP.id, 'Data:', rsvpData);
+                    console.log('🔄 [RSVP] กำลังอัปเดต RSVP ID:', existingRSVP.id);
+                    console.log('📝 [RSVP] ข้อมูลที่อัปเดต:', JSON.stringify(rsvpData, null, 2));
                     await updateRSVP(existingRSVP.id, rsvpData);
-                    console.log('RSVP updated successfully');
+                    console.log('✅ [RSVP] อัปเดต RSVP สำเร็จ');
                     rsvpId = existingRSVP.id;
                     setSubmittedData({ 
                         ...rsvpData, 
@@ -1462,9 +1727,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             } else {
                 // Create RSVP ใหม่
                 try {
-                    console.log('Creating new RSVP with data:', rsvpData);
+                    console.log('🆕 [RSVP] กำลังสร้าง RSVP ใหม่...');
+                    console.log('📝 [RSVP] ข้อมูล RSVP:', JSON.stringify(rsvpData, null, 2));
                     rsvpId = await createRSVP(rsvpData);
-                    console.log('RSVP created successfully with ID:', rsvpId);
+                    console.log('✅ [RSVP] สร้าง RSVP สำเร็จ ID:', rsvpId);
                     setSubmittedData({ 
                         ...rsvpData, 
                         id: rsvpId,
@@ -1481,13 +1747,33 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 }
             }
 
-            // ถ้า isComing === 'yes' ให้สร้างหรืออัพเดท Guest อัตโนมัติ
+            // 🔧 DevOps: ถ้า isComing === 'yes' ให้สร้างหรืออัพเดท Guest อัตโนมัติ (พร้อม Idempotency Check)
             if (values.isComing === 'yes') {
                 try {
-                    const existingGuest = existingRSVP?.guestId ? await getGuest(existingRSVP.guestId) : null;
+                    console.log('🔄 [RSVP Flow] กำลังจัดการ Guest สำหรับ RSVP...');
+                    
+                    // 1. เช็ค Guest ที่ link กับ RSVP อยู่แล้ว (ถ้ามี)
+                    let existingGuest = existingRSVP?.guestId ? await getGuest(existingRSVP.guestId) : null;
+                    
+                    // 2. 🔧 Idempotency Check: เช็คว่ามี Guest ที่มี rsvpUid นี้อยู่แล้วหรือไม่
+                    if (!existingGuest) {
+                        console.log('🔍 [RSVP Flow] กำลังตรวจสอบ Guest ที่มี rsvpUid:', effectiveUserId);
+                        existingGuest = await getGuestByRsvpUid(effectiveUserId);
+                        
+                        if (existingGuest) {
+                            console.log('✅ [RSVP Flow] พบ Guest ที่มีอยู่แล้ว (rsvpUid):', existingGuest.id);
+                            // Link RSVP กับ Guest ที่มีอยู่ (ถ้ายังไม่ได้ link)
+                            if (!existingRSVP?.guestId || existingRSVP.guestId !== existingGuest.id) {
+                                console.log('🔗 [RSVP Flow] กำลัง link RSVP กับ Guest ที่มีอยู่...');
+                                await updateRSVP(rsvpId, { guestId: existingGuest.id });
+                                console.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
+                            }
+                        }
+                    }
                     
                     if (existingGuest) {
                         // Update Guest ที่มีอยู่แล้ว - ใช้ฟังก์ชันสำหรับ RSVP
+                        console.log('🔄 [RSVP Flow] กำลังอัปเดต Guest ที่มีอยู่:', existingGuest.id);
                         const updatedGuest: Partial<Guest> = {
                             firstName: rsvpData.firstName || existingGuest.firstName,
                             lastName: rsvpData.lastName || existingGuest.lastName,
@@ -1510,17 +1796,141 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
                         await updateGuestFromRSVP(existingGuest.id, updatedGuest, effectiveUserId);
+                        console.log('✅ [RSVP Flow] อัปเดต Guest สำเร็จ:', existingGuest.id);
                         
-                        // Update RSVP ให้ link กับ Guest
-                        await updateRSVP(rsvpId, { guestId: existingGuest.id });
+                        // Update RSVP ให้ link กับ Guest (ถ้ายังไม่ได้ link)
+                        if (!existingRSVP?.guestId || existingRSVP.guestId !== existingGuest.id) {
+                            await updateRSVP(rsvpId, { guestId: existingGuest.id });
+                            console.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
+                        }
+                        
+                        // 🔧 DevOps Fix: จัดการ accompanying guests เมื่อ update RSVP
+                        if (rsvpData.accompanyingGuests && rsvpData.accompanyingGuests.length > 0) {
+                            console.log(`🔄 [RSVP Flow] กำลังจัดการ Guest ผู้ติดตาม ${rsvpData.accompanyingGuests.length} คน...`);
+                            
+                            // หา groupId จาก existingGuest
+                            const groupId = existingGuest.groupId || `GROUP_${existingGuest.id}`;
+                            const groupName = existingGuest.groupName || `${rsvpData.firstName} ${rsvpData.lastName}`;
+                            
+                            // ดึง Guests ที่มีอยู่แล้วทั้งหมด (main + accompanying)
+                            const allExistingGuests = await get(ref(database, 'guests'));
+                            const existingGuestsList: Guest[] = allExistingGuests.exists() 
+                                ? Object.keys(allExistingGuests.val()).map(key => ({ id: key, ...allExistingGuests.val()[key] }))
+                                : [];
+                            
+                            // หา accompanying guests ที่มีอยู่แล้ว (ผ่าน groupId และ rsvpUid)
+                            const existingAccGuests = existingGuestsList.filter(g => 
+                                g.rsvpUid === effectiveUserId && 
+                                g.id !== existingGuest.id &&
+                                (g.groupId === groupId || g.groupId === existingGuest.groupId)
+                            );
+                            
+                            // สร้าง/อัพเดต accompanying guests
+                            for (let i = 0; i < rsvpData.accompanyingGuests.length; i++) {
+                                try {
+                                    const accGuest = rsvpData.accompanyingGuests[i];
+                                    
+                                    // หา Guest ที่มีอยู่แล้ว (match ตามชื่อและ rsvpUid)
+                                    const existingAccGuest = existingAccGuests.find(g => 
+                                        g.rsvpUid === effectiveUserId &&
+                                        g.firstName === accGuest.name &&
+                                        g.id !== existingGuest.id
+                                    );
+                                    
+                                    if (existingAccGuest) {
+                                        // อัพเดต Guest ที่มีอยู่แล้ว
+                                        const updatedAccGuest: Partial<Guest> = {
+                                            firstName: accGuest.name || existingAccGuest.firstName,
+                                            relationToCouple: accGuest.relationToMain || existingAccGuest.relationToCouple,
+                                            side: rsvpData.side as Side,
+                                            groupId: groupId,
+                                            groupName: groupName,
+                                            isComing: true,
+                                            updatedAt: new Date().toISOString(),
+                                        };
+                                        
+                                        Object.keys(updatedAccGuest).forEach(key => {
+                                            const value = (updatedAccGuest as Record<string, unknown>)[key];
+                                            if (value === undefined) {
+                                                delete (updatedAccGuest as Record<string, unknown>)[key];
+                                            }
+                                        });
+                                        
+                                        await updateGuestFromRSVP(existingAccGuest.id, updatedAccGuest, effectiveUserId);
+                                        console.log(`✅ [RSVP Flow] อัปเดต Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, existingAccGuest.id, accGuest.name);
+                                    } else {
+                                        // สร้าง Guest ใหม่สำหรับผู้ติดตาม
+                                        const timestamp = Date.now();
+                                        const random = Math.floor(Math.random() * 1000);
+                                        const accGuestId = `G${timestamp}${random}_${i}`;
+                                        const accGuestData: Guest = {
+                                            id: accGuestId,
+                                            firstName: accGuest.name || `คนที่ ${i + 1}`,
+                                            lastName: '',
+                                            nickname: '',
+                                            age: null,
+                                            gender: 'other',
+                                            relationToCouple: accGuest.relationToMain || '',
+                                            side: rsvpData.side as Side,
+                                            zoneId: null,
+                                            tableId: null,
+                                            note: '',
+                                            isComing: true,
+                                            accompanyingGuestsCount: 0,
+                                            groupId: groupId,
+                                            groupName: groupName,
+                                            checkedInAt: null,
+                                            checkInMethod: null,
+                                            rsvpUid: effectiveUserId,
+                                            createdAt: new Date().toISOString(),
+                                            updatedAt: new Date().toISOString(),
+                                        };
+                                        
+                                        Object.keys(accGuestData).forEach(key => {
+                                            const value = (accGuestData as unknown as Record<string, unknown>)[key];
+                                            if (value === undefined) {
+                                                delete (accGuestData as unknown as Record<string, unknown>)[key];
+                                            }
+                                        });
+                                        
+                                        await set(ref(database, `guests/${accGuestId}`), accGuestData);
+                                        console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
+                                    }
+                                } catch (accError: unknown) {
+                                    console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest ผู้ติดตาม ${i + 1}:`, accError);
+                                    if (accError && typeof accError === 'object' && 'code' in accError && accError.code === 'PERMISSION_DENIED') {
+                                        console.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
+                                    }
+                                }
+                            }
+                            
+                            // 🔧 DevOps Fix: ลบ Guests ที่ไม่ตรงกับ RSVP อีกต่อไป (ถ้ามี)
+                            const expectedNames = rsvpData.accompanyingGuests.map(g => g.name);
+                            const guestsToRemove = existingAccGuests.filter(g => !expectedNames.includes(g.firstName));
+                            
+                            for (const guestToRemove of guestsToRemove) {
+                                try {
+                                    await remove(ref(database, `guests/${guestToRemove.id}`));
+                                    console.log(`🗑️ [RSVP Flow] ลบ Guest ที่ไม่ตรงกับ RSVP:`, guestToRemove.id);
+                                } catch (error) {
+                                    console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการลบ Guest:`, error);
+                                }
+                            }
+                            
+                            console.log(`✅ [RSVP Flow] จัดการ Guest ผู้ติดตามเสร็จสิ้น (${rsvpData.accompanyingGuests.length} คน)`);
+                        }
                     } else {
-                        // Create Guest ใหม่ - ใช้ timestamp + random เพื่อป้องกัน ID ซ้ำ
+                        // 🔧 DevOps: สร้างกลุ่ม (Group) จาก RSVP
+                        console.log('🆕 [RSVP Flow] กำลังสร้าง Guest ใหม่ (พร้อมกลุ่ม)...');
                         const timestamp = Date.now();
                         const random = Math.floor(Math.random() * 1000);
-                        const newGuestId = `G${timestamp}${random}`;
+                        const groupId = `GROUP_${timestamp}${random}`;
+                        const groupName = `${rsvpData.firstName || 'ไม่ระบุชื่อ'} ${rsvpData.lastName || ''}`.trim();
+                        const mainGuestId = `G${timestamp}${random}`;
                         
+                        // 1. สร้าง Guest หลัก (ตัวเอง)
                         const newGuest: Guest = {
-                            id: newGuestId,
+                            id: mainGuestId,
                             firstName: rsvpData.firstName || 'ไม่ระบุชื่อ',
                             lastName: rsvpData.lastName || '',
                             nickname: rsvpData.nickname || '',
@@ -1533,11 +1943,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                             note: rsvpData.note || '',
                             isComing: true,
                             accompanyingGuestsCount: rsvpData.accompanyingGuestsCount || 0,
-                            groupId: null,
-                            groupName: null,
+                            groupId: groupId,
+                            groupName: groupName,
                             checkedInAt: null,
                             checkInMethod: null,
-                            rsvpUid: effectiveUserId, // เพิ่ม rsvpUid เพื่อติดตามว่า Guest ถูกสร้างจาก RSVP
+                            rsvpUid: effectiveUserId,
                             createdAt: new Date().toISOString(),
                             updatedAt: new Date().toISOString(),
                         };
@@ -1551,14 +1961,74 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         });
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
-                        // createGuestFromRSVP จะเติม rsvpUid ให้อีกครั้งเพื่อความปลอดภัย
+                        // createGuestFromRSVP จะเช็ค idempotency เอง
                         await createGuestFromRSVP(newGuest, effectiveUserId);
                         
+                        // 2. สร้าง Guest สำหรับผู้ติดตาม (accompanyingGuests)
+                        if (rsvpData.accompanyingGuests && rsvpData.accompanyingGuests.length > 0) {
+                            console.log(`🔄 [RSVP Flow] กำลังสร้าง Guest ผู้ติดตาม ${rsvpData.accompanyingGuests.length} คน...`);
+                            
+                            for (let i = 0; i < rsvpData.accompanyingGuests.length; i++) {
+                                try {
+                                    const accGuest = rsvpData.accompanyingGuests[i];
+                                    const accGuestId = `G${timestamp}${random}_${i}`;
+                                    const accGuestData: Guest = {
+                                        id: accGuestId,
+                                        firstName: accGuest.name || `คนที่ ${i + 1}`,
+                                        lastName: '',
+                                        nickname: '',
+                                        age: null,
+                                        gender: 'other',
+                                        relationToCouple: accGuest.relationToMain || '',
+                                        side: rsvpData.side as Side,
+                                        zoneId: null,
+                                        tableId: null,
+                                        note: '',
+                                        isComing: true,
+                                        accompanyingGuestsCount: 0,
+                                        groupId: groupId,
+                                        groupName: groupName,
+                                        checkedInAt: null,
+                                        checkInMethod: null,
+                                        rsvpUid: effectiveUserId,
+                                        createdAt: new Date().toISOString(),
+                                        updatedAt: new Date().toISOString(),
+                                    };
+                                    
+                                    // Remove undefined fields
+                                    Object.keys(accGuestData).forEach(key => {
+                                        const value = (accGuestData as unknown as Record<string, unknown>)[key];
+                                        if (value === undefined) {
+                                            delete (accGuestData as unknown as Record<string, unknown>)[key];
+                                        }
+                                    });
+                                    
+                                    // 🔧 DevOps: ใช้ createGuestFromRSVP เพื่อให้ผ่าน Firebase Rules และ idempotency check
+                                    // แต่ต้อง bypass idempotency check สำหรับผู้ติดตาม (เพราะมี rsvpUid เดียวกัน)
+                                    // ดังนั้นใช้ set โดยตรง แต่เพิ่ม error handling
+                                    await set(ref(database, `guests/${accGuestId}`), accGuestData);
+                                    console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
+                                } catch (accError: unknown) {
+                                    console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการสร้าง Guest ผู้ติดตาม ${i + 1}:`, accError);
+                                    // ยังคงดำเนินการต่อแม้ว่าจะเกิด error (ไม่ throw เพื่อให้สร้าง Guest คนอื่นต่อได้)
+                                    if (accError && typeof accError === 'object' && 'code' in accError && accError.code === 'PERMISSION_DENIED') {
+                                        console.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
+                                    }
+                                }
+                            }
+                            console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตามเสร็จสิ้น (${rsvpData.accompanyingGuests.length} คน)`);
+                        }
+                        
+                        // 🔧 Double-check: เช็คว่า Guest ถูกสร้างจริงหรือไม่ (อาจจะถูก skip เพราะ idempotency)
+                        const createdGuest = await getGuestByRsvpUid(effectiveUserId);
+                        const finalGuestId = createdGuest?.id || mainGuestId;
+                        
                         // Update RSVP ให้ link กับ Guest
-                        await updateRSVP(rsvpId, { guestId: newGuestId });
+                        await updateRSVP(rsvpId, { guestId: finalGuestId });
+                        console.log('✅ [RSVP Flow] สร้าง Guest และ link RSVP สำเร็จ:', finalGuestId);
                     }
                 } catch (guestError: unknown) {
-                    console.error('Error creating/updating guest:', guestError);
+                    console.error('❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest:', guestError);
                     const errorMessage = guestError instanceof Error ? guestError.message : String(guestError || 'Unknown error');
                     // แสดง error message ที่ชัดเจนขึ้น
                     message.warning(`บันทึก RSVP สำเร็จ แต่เกิดปัญหาในการสร้างข้อมูล Guest: ${errorMessage}`);
@@ -1608,7 +2078,13 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             );
         }
 
-        if (!isLoggedIn) {
+        // 🔧 Fix: ตรวจสอบว่า login แล้วหรือไม่ - ต้องมีทั้ง isLoggedIn และ currentUser
+        // เพื่อป้องกันการแสดง form เมื่อยังไม่ login
+        if (!isLoggedIn || !currentUser) {
+            // ตรวจสอบว่าอยู่ใน WebView หรือไม่
+            const webViewInfo = getWebViewInfo();
+            const isInWebView = webViewInfo.isInWebView;
+            const sessionStorageAvailable = webViewInfo.sessionStorageAvailable;
 
             return (
 
@@ -1617,6 +2093,18 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     <Title level={3} className="font-cinzel text-[#5c3a58] mb-2">Welcome</Title>
 
                     <Text type="secondary" className="block mb-6 text-xs">กรุณายืนยันตัวตนเพื่อลงทะเบียน</Text>
+
+                    {/* แสดงคำเตือนสำหรับ WebView ที่ sessionStorage ไม่ทำงาน */}
+                    {isInWebView && !sessionStorageAvailable && (
+                        <Alert
+                            message="คำแนะนำ"
+                            description="หากไม่สามารถเข้าสู่ระบบได้ กรุณากดปุ่ม 'เปิดในเบราว์เซอร์' (⋮) ที่มุมบนขวา แล้วเลือก 'เปิดใน Chrome' หรือ 'เปิดใน Safari'"
+                            type="info"
+                            showIcon
+                            className="mb-4 text-left"
+                            closable
+                        />
+                    )}
 
                     <div className="space-y-3">
 
@@ -2077,9 +2565,31 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
     };
 
+    // 🔧 DevOps: ฟังก์ชันสำหรับคัดลอก link
+    const handleCopyLink = async () => {
+        try {
+            await navigator.clipboard.writeText(copyLinkModal.link);
+            message.success('คัดลอกลิงก์เรียบร้อยแล้ว! เปิดในเบราว์เซอร์ (Chrome, Safari) แล้ววางลิงก์');
+            setCopyLinkModal({ visible: false, link: '', provider: null });
+        } catch (error) {
+            message.error('ไม่สามารถคัดลอกลิงก์ได้ กรุณาคัดลอกด้วยตนเอง');
+        }
+    };
+
     // Modal สำหรับแสดง warning เมื่อมีการ login จากที่อื่น
     const handleForceEndSession = async () => {
         if (!currentUser) return;
+        
+        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
+        const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
+        const isAdminPath = currentPathname.startsWith('/admin');
+        
+        if (isAdminPath) {
+            // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
+            console.log('⏭️ [Force End Session] ข้าม session management - อยู่ในหน้า admin');
+            setSessionWarning(null);
+            return;
+        }
         
         const user = getCurrentUser();
         if (!user) {
@@ -2093,7 +2603,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             isRegisteringSessionRef.current = true;
             
             // เรียก registerSession() เพื่อยึด session (ใช้ atomic update เพื่อ set isOnline และ startedAt พร้อมกัน)
-            const sessionResult = await registerSession(user);
+            // Guest Flow - ใช้ isAdmin = false
+            const sessionResult = await registerSession(user, false);
             
             // ปิด flag หลังจากยึด session เสร็จ และอัพเดท startedAt
             isInitialSessionSetupRef.current = false;
@@ -2135,6 +2646,41 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         เพื่อปิด session อื่นและเข้าสู่ระบบจากอุปกรณ์นี้แทน
                     </Text>
                 </div>
+            </Modal>
+
+            {/* 🔧 DevOps: Modal สำหรับคัดลอก link เมื่อ popup ไม่ทำงาน */}
+            <Modal
+                title="ไม่สามารถเข้าสู่ระบบในแอปนี้ได้"
+                open={copyLinkModal.visible}
+                onCancel={() => setCopyLinkModal({ visible: false, link: '', provider: null })}
+                footer={[
+                    <Button key="copy" type="primary" onClick={handleCopyLink}>
+                        คัดลอกลิงก์
+                    </Button>,
+                    <Button key="close" onClick={() => setCopyLinkModal({ visible: false, link: '', provider: null })}>
+                        ปิด
+                    </Button>,
+                ]}
+            >
+                <Alert
+                    message="คำแนะนำ"
+                    description={
+                        <div>
+                            <p>กรุณาคัดลอกลิงก์ด้านล่าง แล้วเปิดในเบราว์เซอร์ (Chrome, Safari) เพื่อเข้าสู่ระบบ</p>
+                            <Input.TextArea
+                                value={copyLinkModal.link}
+                                readOnly
+                                rows={3}
+                                style={{ marginTop: 12 }}
+                            />
+                            <p style={{ marginTop: 12, fontSize: '12px', color: '#666' }}>
+                                💡 หลังจากเข้าสู่ระบบในเบราว์เซอร์แล้ว คุณสามารถกลับมาใช้งานในแอปนี้ได้
+                            </p>
+                        </div>
+                    }
+                    type="info"
+                    showIcon
+                />
             </Modal>
 
             <div className="w-full h-full flex flex-col bg-[#fdfbf7] relative overflow-hidden">
@@ -2291,13 +2837,19 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
             }
             
             if (user) {
-                
+                // Guest Flow - ใช้ userAppState ตามปกติ
                 // Load initial state จาก Firebase
                 getUserAppState(user.uid)
                     .then((state) => {
                         if (!isMounted) return;
                         if (state) {
-                            if (state.isFlipped !== undefined) setIsFlipped(state.isFlipped);
+                            // 🔧 Fix: เมื่อล็อคอินแล้ว → ถ้า hasStarted = true → flip ไปหน้า form ทันที
+                            if (state.hasStarted && state.isFlipped !== false) {
+                                // ถ้าเคยกด heart แล้ว → flip ไปหน้า form
+                                setIsFlipped(true);
+                            } else if (state.isFlipped !== undefined) {
+                                setIsFlipped(state.isFlipped);
+                            }
                             if (state.musicPlaying !== undefined) setMusicPlaying(state.musicPlaying);
                             if (state.hasStarted !== undefined) setShowIntro(!state.hasStarted);
                             if (state.currentTrackIndex !== undefined) setCurrentTrackIndex(state.currentTrackIndex);
@@ -2312,7 +2864,13 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 unsubscribeState = subscribeUserAppState(user.uid, (state) => {
                     if (!isMounted) return;
                     if (state) {
-                        if (state.isFlipped !== undefined) setIsFlipped(state.isFlipped);
+                        // 🔧 Fix: เมื่อล็อคอินแล้ว → ถ้า hasStarted = true → flip ไปหน้า form ทันที
+                        if (state.hasStarted && state.isFlipped !== false) {
+                            // ถ้าเคยกด heart แล้ว → flip ไปหน้า form
+                            setIsFlipped(true);
+                        } else if (state.isFlipped !== undefined) {
+                            setIsFlipped(state.isFlipped);
+                        }
                         if (state.musicPlaying !== undefined) setMusicPlaying(state.musicPlaying);
                         if (state.hasStarted !== undefined) setShowIntro(!state.hasStarted);
                         if (state.currentTrackIndex !== undefined) setCurrentTrackIndex(state.currentTrackIndex);
@@ -2343,6 +2901,8 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         const user = getCurrentUser();
         if (!user) return;
         
+        // 🔧 DevOps Fix: เมื่อล็อคอินอยู่ → กด X หรือ Heart → แสดงการ์ด (isFlipped = true) เสมอ
+        // ไม่ต้องกลับไปหน้า intro อีก
         // Debounce เพื่อป้องกันการ update บ่อยเกินไป
         const timeoutId = setTimeout(() => {
             updateUserAppState(user.uid, { isFlipped })
@@ -2351,7 +2911,9 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 });
         }, 300);
 
-        return () => clearTimeout(timeoutId);
+        return () => {
+            clearTimeout(timeoutId);
+        };
     }, [isFlipped]);
 
     // Save music playing state ไปยัง Firebase Realtime Database
@@ -2359,6 +2921,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         const user = getCurrentUser();
         if (!user) return;
         
+        // Guest Flow - ใช้ userAppState ตามปกติ
         // Debounce เพื่อป้องกันการ update บ่อยเกินไป
         const timeoutId = setTimeout(() => {
             updateUserAppState(user.uid, { musicPlaying })
@@ -2375,6 +2938,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         const user = getCurrentUser();
         if (!user) return;
         
+        // Guest Flow - ใช้ userAppState ตามปกติ
         // Debounce เพื่อป้องกันการ update บ่อยเกินไป
         const timeoutId = setTimeout(() => {
             updateUserAppState(user.uid, { currentTrackIndex })
@@ -2387,11 +2951,21 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     }, [currentTrackIndex]);
 
     const handleStart = () => {
+        // 🔧 Fix: เมื่อกด Heart button → ปิด intro และแสดงการ์ด
         setShowIntro(false);
-        // Save hasStarted state ไปยัง Firebase
+        
+        // 🔧 Fix: เช็คว่าล็อคอินแล้วหรือไม่
+        // - ถ้าไม่ล็อคอิน → แสดงหน้าแรกของการ์ด (isFlipped = false)
+        // - ถ้าล็อคอิน → แสดงหน้า form (isFlipped = true)
         const user = getCurrentUser();
+        const shouldFlip = !!user; // Flip เฉพาะเมื่อล็อคอินแล้ว
+        
+        setIsFlipped(shouldFlip);
+        
+        // Update Firebase ทันที (ไม่ต้องรอ debounce) เพื่อป้องกัน subscribeUserAppState ทับ state
         if (user) {
-            updateUserAppState(user.uid, { hasStarted: true })
+            // Guest Flow - ใช้ userAppState ตามปกติ
+            updateUserAppState(user.uid, { hasStarted: true, isFlipped: shouldFlip })
                 .catch((error) => {
                     console.error('Error saving hasStarted state:', error);
                 });
@@ -2409,6 +2983,20 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                 isManualControlRef.current = false;
             }, 500);
         }, 100);
+    };
+
+    // 🔧 Fix: ฟังก์ชันสำหรับกลับไปหน้าแรกของการ์ดเมื่อกดกากบาท
+    const handleFlipBack = () => {
+        setIsFlipped(false);
+        
+        // Update Firebase state (ถ้าล็อคอินแล้ว)
+        const user = getCurrentUser();
+        if (user) {
+            updateUserAppState(user.uid, { isFlipped: false })
+                .catch((error) => {
+                    console.error('Error saving isFlipped state:', error);
+                });
+        }
     };
 
     const onToggleMusic = () => {
@@ -2469,7 +3057,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         
         // ถ้า musicPlaying = true และยังไม่ได้ auto-play
         if (musicPlaying && !autoPlayAttemptedRef.current && iframeReady) {
-            // Auto-play music when restored from sessionStorage after refresh
+            // 🔧 DevOps: Auto-play music when restored from Firebase after refresh
             let attempts = 0;
             const maxAttempts = 5; // ลดจำนวน attempts เพื่อป้องกัน loop
             let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -2629,7 +3217,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
 
                     </div>
 
-                    <div className={`flip-back ${!isFlipped ? 'side-inactive' : 'side-active'}`}><CardBack onFlip={() => setIsFlipped(false)} /></div>
+                    <div className={`flip-back ${!isFlipped ? 'side-inactive' : 'side-active'}`}><CardBack onFlip={handleFlipBack} /></div>
 
                 </div>
 
@@ -2642,8 +3230,6 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     );
 
 };
-
-
 
 
 

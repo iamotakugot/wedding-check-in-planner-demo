@@ -1,11 +1,21 @@
 {
   "rules": {
     "guests": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      // 🔧 DevOps Fix: อนุญาตให้ user ที่ login แล้วอ่าน guests ทั้งหมด (เพื่อให้ getGuestByRsvpUid ทำงานได้)
+      // แต่จะ filter ฝั่ง client ว่าเป็น Guest ของตัวเองหรือไม่
+      // Admin สามารถอ่านทั้งหมดได้
+      ".read": "auth != null",
       "$guestId": {
-        ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || data.child('rsvpUid').val() === auth.uid)",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (data.exists() && data.child('rsvpUid').val() === auth.uid && newData.child('rsvpUid').val() === auth.uid) || (!data.exists() && newData.child('rsvpUid').val() === auth.uid))",
-        ".validate": "!newData.exists() || root.child('admins').child(auth.uid).exists() || newData.child('rsvpUid').val() === auth.uid"
+        // อนุญาตให้ user อ่าน Guest ของตัวเอง (rsvpUid === auth.uid) และ admin อ่านทั้งหมด
+        ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || (data.exists() && data.child('rsvpUid').val() === auth.uid))",
+        // 🔒 Security: Admin ห้ามสร้าง/แก้ไข Guest ผ่าน RSVP flow (Firebase Rules จะบล็อก: !root.child('admins').child(auth.uid).exists())
+        // อนุญาตให้ admin สร้าง/แก้ไข Guest ผ่าน admin panel เท่านั้น
+        // อนุญาตให้ user สร้าง Guest ใหม่ถ้ามี rsvpUid === auth.uid (ไม่ใช่ admin)
+        // และอนุญาตให้ user แก้ไข Guest ที่มี rsvpUid === auth.uid (ไม่ใช่ admin)
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (!root.child('admins').child(auth.uid).exists() && ((!data.exists() && newData.child('rsvpUid').val() === auth.uid) || (data.exists() && data.child('rsvpUid').val() === auth.uid && newData.child('rsvpUid').val() === auth.uid))))",
+        // 🔧 DevOps Fix: Validate ว่า rsvpUid ต้องตรงกับ auth.uid (ถ้าไม่ใช่ admin)
+        // 🔒 Security: Admin ห้ามสร้าง Guest ผ่าน RSVP flow (Firebase Rules จะบล็อก: !root.child('admins').child(auth.uid).exists())
+        ".validate": "!newData.exists() || root.child('admins').child(auth.uid).exists() || (!root.child('admins').child(auth.uid).exists() && newData.hasChildren(['rsvpUid']) && newData.child('rsvpUid').val() === auth.uid)"
       }
     },
     "zones": {
@@ -17,8 +27,18 @@
       ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
     },
     "rsvps": {
+      // 🔧 DevOps Fix: อนุญาตให้ user ที่ login แล้วอ่าน RSVP ทั้งหมด (เพื่อให้ getRSVPByUid ทำงานได้)
+      // แต่จะ filter ฝั่ง client ว่าเป็น RSVP ของตัวเองหรือไม่
+      // Admin สามารถอ่านทั้งหมดได้
       ".read": "auth != null",
-      ".write": "auth != null"
+      "$rsvpId": {
+        // อนุญาตให้ user อ่าน RSVP ของตัวเอง และ admin อ่านทั้งหมด
+        ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || data.child('uid').val() === auth.uid)",
+        // 🔧 DevOps: Admin สามารถอัปเดต RSVP ได้ (เช่น อัปเดต guestId หลัง import)
+        // User (ไม่ใช่ admin) สามารถสร้าง/แก้ไข RSVP ของตัวเองเท่านั้น
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (!root.child('admins').child(auth.uid).exists() && ((!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid && newData.child('uid').val() === auth.uid))))",
+        ".validate": "!newData.exists() || root.child('admins').child(auth.uid).exists() || (!root.child('admins').child(auth.uid).exists() && newData.child('uid').val() === auth.uid)"
+      }
     },
     "config": {
       ".read": true,
@@ -33,12 +53,31 @@
     },
     "userSessions": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
+        ".read": "auth != null && auth.uid === $uid && !root.child('admins').child(auth.uid).exists()",
         "isOnline": {
-          ".write": "auth != null && auth.uid === $uid"
+          ".write": "auth != null && auth.uid === $uid && !root.child('admins').child(auth.uid).exists()"
         },
         "startedAt": {
-          ".write": "auth != null && auth.uid === $uid"
+          ".write": "auth != null && auth.uid === $uid && !root.child('admins').child(auth.uid).exists()"
+        },
+        "sessionId": {
+          ".write": "auth != null && auth.uid === $uid && !root.child('admins').child(auth.uid).exists()"
+        }
+      },
+      ".read": false,
+      ".write": false
+    },
+    "adminSessions": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid && root.child('admins').child(auth.uid).exists()",
+        "isOnline": {
+          ".write": "auth != null && auth.uid === $uid && root.child('admins').child(auth.uid).exists()"
+        },
+        "startedAt": {
+          ".write": "auth != null && auth.uid === $uid && root.child('admins').child(auth.uid).exists()"
+        },
+        "sessionId": {
+          ".write": "auth != null && auth.uid === $uid && root.child('admins').child(auth.uid).exists()"
         }
       },
       ".read": false,

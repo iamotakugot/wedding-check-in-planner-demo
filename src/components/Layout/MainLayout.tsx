@@ -55,7 +55,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     {
       key: '5',
       icon: <LinkOutlined />,
-      label: 'จัดการลิงค์เชิญ',
+      label: 'จัดการการ์ด',
     },
     {
       key: '6',
