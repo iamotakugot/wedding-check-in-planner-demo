@@ -33,6 +33,37 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ใช้ฟอนต์ Sarabun เป็นค่าเริ่มต้นสำหรับทุก element */
+* {
+  font-family: 'Sarabun', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+/* Ant Design components ใช้ฟอนต์ Sarabun */
+.ant-typography,
+.ant-btn,
+.ant-input,
+.ant-input-number,
+.ant-select,
+.ant-select-selector,
+.ant-form-item-label > label,
+.ant-table,
+.ant-menu,
+.ant-card,
+.ant-card-head-title,
+.ant-card-body,
+.ant-statistic-title,
+.ant-statistic-content,
+.ant-tag,
+.ant-alert-message,
+.ant-alert-description,
+.ant-timeline-item-content {
+  font-family: 'Sarabun', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif !important;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }

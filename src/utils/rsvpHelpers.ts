@@ -147,15 +147,22 @@ export const groupRSVPsWithGuests = (
       if (filtered.length === 0) continue;
     }
 
-    // กรองตาม search (ถ้ามี filter)
+    // กรองตาม search (ถ้ามี filter) - รองรับภาษาไทย
     if (filter?.search && filter.search.trim()) {
-      const lower = filter.search.trim().toLowerCase();
+      const searchTerm = filter.search.trim();
+      const lower = searchTerm.toLowerCase();
+      // สร้าง search pattern ที่รองรับทั้งตัวพิมพ์เล็ก-ใหญ่และภาษาไทย
+      const normalizeText = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const normalizedSearch = normalizeText(searchTerm);
+      
       const matchesSearch = 
-        (rsvp.fullName || `${rsvp.firstName} ${rsvp.lastName}`).toLowerCase().includes(lower) ||
+        normalizeText(rsvp.fullName || `${rsvp.firstName} ${rsvp.lastName}`).includes(normalizedSearch) ||
+        (rsvp.firstName && normalizeText(rsvp.firstName).includes(normalizedSearch)) ||
+        (rsvp.lastName && normalizeText(rsvp.lastName).includes(normalizedSearch)) ||
         relatedGuests.some(g => 
-          (g.firstName || '').toLowerCase().includes(lower) ||
-          (g.lastName || '').toLowerCase().includes(lower) ||
-          (g.nickname || '').toLowerCase().includes(lower)
+          (g.firstName && normalizeText(g.firstName).includes(normalizedSearch)) ||
+          (g.lastName && normalizeText(g.lastName).includes(normalizedSearch)) ||
+          (g.nickname && normalizeText(g.nickname).includes(normalizedSearch))
         );
       if (!matchesSearch) continue;
     }

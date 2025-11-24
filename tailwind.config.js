@@ -11,6 +11,8 @@ export default {
         'dancing': ['Dancing Script', 'cursive'],
         'th': ['Sarabun', 'sans-serif'],
         'cinzel': ['Cinzel', 'serif'],
+        // ตั้งค่า Sarabun เป็นฟอนต์หลัก (sans-serif)
+        'sans': ['Sarabun', 'Noto Sans Thai', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'sans-serif'],
       },
       colors: {
         'primary': '#5c3a58',

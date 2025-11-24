@@ -115,8 +115,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [rsvps, guests]);
 
   const totalGuestsFromRSVP = guestsFromRSVP.length;
-  const totalSeatedFromRSVP = guestsFromRSVP.filter((g) => g.zoneId !== null).length;
-  const totalCheckedInFromRSVP = guestsFromRSVP.filter((g) => g.checkedInAt !== null).length;
+  const totalSeatedFromRSVP = guestsFromRSVP.filter((g) => g.zoneId !== null && g.zoneId !== undefined).length;
+  const totalCheckedInFromRSVP = guestsFromRSVP.filter((g) => g.checkedInAt !== null && g.checkedInAt !== undefined).length;
 
   // 🔧 DevOps Fix: คำนวณจำนวนกลุ่มจาก RSVP (Source of Truth) แทน Guests
   const totalGroupsFromGuests = useMemo(() => {
@@ -134,7 +134,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
       const seated = guestsFromRSVP.filter((g) => g.zoneId === zone.zoneId).length;
       const zoneTables = tables.filter((t) => t.zoneId === zone.zoneId);
       const zoneCapacity = zoneTables.reduce((acc, t) => acc + t.capacity, 0);
-      const checkedIn = guestsFromRSVP.filter((g) => g.zoneId === zone.zoneId && g.checkedInAt !== null).length;
+      const checkedIn = guestsFromRSVP.filter((g) => g.zoneId === zone.zoneId && g.checkedInAt !== null && g.checkedInAt !== undefined).length;
 
       return {
         key: zone.zoneId,
