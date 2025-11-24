@@ -51,14 +51,13 @@ const { Title, Text } = Typography;
 interface SeatingManagementPageProps {
   guests: Guest[];
   zones: Zone[];
-  setZones: React.Dispatch<React.SetStateAction<Zone[]>>;
   tables: TableData[];
   setTables: React.Dispatch<React.SetStateAction<TableData[]>>;
   rsvps?: RSVPData[];
 }
 
 const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
-  const { guests, zones, setZones, tables, setTables, rsvps = [] } = props;
+  const { guests, zones, tables, setTables, rsvps = [] } = props;
   const [selectedZoneId, setSelectedZoneId] = useState<string>(
     zones[0]?.id || '',
   );
@@ -349,7 +348,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     try {
       if (editingZone) {
         await updateZone(zone.id, zone);
-        setZones(zones.map((z) => (z.id === zone.id ? zone : z)));
+        // 🔧 DevOps: ไม่ต้องเรียก setZones - Firebase subscription จะ update อัตโนมัติ
         message.success(`แก้ไขโซน ${zone.zoneName} สำเร็จ`);
       } else {
         if (zones.some((z) => z.zoneId === zone.zoneId)) {
@@ -357,7 +356,8 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
           return;
         }
         await createZone(zone);
-        setZones([...zones, zone]);
+        // 🔧 DevOps: ไม่ต้องเรียก setZones - Firebase subscription จะ update อัตโนมัติ
+        // แต่ต้อง set selectedZoneId เพื่อให้ UI แสดงโซนที่สร้างใหม่
         setSelectedZoneId(zone.id);
         message.success(`เพิ่มโซน ${zone.zoneName} สำเร็จ`);
       }
@@ -376,7 +376,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
 
       // Delete zone
       await deleteZone(id);
-      setZones(zones.filter((z) => z.id !== id));
+      // 🔧 DevOps: ไม่ต้องเรียก setZones - Firebase subscription จะ update อัตโนมัติ
 
       // Delete tables in this zone
       const tablesToDelete = tables.filter((t) => t.zoneId === zone.zoneId);
@@ -392,9 +392,15 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
       }
       // 🔧 DevOps: ไม่ต้องเรียก setGuests เพราะ Firebase subscription จะอัปเดต state อัตโนมัติ
 
-      if (selectedZoneId === id) {
-        setSelectedZoneId(zones.filter((z) => z.id !== id)[0]?.id || '');
-      }
+      // Update selectedZoneId using functional update to get latest state
+      setSelectedZoneId((prevId) => {
+        if (prevId === id) {
+          // Find next zone from current zones state (will be updated by subscription)
+          const remainingZones = zones.filter((z) => z.id !== id);
+          return remainingZones[0]?.id || '';
+        }
+        return prevId;
+      });
       message.success(`ลบโซน ${name} และโต๊ะทั้งหมดที่เกี่ยวข้องแล้ว`);
     } catch (error) {
       console.error('Error deleting zone:', error);
@@ -407,7 +413,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
     try {
       if (editingTable) {
         await updateTable(table.id, table);
-        setTables(tables.map((t) => (t.id === table.id ? table : t)));
+        // 🔧 DevOps: ไม่ต้องเรียก setTables - Firebase subscription จะ update อัตโนมัติ
         message.success(`แก้ไขโต๊ะ ${table.tableName} สำเร็จ`);
       } else {
         if (tables.some((t) => t.tableId === table.tableId)) {
@@ -415,7 +421,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
           return;
         }
         await createTable(table);
-        setTables([...tables, table]);
+        // 🔧 DevOps: ไม่ต้องเรียก setTables - Firebase subscription จะ update อัตโนมัติ
         message.success(`เพิ่มโต๊ะ ${table.tableName} สำเร็จ`);
       }
       setEditingTable(null);
@@ -429,7 +435,7 @@ const SeatingManagementPage: React.FC<SeatingManagementPageProps> = (props) => {
   const handleTableDelete = async (id: string, name: string) => {
     try {
       await deleteTable(id);
-      setTables(tables.filter((t) => t.id !== id));
+      // 🔧 DevOps: ไม่ต้องเรียก setTables - Firebase subscription จะ update อัตโนมัติ
 
       // Unassign guests from this table
       const guestsToUpdate = guests.filter((g) => g.tableId === id);

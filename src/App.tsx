@@ -180,7 +180,7 @@ const App: React.FC = () => {
   }, [currentView, isAuthenticated]);
 
   // ใช้ custom hooks สำหรับจัดการข้อมูล
-  const { guests, zones, tables, rsvps, isLoading: dataLoading, setZones, setTables } = useAdminData(
+  const { guests, zones, tables, rsvps, isLoading: dataLoading, setTables } = useAdminData(
     appMode === 'admin' && isAuthenticated
   );
 
@@ -232,7 +232,6 @@ const App: React.FC = () => {
           <SeatingManagementPage
             guests={guests}
             zones={zones}
-            setZones={setZones}
             tables={tables}
             setTables={setTables}
             rsvps={rsvps}
