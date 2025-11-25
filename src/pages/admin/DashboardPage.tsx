@@ -35,116 +35,161 @@ const DashboardPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spin size="large" />
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Spin size="large" tip="กำลังโหลดข้อมูล..." />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800">หน้าหลัก</h1>
+    <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+      <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 md:mb-6 text-gray-800">
+        หน้าหลัก
+      </h1>
       
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} md={8} lg={6}>
+      <Row gutter={[12, 12]} className="sm:gutter-[16px]">
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="RSVP ทั้งหมด"
+              title={<span className="text-xs sm:text-sm">RSVP ทั้งหมด</span>}
               value={rsvpStats.totalForms}
-              prefix={<FileTextOutlined style={{ color: '#1890ff' }} />}
-              valueStyle={{ fontSize: '20px', fontWeight: 600 }}
+              prefix={<FileTextOutlined style={{ color: '#1890ff', fontSize: '18px' }} />}
+              valueStyle={{ 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="ตอบรับเข้างาน"
+              title={<span className="text-xs sm:text-sm">ตอบรับเข้างาน</span>}
               value={rsvpStats.totalComingForms}
-              prefix={<CheckCircleOutlined style={{ color: '#3f8600' }} />}
-              valueStyle={{ color: '#3f8600', fontSize: '20px', fontWeight: 600 }}
+              prefix={<CheckCircleOutlined style={{ color: '#3f8600', fontSize: '18px' }} />}
+              valueStyle={{ 
+                color: '#3f8600', 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="จำนวนคนเข้างาน"
+              title={<span className="text-xs sm:text-sm">จำนวนคนเข้างาน</span>}
               value={totalAttendees}
-              prefix={<TeamOutlined style={{ color: '#722ed1' }} />}
-              valueStyle={{ fontSize: '20px', fontWeight: 600 }}
+              prefix={<TeamOutlined style={{ color: '#722ed1', fontSize: '18px' }} />}
+              valueStyle={{ 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="เช็คอินแล้ว"
+              title={<span className="text-xs sm:text-sm">เช็คอินแล้ว</span>}
               value={totalCheckedIn}
-              prefix={<UserOutlined style={{ color: '#1890ff' }} />}
-              valueStyle={{ color: '#1890ff', fontSize: '20px', fontWeight: 600 }}
+              prefix={<UserOutlined style={{ color: '#1890ff', fontSize: '18px' }} />}
+              valueStyle={{ 
+                color: '#1890ff', 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="แขกทั้งหมด"
+              title={<span className="text-xs sm:text-sm">แขกทั้งหมด</span>}
               value={guests.length}
-              prefix={<TeamOutlined style={{ color: '#fa8c16' }} />}
-              valueStyle={{ fontSize: '20px', fontWeight: 600 }}
+              prefix={<TeamOutlined style={{ color: '#fa8c16', fontSize: '18px' }} />}
+              valueStyle={{ 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="จัดโต๊ะแล้ว"
+              title={<span className="text-xs sm:text-sm">จัดโต๊ะแล้ว</span>}
               value={totalSeated}
-              prefix={<CheckCircleOutlined style={{ color: '#722ed1' }} />}
-              valueStyle={{ color: '#722ed1', fontSize: '20px', fontWeight: 600 }}
+              prefix={<CheckCircleOutlined style={{ color: '#722ed1', fontSize: '18px' }} />}
+              valueStyle={{ 
+                color: '#722ed1', 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="โซน"
+              title={<span className="text-xs sm:text-sm">โซน</span>}
               value={zones.length}
-              valueStyle={{ fontSize: '20px', fontWeight: 600 }}
+              valueStyle={{ 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8} lg={6}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={6}>
           <Card 
             hoverable
-            className="shadow-sm hover:shadow-md transition-shadow"
+            className="shadow-sm hover:shadow-md transition-shadow h-full"
+            styles={{ body: { padding: '16px 20px' } }}
           >
             <Statistic
-              title="โต๊ะ"
+              title={<span className="text-xs sm:text-sm">โต๊ะ</span>}
               value={tables.length}
-              valueStyle={{ fontSize: '20px', fontWeight: 600 }}
+              valueStyle={{ 
+                fontSize: 'clamp(18px, 4vw, 24px)', 
+                fontWeight: 600,
+                lineHeight: '1.2'
+              }}
             />
           </Card>
         </Col>

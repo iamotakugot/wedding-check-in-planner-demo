@@ -825,16 +825,17 @@ const GuestsPage: React.FC = () => {
   ];
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-800">จัดการแขก</h1>
+    <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
+        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">จัดการแขก</h1>
         <Button
           type="primary"
-          size="large"
+          size="middle"
           onClick={() => {
             setEditingGuest(null);
             setIsDrawerVisible(true);
           }}
+          className="w-full sm:w-auto"
         >
           เพิ่มแขก
         </Button>
@@ -843,26 +844,31 @@ const GuestsPage: React.FC = () => {
       <Tabs 
         activeKey={activeTab} 
         onChange={setActiveTab}
+        size="small"
+        className="responsive-tabs"
         items={[
           {
             key: 'list',
             label: 'รายชื่อแขก',
             children: (
               <>
-                <div className="mb-4">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <CustomSearch
-                      placeholder="ค้นหาแขก"
-                      allowClear
-                      style={{ width: '100%', maxWidth: 300 }}
-                      onSearch={setSearchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                    />
-                    <Space.Compact className="w-full sm:w-auto">
+                <div className="mb-3 sm:mb-4">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                    <div className="flex-1 min-w-0">
+                      <CustomSearch
+                        placeholder="ค้นหาแขก"
+                        allowClear
+                        style={{ width: '100%', maxWidth: '100%' }}
+                        onSearch={setSearchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                      />
+                    </div>
+                    <Space.Compact className="w-full sm:w-auto flex-shrink-0">
                       <Button
                         onClick={() => setSelectedSide('all')}
                         type={selectedSide === 'all' ? 'primary' : 'default'}
                         size="middle"
+                        className="flex-1 sm:flex-none"
                       >
                         ทั้งหมด
                       </Button>
@@ -870,6 +876,7 @@ const GuestsPage: React.FC = () => {
                         onClick={() => setSelectedSide('groom')}
                         type={selectedSide === 'groom' ? 'primary' : 'default'}
                         size="middle"
+                        className="flex-1 sm:flex-none"
                       >
                         เจ้าบ่าว
                       </Button>
@@ -877,6 +884,7 @@ const GuestsPage: React.FC = () => {
                         onClick={() => setSelectedSide('bride')}
                         type={selectedSide === 'bride' ? 'primary' : 'default'}
                         size="middle"
+                        className="flex-1 sm:flex-none"
                       >
                         เจ้าสาว
                       </Button>
@@ -884,22 +892,33 @@ const GuestsPage: React.FC = () => {
                   </div>
                 </div>
                 
-                <Table<Guest & { children?: Guest[] }>
-                  columns={columns}
-                  dataSource={filteredTreeData}
-                  rowKey="id"
-                  loading={isLoading}
-                  pagination={{ pageSize: 20 }}
-                  scroll={{ x: 'max-content' }}
-                  className="shadow-sm"
-                  expandable={{
-                    defaultExpandAllRows: false,
-                    indentSize: 20,
-                    showExpandColumn: true,
-                    expandRowByClick: false,
-                    childrenColumnName: 'children',
-                  }}
-                />
+                <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+                  <Table<Guest & { children?: Guest[] }>
+                    columns={columns}
+                    dataSource={filteredTreeData}
+                    rowKey="id"
+                    loading={isLoading}
+                    pagination={{ 
+                      pageSize: 20,
+                      showSizeChanger: false,
+                      responsive: true,
+                      showTotal: (total) => `ทั้งหมด ${total} คน`,
+                    }}
+                    scroll={{ 
+                      x: 'max-content',
+                      y: 'calc(100vh - 400px)',
+                    }}
+                    className="shadow-sm"
+                    size="small"
+                    expandable={{
+                      defaultExpandAllRows: false,
+                      indentSize: 20,
+                      showExpandColumn: true,
+                      expandRowByClick: false,
+                      childrenColumnName: 'children',
+                    }}
+                  />
+                </div>
               </>
             ),
           },
@@ -915,9 +934,9 @@ const GuestsPage: React.FC = () => {
             ),
             children: (
               <>
-          <div className="mb-4">
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12} md={8}>
+          <div className="mb-3 sm:mb-4">
+            <Row gutter={[12, 12]}>
+              <Col xs={24} sm={24} md={12} lg={10}>
                 <CustomSearch
                   placeholder="ค้นหาชื่อ/กลุ่ม"
                   allowClear
@@ -927,23 +946,26 @@ const GuestsPage: React.FC = () => {
                   style={{ width: '100%' }}
                 />
               </Col>
-              <Col xs={24} sm={12} md={16}>
-                <Space.Compact>
+              <Col xs={24} sm={24} md={12} lg={14}>
+                <Space.Compact className="w-full">
                   <Button
                     onClick={() => setCheckInSelectedSide('all')}
                     type={checkInSelectedSide === 'all' ? 'primary' : 'default'}
+                    className="flex-1 sm:flex-none"
                   >
                     ทั้งหมด
                   </Button>
                   <Button
                     onClick={() => setCheckInSelectedSide('groom')}
                     type={checkInSelectedSide === 'groom' ? 'primary' : 'default'}
+                    className="flex-1 sm:flex-none"
                   >
                     เจ้าบ่าว
                   </Button>
                   <Button
                     onClick={() => setCheckInSelectedSide('bride')}
                     type={checkInSelectedSide === 'bride' ? 'primary' : 'default'}
+                    className="flex-1 sm:flex-none"
                   >
                     เจ้าสาว
                   </Button>
@@ -953,32 +975,31 @@ const GuestsPage: React.FC = () => {
           </div>
 
           {selectedCheckInIds.length > 0 && (
-            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300 shadow-md">
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div className="mb-3 sm:mb-4 p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300 shadow-md">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-2">
-                  <CheckCircleOutlined className="text-blue-600 text-xl" />
-                  <Text strong className="text-lg text-blue-900">
+                  <CheckCircleOutlined className="text-blue-600 text-lg sm:text-xl" />
+                  <Text strong className="text-base sm:text-lg text-blue-900">
                     เลือก {selectedCheckInIds.length} คน
                   </Text>
                 </div>
-                <Space size="middle">
+                <Space size="small" className="w-full sm:w-auto">
                   <Button 
                     onClick={() => setSelectedCheckInIds([])}
-                    size="large"
+                    size="middle"
+                    className="flex-1 sm:flex-none"
                   >
                     ยกเลิก
                   </Button>
                   <Button 
                     type="primary" 
                     onClick={handleBulkCheckIn} 
-                    size="large"
+                    size="middle"
                     icon={<CheckCircleOutlined />}
+                    className="flex-1 sm:flex-none"
                     style={{
-                      height: '44px',
-                      fontSize: '16px',
+                      fontSize: '14px',
                       fontWeight: 'bold',
-                      paddingLeft: '24px',
-                      paddingRight: '24px'
                     }}
                   >
                     เช็คอิน {selectedCheckInIds.length} คน
@@ -988,7 +1009,7 @@ const GuestsPage: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {filteredCheckInMembers.map(({ guest, group, member }) => {
               const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
               const canCheckIn = rsvpStatus !== 'no';
@@ -1004,10 +1025,10 @@ const GuestsPage: React.FC = () => {
                   size="small"
                   className={`transition-all ${isSelected ? 'border-blue-500 border-2 shadow-lg' : 'hover:shadow-md'}`}
                   styles={{
-                    body: { padding: '16px' }
+                    body: { padding: '12px' }
                   }}
                 >
-                  <div className="flex items-start gap-3 mb-3">
+                  <div className="flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
                     <Checkbox
                       checked={isSelected}
                       onChange={(e) => {
@@ -1020,7 +1041,7 @@ const GuestsPage: React.FC = () => {
                       disabled={!canCheckIn}
                     />
                     <Avatar 
-                      size={48}
+                      size={{ xs: 40, sm: 48 }}
                       icon={<UserOutlined />}
                       style={{ 
                         backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96',
@@ -1030,16 +1051,16 @@ const GuestsPage: React.FC = () => {
                       {displayName.charAt(0).toUpperCase()}
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-base mb-1 truncate" title={displayName}>
+                      <div className="font-semibold text-sm sm:text-base mb-1 truncate" title={displayName}>
                         {displayName}
                       </div>
                       {group && (
-                        <Tag color="blue" className="mb-1">
+                        <Tag color="blue" className="mb-1 text-xs">
                           {group.groupName}
                         </Tag>
                       )}
                       <div className="flex flex-wrap gap-1 mb-2">
-                        <Tag color={guest.side === 'groom' ? 'blue' : 'magenta'}>
+                        <Tag color={guest.side === 'groom' ? 'blue' : 'magenta'} className="text-xs">
                           {guest.side === 'groom' ? 'เจ้าบ่าว' : guest.side === 'bride' ? 'เจ้าสาว' : 'ทั้งคู่'}
                         </Tag>
                         <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />
@@ -1050,7 +1071,7 @@ const GuestsPage: React.FC = () => {
                         </Text>
                       )}
                       {!canCheckIn && (
-                        <Tag color="red" className="mt-1">
+                        <Tag color="red" className="mt-1 text-xs">
                           ไม่ตอบรับเข้าร่วมงาน
                         </Tag>
                       )}
@@ -1062,11 +1083,10 @@ const GuestsPage: React.FC = () => {
                     onClick={() => handleCheckIn(guest)}
                     disabled={!canCheckIn}
                     block
-                    size="large"
+                    size="middle"
                     className="mt-2"
                     style={{
-                      height: '40px',
-                      fontSize: '16px',
+                      fontSize: '14px',
                       fontWeight: 'bold'
                     }}
                   >

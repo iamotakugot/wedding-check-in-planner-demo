@@ -65,18 +65,20 @@ const SettingsPage: React.FC = () => {
 
   if (configLoading || rsvpsLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spin size="large" />
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Spin size="large" tip="กำลังโหลดข้อมูล..." />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800">ตั้งค่า</h1>
+    <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+      <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 md:mb-6 text-gray-800">ตั้งค่า</h1>
 
       <Tabs 
         defaultActiveKey="card"
+        size="small"
+        className="responsive-tabs"
         items={[
           {
             key: 'card',
@@ -95,65 +97,65 @@ const SettingsPage: React.FC = () => {
                 preserve={false}
                 initialValues={defaultWeddingCardConfig}
               >
-            <Row gutter={[16, 16]} className="md:gutter-[24px]">
-              <Col xs={24} md={12}>
-                <Card title="ข้อมูลเจ้าบ่าว" className="shadow-sm">
+            <Row gutter={[12, 12]} className="sm:gutter-[16px] md:gutter-[24px]">
+              <Col xs={24} sm={24} md={12}>
+                <Card title="ข้อมูลเจ้าบ่าว" className="shadow-sm h-full" styles={{ body: { padding: '16px sm:20px' } }}>
                   <Form.Item name={['groom', 'firstName']} label="ชื่อ">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name={['groom', 'lastName']} label="นามสกุล">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name={['groom', 'nickname']} label="ชื่อเล่น">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name={['groom', 'fullNameThai']} label="ชื่อเต็มภาษาไทย">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                 </Card>
               </Col>
-              <Col xs={24} md={12}>
-                <Card title="ข้อมูลเจ้าสาว" className="shadow-sm">
+              <Col xs={24} sm={24} md={12}>
+                <Card title="ข้อมูลเจ้าสาว" className="shadow-sm h-full" styles={{ body: { padding: '16px sm:20px' } }}>
                   <Form.Item name={['bride', 'firstName']} label="ชื่อ">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name={['bride', 'lastName']} label="นามสกุล">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name={['bride', 'nickname']} label="ชื่อเล่น">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name={['bride', 'fullNameThai']} label="ชื่อเต็มภาษาไทย">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                 </Card>
               </Col>
               <Col xs={24}>
-                <Card title="บิดามารดา" className="shadow-sm">
-                  <Row gutter={[16, 16]}>
-                    <Col xs={24} md={12}>
+                <Card title="บิดามารดา" className="shadow-sm" styles={{ body: { padding: '16px sm:20px' } }}>
+                  <Row gutter={[12, 12]} className="sm:gutter-[16px]">
+                    <Col xs={24} sm={24} md={12}>
                       <Form.Item name={['parents', 'groom', 'father']} label="บิดาเจ้าบ่าว">
-                        <Input />
+                        <Input size="middle" />
                       </Form.Item>
                       <Form.Item name={['parents', 'groom', 'mother']} label="มารดาเจ้าบ่าว">
-                        <Input />
+                        <Input size="middle" />
                       </Form.Item>
                     </Col>
-                    <Col xs={24} md={12}>
+                    <Col xs={24} sm={24} md={12}>
                       <Form.Item name={['parents', 'bride', 'father']} label="บิดาเจ้าสาว">
-                        <Input />
+                        <Input size="middle" />
                       </Form.Item>
                       <Form.Item name={['parents', 'bride', 'mother']} label="มารดาเจ้าสาว">
-                        <Input />
+                        <Input size="middle" />
                       </Form.Item>
                     </Col>
                   </Row>
                 </Card>
               </Col>
               <Col xs={24}>
-                <Card title="การตั้งค่า" className="shadow-sm">
+                <Card title="การตั้งค่า" className="shadow-sm" styles={{ body: { padding: '16px sm:20px' } }}>
                   <Form.Item name="nameOrder" label="ลำดับการแสดงชื่อ">
-                    <Input />
+                    <Input size="middle" />
                   </Form.Item>
                   <Form.Item name="showParentsAtTop" label="แสดงบิดามารดาที่ด้านบน" valuePropName="checked">
                     <Input type="checkbox" />
@@ -161,7 +163,13 @@ const SettingsPage: React.FC = () => {
                 </Card>
               </Col>
             </Row>
-            <Button type="primary" htmlType="submit" loading={saving} size="large" className="mt-4 md:mt-6">
+            <Button 
+              type="primary" 
+              htmlType="submit" 
+              loading={saving} 
+              size="middle" 
+              className="mt-3 sm:mt-4 md:mt-6 w-full sm:w-auto"
+            >
               บันทึก
             </Button>
           </Form>
@@ -176,32 +184,51 @@ const SettingsPage: React.FC = () => {
               </span>
             ),
             children: (
-              <Row gutter={[16, 16]}>
+              <Row gutter={[12, 12]} className="sm:gutter-[16px]">
             <Col xs={24} sm={12} md={8}>
-              <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <Statistic title="ตอบรับทั้งหมด" value={rsvpStats.totalForms} valueStyle={{ fontSize: '20px', fontWeight: 600 }} />
+              <Card className="shadow-sm hover:shadow-md transition-shadow h-full" styles={{ body: { padding: '16px sm:20px' } }}>
+                <Statistic 
+                  title={<span className="text-xs sm:text-sm">ตอบรับทั้งหมด</span>} 
+                  value={rsvpStats.totalForms} 
+                  valueStyle={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 600 }} 
+                />
               </Card>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <Statistic title="ยินดีร่วมงาน" value={rsvpStats.totalComingForms} valueStyle={{ color: '#3f8600', fontSize: '20px', fontWeight: 600 }} />
+              <Card className="shadow-sm hover:shadow-md transition-shadow h-full" styles={{ body: { padding: '16px sm:20px' } }}>
+                <Statistic 
+                  title={<span className="text-xs sm:text-sm">ยินดีร่วมงาน</span>} 
+                  value={rsvpStats.totalComingForms} 
+                  valueStyle={{ color: '#3f8600', fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 600 }} 
+                />
               </Card>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <Statistic title="จำนวนคนเข้างาน" value={totalAttendees} valueStyle={{ fontSize: '20px', fontWeight: 600 }} />
+              <Card className="shadow-sm hover:shadow-md transition-shadow h-full" styles={{ body: { padding: '16px sm:20px' } }}>
+                <Statistic 
+                  title={<span className="text-xs sm:text-sm">จำนวนคนเข้างาน</span>} 
+                  value={totalAttendees} 
+                  valueStyle={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 600 }} 
+                />
               </Card>
             </Col>
-            <Col xs={24} md={12}>
-              <Card title="ลิงค์เชิญ" className="shadow-sm">
-                <Space.Compact style={{ width: '100%' }}>
-                  <Input value={inviteLink} readOnly style={{ flex: 1 }} />
-                  <Button icon={<CopyOutlined />} onClick={handleCopy}>
-                    คัดลอก
+            <Col xs={24} sm={24} md={12}>
+              <Card title="ลิงค์เชิญ" className="shadow-sm" styles={{ body: { padding: '16px sm:20px' } }}>
+                <Space.Compact style={{ width: '100%' }} className="mb-3 sm:mb-4 md:mb-6">
+                  <Input value={inviteLink} readOnly style={{ flex: 1 }} size="middle" />
+                  <Button icon={<CopyOutlined />} onClick={handleCopy} size="middle">
+                    <span className="hidden sm:inline">คัดลอก</span>
+                    <span className="sm:hidden">คัดลอก</span>
                   </Button>
                 </Space.Compact>
-                <div className="mt-4 md:mt-6 flex justify-center">
-                  <QRCode value={inviteLink} size={200} />
+                <div className="flex justify-center">
+                  <QRCode 
+                    value={inviteLink} 
+                    size={200}
+                    errorLevel="M"
+                    style={{ maxWidth: '100%', height: 'auto' }}
+                    className="w-full max-w-[200px]"
+                  />
                 </div>
               </Card>
             </Col>

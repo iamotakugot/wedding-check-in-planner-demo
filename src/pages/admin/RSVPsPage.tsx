@@ -202,27 +202,40 @@ const RSVPsPage: React.FC = () => {
   ];
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-800">ตอบรับ</h1>
-        <CustomSearch
-          placeholder="ค้นหาชื่อ-นามสกุล"
-          allowClear
-          style={{ width: '100%', maxWidth: 300 }}
-          onSearch={setSearchText}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
+    <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
+        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">ตอบรับ</h1>
+        <div className="w-full sm:w-auto flex-1 sm:flex-none" style={{ maxWidth: '100%' }}>
+          <CustomSearch
+            placeholder="ค้นหาชื่อ-นามสกุล"
+            allowClear
+            style={{ width: '100%', maxWidth: '100%' }}
+            onSearch={setSearchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </div>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={filteredRSVPs}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20 }}
-        scroll={{ x: 'max-content' }}
-        className="shadow-sm"
-      />
+      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <Table
+          columns={columns}
+          dataSource={filteredRSVPs}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ 
+            pageSize: 20,
+            showSizeChanger: false,
+            responsive: true,
+            showTotal: (total) => `ทั้งหมด ${total} รายการ`,
+          }}
+          scroll={{ 
+            x: 'max-content',
+            y: 'calc(100vh - 350px)',
+          }}
+          className="shadow-sm"
+          size="small"
+        />
+      </div>
 
       <Modal
         title="รายละเอียด RSVP"
@@ -232,11 +245,16 @@ const RSVPsPage: React.FC = () => {
           setSelectedRSVP(null);
         }}
         footer={null}
-        width="90%"
+        width="95%"
+        styles={{ body: { padding: '16px sm:24px' } }}
         style={{ maxWidth: 600 }}
       >
         {selectedRSVP && (
-          <Descriptions column={1} bordered>
+          <Descriptions 
+            column={{ xs: 1, sm: 1, md: 1 }} 
+            bordered
+            size="small"
+          >
             <Descriptions.Item label="ชื่อ-นามสกุล">
               {selectedRSVP.firstName} {selectedRSVP.lastName}
             </Descriptions.Item>

@@ -327,13 +327,14 @@ const SeatingPage: React.FC = () => {
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-800">จัดการที่นั่ง</h1>
+    <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
+        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">จัดการที่นั่ง</h1>
         <Button
           icon={<MenuOutlined />}
           onClick={() => setSidebarDrawerVisible(true)}
-          className="md:hidden"
+          className="md:hidden w-full sm:w-auto"
+          size="middle"
         >
           เปิดรายชื่อแขก
         </Button>
@@ -343,6 +344,8 @@ const SeatingPage: React.FC = () => {
         type="editable-card"
         activeKey={selectedZoneId || undefined}
         onChange={setSelectedZoneId}
+        size="small"
+        className="responsive-tabs"
         onEdit={(targetKey, action) => {
           if (action === 'add') {
             // เพิ่มโซนใหม่
@@ -458,9 +461,9 @@ const SeatingPage: React.FC = () => {
       {currentZone && (
         <div className="mt-4">
 
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
             {/* Guest Sidebar - Hidden on mobile, shown in drawer */}
-            <div className="hidden md:block">
+            <div className="hidden md:block flex-shrink-0">
               <GuestSelectionSidebar
                 guests={guests}
                 selectedGuestId={selectedGuestId}
@@ -480,7 +483,8 @@ const SeatingPage: React.FC = () => {
               placement="left"
               onClose={() => setSidebarDrawerVisible(false)}
               open={sidebarDrawerVisible}
-              width="90%"
+              width="85%"
+              styles={{ body: { padding: '12px' } }}
               style={{ maxWidth: 400 }}
             >
               <GuestSelectionSidebar
@@ -504,10 +508,10 @@ const SeatingPage: React.FC = () => {
 
           {/* Canvas Area */}
           <Card 
-            className="flex-1 shadow-sm"
+            className="flex-1 shadow-sm min-w-0"
             title={
-              <div className="flex items-center justify-between">
-                <span className="text-base md:text-lg font-semibold">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <span className="text-sm sm:text-base md:text-lg font-semibold truncate flex-1 min-w-0">
                   {currentZone?.zoneName || 'ไม่มีชื่อโซน'}
                 </span>
                 {currentZone && (
@@ -519,26 +523,29 @@ const SeatingPage: React.FC = () => {
                       setIsTableModalVisible(true);
                     }}
                     size="small"
+                    className="flex-shrink-0"
                   >
-                    เพิ่มโต๊ะ
+                    <span className="hidden sm:inline">เพิ่มโต๊ะ</span>
+                    <span className="sm:hidden">เพิ่ม</span>
                   </Button>
                 )}
               </div>
             }
+            styles={{ body: { padding: '12px sm:16px' } }}
           >
             <div
               id="layout-canvas"
               style={{
                 position: 'relative',
                 width: '100%',
-                height: '400px',
-                minHeight: '400px',
+                height: '300px',
+                minHeight: '300px',
                 border: '1px solid #e0e0e0',
                 borderRadius: '8px',
                 backgroundColor: '#fafafa',
                 overflow: 'auto',
               }}
-              className="md:h-[600px]"
+              className="sm:h-[400px] md:h-[500px] lg:h-[600px]"
             >
               {tablesInCurrentZone
                 .filter(table => table && table.id && table.tableId)
