@@ -15,7 +15,6 @@ import {
   Tag,
   Select,
   Spin,
-  Alert,
 } from 'antd';
 // นำเข้า icons จาก Ant Design
 import {
@@ -1263,57 +1262,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         setShowBrowserBanner(true);
     }, [isLoggedIn]);
 
-    // Handle open in browser
-    // ใช้ deep link สำหรับ mobile หรือ fallback สำหรับ desktop
-    const handleOpenInBrowser = () => {
-        try {
-            const authService = AuthService.getInstance();
-            const url = authService.getOpenInBrowserUrl();
-            const webViewInfo = authService.getWebViewInfo();
-            
-            // สำหรับ mobile: ลองใช้ deep link หรือ intent
-            if (webViewInfo.isMobile) {
-                // Android: ลองใช้ intent:// หรือ https://
-                if (/Android/i.test(webViewInfo.platform)) {
-                    // ลองเปิดด้วย Chrome หรือ default browser
-                    const chromeIntent = `intent://${url.replace(/https?:\/\//, '')}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
-                    try {
-                        window.location.href = chromeIntent;
-                        setTimeout(() => {
-                            // Fallback: ถ้า intent ไม่ทำงาน ใช้ https://
-                            window.open(url, '_blank');
-                        }, 500);
-                    } catch {
-                        window.open(url, '_blank');
-                    }
-                } else {
-                    // iOS: ใช้ https:// และ Safari จะเปิดอัตโนมัติ
-                    window.open(url, '_blank');
-                }
-            } else {
-                // Desktop: ใช้ window.open
-                window.open(url, '_blank');
-            }
-        } catch (error) {
-            logger.error('Error opening in browser:', error);
-            // Fallback: ใช้ window.open
-            const url = AuthService.getInstance().getOpenInBrowserUrl();
-            window.open(url, '_blank');
-        }
-    };
-
-    // Handle copy link
-    const handleCopyLink = async () => {
-        try {
-            const url = typeof window !== 'undefined' ? window.location.href : '';
-            await navigator.clipboard.writeText(url);
-            message.success('คัดลอกลิงก์เรียบร้อยแล้ว! กรุณาเปิดในเบราว์เซอร์ (Chrome, Safari) แล้ววางลิงก์');
-        } catch (error) {
-            logger.error('Error copying link:', error);
-            message.error('ไม่สามารถคัดลอกลิงก์ได้ กรุณาคัดลอกด้วยตนเอง');
-        }
-    };
-
     // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google หรือ Facebook
     const handleLogin = async (provider: 'google' | 'facebook') => {
         // Prevent multiple clicks - ป้องกันการคลิกซ้ำ
@@ -1982,10 +1930,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // ตรวจสอบว่า login แล้วหรือไม่ - ต้องมีทั้ง isLoggedIn และ currentUser
         // และต้องผ่านการเช็ค auth state แล้ว (isCheckingAuth === false)
         if (!isLoggedIn || !currentUser) {
-            // ตรวจสอบว่าอยู่ใน WebView หรือไม่
-            const webViewInfo = AuthService.getInstance().getWebViewInfo();
-            const isInWebView = webViewInfo.isInWebView;
-
             return (
 
                 <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
@@ -1993,39 +1937,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     <Title level={3} className="font-cinzel text-[#5c3a58] mb-2">Welcome</Title>
 
                     <Text type="secondary" className="block mb-6 text-xs">กรุณายืนยันตัวตนเพื่อลงทะเบียน</Text>
-
-                    {/* Inline Banner สำหรับ Embedded Browser Warning */}
-                    {isInWebView && (
-                        <Alert
-                            message="เบราว์เซอร์ในแอปนี้อาจไม่รองรับการเข้าสู่ระบบด้วย Facebook/Google"
-                            description={
-                                <div className="mt-2 space-y-2">
-                                    <p className="text-sm">หากล็อกอินไม่สำเร็จ แนะนำให้เปิดการ์ดนี้ในเบราว์เซอร์ภายนอก</p>
-                                    <div className="flex gap-2 mt-3">
-                                        <Button 
-                                            size="small" 
-                                            onClick={handleCopyLink}
-                                            icon={<CheckOutlined />}
-                                        >
-                                            คัดลอกลิงก์
-                                        </Button>
-                                        <Button 
-                                            size="small" 
-                                            type="primary"
-                                            onClick={handleOpenInBrowser}
-                                            icon={<EnvironmentOutlined />}
-                                        >
-                                            เปิดในเบราว์เซอร์
-                                        </Button>
-                                    </div>
-                                </div>
-                            }
-                            type="warning"
-                            showIcon
-                            className="mb-4 text-left"
-                            closable
-                        />
-                    )}
 
                     <div className="space-y-3">
                         <Button 
