@@ -716,7 +716,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 
-                <div className="w-full grid grid-cols-4 gap-1 md:gap-2 mb-1 md:mb-4 px-0 md:px-2 relative z-10">
+                <div className="w-full grid grid-cols-5 gap-1 md:gap-2 mb-1 md:mb-4 px-0 md:px-2 relative z-10">
 
                     {weddingSchedule.map((item, idx) => (
 
@@ -726,7 +726,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
                             <div className="text-[#5c3a58] font-bold text-[8px] md:text-xs whitespace-nowrap">{item.time}</div>
 
-                            <div className="text-gray-400 text-[7px] md:text-[10px] hidden sm:block">{item.title}</div>
+                            <div className="text-gray-400 text-[7px] md:text-[10px] hidden sm:block text-center">{item.title}</div>
 
                         </div>
 
