@@ -42,15 +42,6 @@ const GuestsPage: React.FC = () => {
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
   const [selectedCheckInIds, setSelectedCheckInIds] = useState<string[]>([]);
 
-  // Filter guests for list tab
-  const filteredGuests = useMemo(() => {
-    return guests.filter(guest => {
-      const matchesSearch = !searchText || 
-        formatGuestName(guest).toLowerCase().includes(searchText.toLowerCase());
-      const matchesSide = selectedSide === 'all' || guest.side === selectedSide;
-      return matchesSearch && matchesSide;
-    });
-  }, [guests, searchText, selectedSide]);
 
   // Get all members from groups for check-in
   const allMembersForCheckIn = useMemo(() => {
@@ -267,6 +258,81 @@ const GuestsPage: React.FC = () => {
   };
 
 
+  // Prepare tree data structure for table
+  const treeData = useMemo(() => {
+    const data: Array<Guest & { children?: Guest[] }> = [];
+    const processedGroupIds = new Set<string>();
+    
+    // Add groups with children
+    guestGroups.forEach(group => {
+      if (group.totalCount > 1 && !processedGroupIds.has(group.groupId)) {
+        const groupGuests = group.members
+          .map(member => guests.find(g => g.id === member.id))
+          .filter((g): g is Guest => g !== undefined);
+        
+        if (groupGuests.length > 0) {
+          const parentGuest = groupGuests[0]; // First member as parent
+          const childrenGuests = groupGuests.slice(1); // Rest as children
+          
+          data.push({
+            ...parentGuest,
+            children: childrenGuests.length > 0 ? childrenGuests : undefined,
+          });
+          
+          processedGroupIds.add(group.groupId);
+        }
+      }
+    });
+    
+    // Add individual guests (not in groups or groups with 1 member)
+    guests.forEach(guest => {
+      if (!guest.groupId || !processedGroupIds.has(guest.groupId)) {
+        const group = guestGroups.find(g => g.groupId === guest.groupId);
+        if (!group || group.totalCount <= 1) {
+          data.push(guest);
+        }
+      }
+    });
+    
+    return data;
+  }, [guests, guestGroups]);
+
+  // Filter tree data based on search and side
+  const filteredTreeData = useMemo(() => {
+    return treeData.filter(item => {
+      // Check parent
+      const parentMatchesSearch = !searchText || 
+        formatGuestName(item).toLowerCase().includes(searchText.toLowerCase());
+      const parentMatchesSide = selectedSide === 'all' || item.side === selectedSide;
+      
+      // Check children
+      const childrenMatchSearch = item.children?.some(child => 
+        formatGuestName(child).toLowerCase().includes(searchText.toLowerCase())
+      );
+      const childrenMatchSide = item.children?.some(child => 
+        selectedSide === 'all' || child.side === selectedSide
+      );
+      
+      return (parentMatchesSearch || childrenMatchSearch) && (parentMatchesSide || childrenMatchSide);
+    }).map(item => {
+      // Filter children if needed
+      if (item.children && (searchText || selectedSide !== 'all')) {
+        const filteredChildren = item.children.filter(child => {
+          const matchesSearch = !searchText || 
+            formatGuestName(child).toLowerCase().includes(searchText.toLowerCase());
+          const matchesSide = selectedSide === 'all' || child.side === selectedSide;
+          return matchesSearch && matchesSide;
+        });
+        
+        return {
+          ...item,
+          children: filteredChildren.length > 0 ? filteredChildren : undefined,
+        };
+      }
+      return item;
+    });
+  }, [treeData, searchText, selectedSide]);
+
   // Table columns
   const columns: ColumnsType<Guest> = [
     {
@@ -424,46 +490,12 @@ const GuestsPage: React.FC = () => {
           
           <Table
             columns={columns}
-            dataSource={filteredGuests.filter(g => {
-              // Only show group headers and individual guests in main table
-              const group = guestGroups.find(gr => gr.groupId === g.groupId);
-              if (group && group.totalCount > 1) {
-                // Only show first member as header
-                return group.members[0].id === g.id;
-              }
-              return true;
-            })}
+            dataSource={filteredTreeData}
             rowKey="id"
             loading={isLoading}
             pagination={{ pageSize: 20 }}
-            expandable={{
-              expandedRowRender: (record) => {
-                const group = guestGroups.find(g => g.groupId === record.groupId);
-                if (!group || group.totalCount <= 1) {
-                  return null;
-                }
-                
-                const otherMembers = group.members.slice(1).map(member => {
-                  const memberGuest = guests.find(g => g.id === member.id);
-                  return { member, guest: memberGuest };
-                }).filter((item): item is { member: typeof group.members[0]; guest: Guest } => item.guest !== undefined);
-                
-                return (
-                  <Table
-                    columns={columns}
-                    dataSource={otherMembers.map(item => item.guest)}
-                    rowKey="id"
-                    pagination={false}
-                    size="small"
-                    showHeader={false}
-                  />
-                );
-              },
-              rowExpandable: (record) => {
-                const group = guestGroups.find(g => g.groupId === record.groupId);
-                return group ? group.totalCount > 1 : false;
-              },
-            }}
+            defaultExpandAllRows={false}
+            indentSize={20}
           />
         </TabPane>
         <TabPane tab={`เช็คอิน (${totalCheckedIn}/${guests.length})`} key="checkin">
