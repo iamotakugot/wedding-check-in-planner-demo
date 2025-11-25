@@ -9,6 +9,7 @@ const { Text } = Typography;
 interface DraggableTableProps {
   table: TableData;
   seatedGuests: Guest[];
+  seatedMemberCount?: number; // Optional: member count (takes precedence over seatedGuests.length)
   zoneColor: string;
   onTablePositionUpdate: (id: string, newX: number, newY: number) => void;
   onOpenDetail: (table: TableData) => void;
@@ -20,6 +21,7 @@ interface DraggableTableProps {
 const DraggableTable: React.FC<DraggableTableProps> = ({
   table,
   seatedGuests,
+  seatedMemberCount,
   zoneColor,
   onTablePositionUpdate,
   onOpenDetail,
@@ -30,7 +32,8 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
-  const seatedCount = seatedGuests.length;
+  // Use member count if provided, otherwise fall back to guest count
+  const seatedCount = seatedMemberCount !== undefined ? seatedMemberCount : seatedGuests.length;
   const capacity = table.capacity;
   const percent = Math.round((seatedCount / capacity) * 100);
   let opacity = 0.8;

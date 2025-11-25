@@ -3,7 +3,7 @@
  * Map ข้อมูลจาก RSVP และ Guest เป็น GuestGroup structure
  */
 
-import { RSVPData, Guest, GuestGroup, GroupMember } from '@/types';
+import { RSVPData, Guest, GuestGroup, GroupMember, SeatAssignment, TableData, Zone } from '@/types';
 import { getGuestsFromRSVP } from './rsvpHelpers';
 import { formatGuestName } from './guestHelpers';
 
@@ -11,9 +11,16 @@ import { formatGuestName } from './guestHelpers';
  * Map RSVP และ Guests เป็น GuestGroup
  * @param rsvp - RSVPData object
  * @param guests - Array of Guest objects
+ * @param tables - Array of TableData objects (for seat lookup)
+ * @param zones - Array of Zone objects (for seat lookup)
  * @returns GuestGroup หรือ null ถ้าไม่มีข้อมูล
  */
-export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup | null {
+export function mapRSVPToGuestGroup(
+  rsvp: RSVPData,
+  guests: Guest[],
+  tables: TableData[] = [],
+  zones: Zone[] = []
+): GuestGroup | null {
   // ตรวจสอบ input
   if (!rsvp || !rsvp.uid) {
     return null;
@@ -76,6 +83,22 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
     const isOwner = index === 0; // คนแรกคือ owner
     const orderIndex = index; // 0 = ตัวเอง, 1,2,3,... = แขกคนที่ 1,2,3,...
 
+    // Populate seat assignment from Guest.tableId/zoneId
+    let seat: SeatAssignment | null = null;
+    if (guest.tableId && guest.zoneId) {
+      const table = tables.find(t => t.tableId === guest.tableId);
+      const zone = zones.find(z => z.zoneId === guest.zoneId);
+      
+      if (table && zone) {
+        seat = {
+          tableId: guest.tableId,
+          tableLabel: table.tableName,
+          zoneId: guest.zoneId,
+          zoneLabel: zone.zoneName,
+        };
+      }
+    }
+
     return {
       id: guest.id,
       firstName: guest.firstName,
@@ -86,8 +109,7 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
       checkedInAt: guest.checkedInAt || null,
       isOwner,
       orderIndex,
-      // seat จะถูกสร้างใน SeatingPage เมื่อมี access ถึง tables/zones
-      seat: null,
+      seat,
     };
   });
 
@@ -112,9 +134,16 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
  * Map RSVPs และ Guests เป็น GuestGroups
  * @param rsvps - Array of RSVPData
  * @param guests - Array of Guest objects
+ * @param tables - Array of TableData objects (for seat lookup)
+ * @param zones - Array of Zone objects (for seat lookup)
  * @returns Array of GuestGroup
  */
-export function mapRSVPsToGuestGroups(rsvps: RSVPData[], guests: Guest[]): GuestGroup[] {
+export function mapRSVPsToGuestGroups(
+  rsvps: RSVPData[],
+  guests: Guest[],
+  tables: TableData[] = [],
+  zones: Zone[] = []
+): GuestGroup[] {
   // ตรวจสอบ input
   if (!rsvps || rsvps.length === 0) {
     return [];
@@ -134,7 +163,7 @@ export function mapRSVPsToGuestGroups(rsvps: RSVPData[], guests: Guest[]): Guest
     }
 
     // Map RSVP → GuestGroup
-    const group = mapRSVPToGuestGroup(rsvp, guests);
+    const group = mapRSVPToGuestGroup(rsvp, guests, tables, zones);
     if (group) {
       guestGroups.push(group);
     }

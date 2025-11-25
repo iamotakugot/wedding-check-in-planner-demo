@@ -7,20 +7,24 @@ import { useState, useEffect, useMemo } from 'react';
 import { GuestGroup } from '@/types';
 import { useRSVPs } from './useRSVPs';
 import { useGuests } from './useGuests';
+import { useTables } from './useTables';
+import { useZones } from './useZones';
 import { mapRSVPsToGuestGroups } from '@/utils/groupHelpers';
 
 export const useGuestGroups = (isEnabled: boolean = true) => {
   const { rsvps, isLoading: rsvpsLoading } = useRSVPs(isEnabled);
   const { guests, isLoading: guestsLoading } = useGuests(isEnabled);
+  const { tables, isLoading: tablesLoading } = useTables(isEnabled);
+  const { zones, isLoading: zonesLoading } = useZones(isEnabled);
   const [guestGroups, setGuestGroups] = useState<GuestGroup[]>([]);
 
-  // Map RSVPs และ Guests เป็น GuestGroups
+  // Map RSVPs และ Guests เป็น GuestGroups (with seat assignments from tables/zones)
   const mappedGroups = useMemo(() => {
     if (!isEnabled || rsvps.length === 0 || guests.length === 0) {
       return [];
     }
-    return mapRSVPsToGuestGroups(rsvps, guests);
-  }, [rsvps, guests, isEnabled]);
+    return mapRSVPsToGuestGroups(rsvps, guests, tables, zones);
+  }, [rsvps, guests, tables, zones, isEnabled]);
 
   useEffect(() => {
     if (!isEnabled) {
@@ -28,7 +32,7 @@ export const useGuestGroups = (isEnabled: boolean = true) => {
       return;
     }
 
-    if (rsvpsLoading || guestsLoading) {
+    if (rsvpsLoading || guestsLoading || tablesLoading || zonesLoading) {
       return;
     }
 
@@ -48,11 +52,11 @@ export const useGuestGroups = (isEnabled: boolean = true) => {
         hasSeat: m.seat !== null && m.seat !== undefined,
       })),
     })));
-  }, [mappedGroups, rsvpsLoading, guestsLoading, isEnabled]);
+  }, [mappedGroups, rsvpsLoading, guestsLoading, tablesLoading, zonesLoading, isEnabled]);
 
   return {
     guestGroups,
-    isLoading: rsvpsLoading || guestsLoading,
+    isLoading: rsvpsLoading || guestsLoading || tablesLoading || zonesLoading,
   };
 };
 

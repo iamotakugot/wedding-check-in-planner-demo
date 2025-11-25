@@ -59,7 +59,6 @@ const SeatingPage: React.FC = () => {
   // Click-based assignment state
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [isAssignMode, setIsAssignMode] = useState(false);
-  const [searchText, setSearchText] = useState('');
   const seatingManager = new SeatingManager();
 
   const currentZone = zones.find((z) => z && z.id === selectedZoneId && z.zoneName);
@@ -70,6 +69,27 @@ const SeatingPage: React.FC = () => {
     [selectedZoneId, tables]
   );
 
+  // Count seated members per table (from guestGroups)
+  const seatedMembersByTable = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tables) {
+      if (t && t.tableId) {
+        map.set(t.tableId, 0);
+      }
+    }
+    // Count members with seat assignments
+    for (const group of guestGroups) {
+      for (const member of group.members) {
+        if (member.seat?.tableId) {
+          const currentCount = map.get(member.seat.tableId) || 0;
+          map.set(member.seat.tableId, currentCount + 1);
+        }
+      }
+    }
+    return map;
+  }, [guestGroups, tables]);
+
+  // Keep guestsByTable for components that need Guest objects (backward compatibility)
   const guestsByTable = useMemo(() => {
     const map = new Map<string, Guest[]>();
     for (const t of tables) {
@@ -87,41 +107,8 @@ const SeatingPage: React.FC = () => {
     return map;
   }, [guests, tables]);
 
-  // Get unassigned guests/members (no tableId) with search filter
-  // This includes both individual guests and members from groups
-  const unassignedGuests = useMemo(() => {
-    // Get individual guests without groupId
-    const individualGuests = guests.filter(g => !g.tableId && !g.groupId);
-    
-    // Get members from groups that don't have seat assignment
-    const unassignedMembers: Guest[] = [];
-    guestGroups.forEach(group => {
-      group.members.forEach(member => {
-        if (!member.seat) {
-          // Find the corresponding guest object
-          const guest = guests.find(g => g.id === member.id);
-          if (guest) {
-            unassignedMembers.push(guest);
-          }
-        }
-      });
-    });
-    
-    let filtered = [...individualGuests, ...unassignedMembers];
-    
-    // Apply search filter
-    if (searchText && searchText.trim()) {
-      const searchTerm = searchText.trim().toLowerCase();
-      filtered = filtered.filter(g => {
-        const name = `${g.firstName} ${g.lastName}`.toLowerCase();
-        const relation = g.relationToCouple?.toLowerCase() || '';
-        const groupName = g.groupName?.toLowerCase() || '';
-        return name.includes(searchTerm) || relation.includes(searchTerm) || groupName.includes(searchTerm);
-      });
-    }
-    
-    return filtered;
-  }, [guests, guestGroups, searchText]);
+  // Note: GuestSelectionSidebar uses guestGroups directly for members
+  // and filters guests prop internally for individual guests
 
   // Table position update handler
   const handleTablePositionUpdate = useCallback(
@@ -327,7 +314,7 @@ const SeatingPage: React.FC = () => {
             <SeatingSearchInput
               guests={guests}
               guestGroups={guestGroups}
-              onSearch={setSearchText}
+              onSearch={() => {}} // Search handled internally by SeatingSearchInput
               onSelect={handleSearchSelect}
               placeholder="ค้นหาชื่อกลุ่ม / สมาชิก / ความสัมพันธ์"
               style={{ maxWidth: 400 }}
@@ -337,7 +324,7 @@ const SeatingPage: React.FC = () => {
           <div className="flex gap-4">
             {/* Guest Sidebar */}
             <GuestSelectionSidebar
-              guests={unassignedGuests}
+              guests={guests}
               selectedGuestId={selectedGuestId}
               isAssignMode={isAssignMode}
               onGuestClick={handleGuestClick}
@@ -385,11 +372,13 @@ const SeatingPage: React.FC = () => {
                 .filter(table => table && table.id && table.tableId)
                 .map(table => {
                   const seatedGuests = guestsByTable.get(table.tableId) || [];
+                  const seatedMemberCount = seatedMembersByTable.get(table.tableId) || 0;
                   return (
                     <DraggableTable
                       key={table.id}
                       table={table}
                       seatedGuests={seatedGuests}
+                      seatedMemberCount={seatedMemberCount}
                       zoneColor={currentZone?.color || '#1890ff'}
                       onTablePositionUpdate={handleTablePositionUpdate}
                       onTableClick={handleTableClick}
