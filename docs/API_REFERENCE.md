@@ -67,6 +67,11 @@ AuthService.getInstance()
   .signInWithFacebook(): Promise<void>
   .checkRedirectResult(): Promise<User | null>
   .checkIsAdmin(uid: string): Promise<boolean>
+  .getWebViewInfo(): WebViewInfo
+  .shouldBlockFacebookLogin(): boolean
+  .isInInAppBrowser(): boolean
+  .isInFacebookMessengerWebView(): boolean
+  .getOpenInBrowserUrl(): string
 ```
 
 ## Manager Classes
@@ -96,6 +101,7 @@ new CheckInManager()
   .checkInGuest(guestId: string, method: 'manual' | 'qr'): Promise<void>
   .checkOutGuest(guestId: string): Promise<void>
   .checkInGroup(groupId: string, method: 'manual' | 'qr'): Promise<void>
+  .checkInGroupMembers(groupId: string, guestIds: string[], method: 'manual' | 'qr'): Promise<void>
   .checkOutGroup(groupId: string): Promise<void>
   .getCheckedInCount(): Promise<number>
   .getGuestsByGroup(groupId: string): Promise<Guest[]>

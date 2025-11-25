@@ -6,6 +6,7 @@
 import { ref, get, set, update, onValue, DataSnapshot, onDisconnect } from 'firebase/database';
 import { database } from '@/firebase/config';
 import { User } from 'firebase/auth';
+import { logger } from '@/utils/logger';
 // checkIsAdmin not needed in sessions.ts
 
 // Refs
@@ -40,7 +41,7 @@ export const getIsOnline = async (uid: string, isAdmin: boolean = false): Promis
     if (!snapshot.exists()) return false;
     return snapshot.val() === 1;
   } catch (error) {
-    console.error('Error getting isOnline:', error);
+    logger.error('Error getting isOnline:', error);
     return false;
   }
 };
@@ -62,7 +63,7 @@ export const getSessionInfo = async (uid: string, isAdmin: boolean = false): Pro
       startedAt: startedAtSnapshot.exists() ? startedAtSnapshot.val() : undefined,
     };
   } catch (error) {
-    console.error('Error getting session info:', error);
+    logger.error('Error getting session info:', error);
     return null;
   }
 };

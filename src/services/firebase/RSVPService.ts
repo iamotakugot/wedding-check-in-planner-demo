@@ -7,6 +7,7 @@ import { ref, get, set, push, update, onValue, DataSnapshot } from 'firebase/dat
 import { database } from '@/firebase/config';
 import { RSVPData } from '@/types';
 import { AuthService } from './AuthService';
+import { logger } from '@/utils/logger';
 
 interface FirebaseError {
   code?: string;
@@ -134,7 +135,7 @@ export class RSVPService {
       if (!snapshot.exists()) return null;
       return { id, ...snapshot.val() };
     } catch (error) {
-      console.error('Error getting RSVP by ID:', error);
+      logger.error('Error getting RSVP by ID:', error);
       return null;
     }
   }
@@ -173,7 +174,7 @@ export class RSVPService {
       const data = snapshot.val();
       return Object.keys(data).map(key => ({ id: key, ...data[key] }));
     } catch (error) {
-      console.error('Error getting all RSVPs:', error);
+      logger.error('Error getting all RSVPs:', error);
       return [];
     }
   }

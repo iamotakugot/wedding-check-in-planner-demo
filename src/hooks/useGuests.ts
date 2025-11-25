@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Guest } from '@/types';
 import { GuestService } from '@/services/firebase/GuestService';
+import { logger } from '@/utils/logger';
 
 export const useGuests = (isEnabled: boolean = true) => {
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -27,7 +28,7 @@ export const useGuests = (isEnabled: boolean = true) => {
         setIsLoading(false);
       })
       .catch((error) => {
-        console.error('Error loading guests:', error);
+        logger.error('Error loading guests:', error);
         setIsLoading(false);
       });
 

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Drawer, Form, Input, InputNumber, Select, Space, Button, Row, Col } from 'antd';
-import { Guest, Zone, TableData } from '@/types';
+import { Guest } from '@/types';
 import { GENDER_OPTIONS, SIDE_OPTIONS } from '@/data/formOptions';
 
 const { TextArea } = Input;
@@ -10,8 +10,6 @@ interface GuestFormDrawerProps {
   onClose: () => void;
   guestToEdit: Guest | null;
   onSubmit: (guest: Guest) => void;
-  zones: Zone[];
-  tables: TableData[];
 }
 
 const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
@@ -19,8 +17,6 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
   onClose,
   guestToEdit,
   onSubmit,
-  zones: _zones,
-  tables: _tables,
 }) => {
   const [form] = Form.useForm();
   const isEditMode = !!guestToEdit;
@@ -180,3 +176,4 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
 };
 
 export default GuestFormDrawer;
+

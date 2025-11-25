@@ -15,7 +15,6 @@ import {
   Tag,
   Select,
   Spin,
-  Modal,
   Alert,
 } from 'antd';
 // นำเข้า icons จาก Ant Design
@@ -68,6 +67,7 @@ import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formO
 import { defaultWeddingCardConfig, getOrderedNames, type WeddingCardConfig } from '@/constants/weddingCard';
 // นำเข้า utility functions
 import { generateId } from '@/utils/id';
+import { logger } from '@/utils/logger';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -832,16 +832,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     const isLoggingOutRef = useRef(false);
     const sessionLogoutTriggeredRef = useRef(false);
     
-    // 🔧 DevOps: เพิ่ม state สำหรับ Modal คัดลอก link
-    const [copyLinkModal, setCopyLinkModal] = useState<{
-        visible: boolean;
-        link: string;
-        provider: 'google' | 'facebook' | null;
-    }>({
-        visible: false,
-        link: '',
-        provider: null,
-    });
 
     // Check persistent login on mount
     // สำคัญ: ต้องเรียก checkRedirectResult() ก่อน onAuthStateChanged
@@ -856,7 +846,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // 🔧 เพิ่ม timeout เพื่อป้องกัน loading ค้าง (10 วินาที)
         const authTimeout = setTimeout(() => {
             if (isMounted) {
-                console.warn('Auth check timeout - clearing loading state');
+                logger.warn('Auth check timeout - clearing loading state');
                 setIsCheckingAuth(false);
             }
         }, 10000); // 10 seconds timeout
@@ -872,7 +862,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 if (user) {
                     // User successfully signed in via redirect
                     redirectResultHandled = true;
-                    console.log('✅ Redirect login successful, user:', user.uid);
+                    logger.log('✅ Redirect login successful, user:', user.uid);
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
                     setUserInfo(user);
@@ -885,12 +875,14 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     
                     if (!isAdminPath) {
                         registerSession(user, false).catch((sessionError) => {
-                            console.error('Error registering session:', sessionError);
+                            logger.error('Error registering session:', sessionError);
                         });
                     }
                 } else {
                     // No redirect result, continue with auth state check
-                    console.log('No redirect result, checking auth state...');
+                    logger.log('No redirect result, checking auth state...');
+                    
+                    // ไม่ต้องแสดง modal แล้ว - ใช้ inline banner แทน
                 }
             })
             .catch((err) => {
@@ -908,10 +900,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     if (err.message?.includes('sessionStorage') || 
                         err.message?.includes('initial state') ||
                         err.message?.includes('missing initial state')) {
-                        console.warn('SessionStorage error in webview - continuing with auth state check');
+                        logger.warn('SessionStorage error in webview - continuing with auth state check');
                         // ไม่แสดง error message เพื่อไม่ให้ผู้ใช้สับสน
                     } else {
-                        console.error('Redirect login error:', err);
+                        logger.error('Redirect login error:', err);
                         // แสดง error เฉพาะเมื่อไม่ใช่ sessionStorage error
                         message.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ กรุณาลองใหม่');
                     }
@@ -934,7 +926,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             
             if (isAdminPath) {
                 // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
-                console.log('⏭️ [Auth State Change] ข้าม session management - อยู่ในหน้า admin');
+                logger.log('⏭️ [Auth State Change] ข้าม session management - อยู่ในหน้า admin');
                 setIsCheckingAuth(false);
                 setLoading(false);
                 return;
@@ -962,7 +954,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 
                 // ถ้า UID เปลี่ยน หรือยังไม่มี currentUser ให้อัปเดต
                 if (currentUid !== existingUid || !existingUid) {
-                    console.log('✅ Auth state changed, updating user:', currentUid);
+                    logger.log('✅ Auth state changed, updating user:', currentUid);
                     redirectResultHandled = false; // Reset flag เพื่อให้สามารถอัปเดตได้
                     setIsLoggedIn(true);
                     setCurrentUser(currentUid);
@@ -975,7 +967,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             
             // ถ้าไม่มี redirect result และ auth state เปลี่ยน
             if (user) {
-                console.log('✅ Auth state detected, user:', user.uid);
+                logger.log('✅ Auth state detected, user:', user.uid);
                 
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
@@ -987,12 +979,12 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 
                 if (!isAdminPath) {
                     registerSession(user, false).catch((sessionError) => {
-                        console.error('Error registering session:', sessionError);
+                        logger.error('Error registering session:', sessionError);
                     });
                 }
             } else {
                 // Log เฉพาะเมื่อ logout จริงๆ (ไม่ใช่ initial check)
-                console.log('User logged out');
+                logger.log('User logged out');
                 setIsLoggedIn(false);
                 setCurrentUser(null);
                 setUserInfo(null);
@@ -1019,7 +1011,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         
         if (isAdminPath) {
             // ถ้าอยู่ในหน้า admin ไม่ต้องโหลด RSVP
-            console.log('⏭️ [RSVP] ข้ามการโหลด RSVP - อยู่ในหน้า admin');
+            logger.log('⏭️ [RSVP] ข้ามการโหลด RSVP - อยู่ในหน้า admin');
             setIsLoadingRSVP(false);
             return;
         }
@@ -1057,7 +1049,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 const userRSVP = rsvps.find(r => r.uid === currentUser);
                 
                 if (userRSVP) {
-                    console.log('✅ [RSVP] Realtime update - พบ RSVP:', userRSVP.id);
+                    logger.log('✅ [RSVP] Realtime update - พบ RSVP:', userRSVP.id);
                     setSubmittedData(userRSVP);
                     
                     // เติมข้อมูลลง form เพื่อให้แก้ไขได้
@@ -1085,7 +1077,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 
                 setIsLoadingRSVP(false);
             }, (error) => {
-                console.error('❌ [RSVP] เกิดข้อผิดพลาดในการ subscribe RSVP:', error);
+                logger.error('❌ [RSVP] เกิดข้อผิดพลาดในการ subscribe RSVP:', error);
                 setIsLoadingRSVP(false);
             });
             
@@ -1137,10 +1129,63 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
 
+    // Handle open in browser
+    // ใช้ deep link สำหรับ mobile หรือ fallback สำหรับ desktop
+    const handleOpenInBrowser = () => {
+        try {
+            const authService = AuthService.getInstance();
+            const url = authService.getOpenInBrowserUrl();
+            const webViewInfo = authService.getWebViewInfo();
+            
+            // สำหรับ mobile: ลองใช้ deep link หรือ intent
+            if (webViewInfo.isMobile) {
+                // Android: ลองใช้ intent:// หรือ https://
+                if (/Android/i.test(webViewInfo.platform)) {
+                    // ลองเปิดด้วย Chrome หรือ default browser
+                    const chromeIntent = `intent://${url.replace(/https?:\/\//, '')}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
+                    try {
+                        window.location.href = chromeIntent;
+                        setTimeout(() => {
+                            // Fallback: ถ้า intent ไม่ทำงาน ใช้ https://
+                            window.open(url, '_blank');
+                        }, 500);
+                    } catch {
+                        window.open(url, '_blank');
+                    }
+                } else {
+                    // iOS: ใช้ https:// และ Safari จะเปิดอัตโนมัติ
+                    window.open(url, '_blank');
+                }
+            } else {
+                // Desktop: ใช้ window.open
+                window.open(url, '_blank');
+            }
+        } catch (error) {
+            logger.error('Error opening in browser:', error);
+            // Fallback: ใช้ window.open
+            const url = AuthService.getInstance().getOpenInBrowserUrl();
+            window.open(url, '_blank');
+        }
+    };
+
+    // Handle copy link
+    const handleCopyLink = async () => {
+        try {
+            const url = typeof window !== 'undefined' ? window.location.href : '';
+            await navigator.clipboard.writeText(url);
+            message.success('คัดลอกลิงก์เรียบร้อยแล้ว! กรุณาเปิดในเบราว์เซอร์ (Chrome, Safari) แล้ววางลิงก์');
+        } catch (error) {
+            logger.error('Error copying link:', error);
+            message.error('ไม่สามารถคัดลอกลิงก์ได้ กรุณาคัดลอกด้วยตนเอง');
+        }
+    };
+
     // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google หรือ Facebook
     const handleLogin = async (provider: 'google' | 'facebook') => {
         // Prevent multiple clicks - ป้องกันการคลิกซ้ำ
         if (loading) return;
+
+        // ไม่ block login แต่ให้ banner เตือนแทน
 
         // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
         const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -1148,7 +1193,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         
         if (isAdminPath) {
             // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
-            console.log('⏭️ [Login] ข้าม session management - อยู่ในหน้า admin');
+            logger.log('⏭️ [Login] ข้าม session management - อยู่ในหน้า admin');
             setLoading(false);
             return;
         }
@@ -1168,7 +1213,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
             const firebaseUser = AuthService.getInstance().getCurrentUser();
             if (firebaseUser) {
-                console.log('✅ Login successful, setting user state:', firebaseUser.uid);
+                logger.log('✅ Login successful, setting user state:', firebaseUser.uid);
                 setCurrentUser(firebaseUser.uid);
                 setUserInfo(firebaseUser);
                 setIsLoggedIn(true);
@@ -1179,7 +1224,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 
                 if (!isAdminPath) {
                     registerSession(firebaseUser, false).catch((sessionError) => {
-                        console.error('Error registering session:', sessionError);
+                        logger.error('Error registering session:', sessionError);
                     });
                 }
             }
@@ -1188,7 +1233,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // กรณี redirect → จะถูกเพิกเฉยเพราะหน้าเพจจะย้ายออก
             setLoading(false);
         } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-            console.error(`Error initiating ${provider} login:`, error);
+            logger.error(`Error initiating ${provider} login:`, error);
             
             // Handle specific errors - จัดการ error เฉพาะ
             if (error.code === 'auth/popup-blocked') {
@@ -1213,34 +1258,19 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 message.error('อีเมลนี้ถูกเชื่อมกับผู้ให้บริการอื่นอยู่แล้ว กรุณาเข้าสู่ระบบด้วยผู้ให้บริการเดิม');
                 setLoading(false);
             } else if (error.code === 'auth/operation-not-supported-in-this-environment') {
-                // สำหรับ WebView ที่ไม่รองรับ popup → แสดง Modal พร้อม link
-                const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-                setCopyLinkModal({
-                    visible: true,
-                    link: currentUrl,
-                    provider: provider,
-                });
+                // สำหรับ WebView ที่ไม่รองรับ popup → แสดง message แนะนำ
+                message.warning('เบราว์เซอร์นี้อาจไม่รองรับการเข้าสู่ระบบ กรุณาเปิดในเบราว์เซอร์ภายนอก (Chrome/Safari)');
                 setLoading(false);
             } else if (error.message?.startsWith('POPUP_BLOCKED|')) {
-                // 🔧 DevOps: ถ้า popup ถูกบล็อก → แสดง Modal พร้อม link ให้คัดลอก
-                const link = error.message.split('|')[1];
-                setCopyLinkModal({
-                    visible: true,
-                    link: link,
-                    provider: provider,
-                });
+                // ถ้า popup ถูกบล็อก → แสดง message แนะนำ
+                message.warning('ป๊อปอัปถูกบล็อก กรุณาเปิดในเบราว์เซอร์ภายนอก (Chrome/Safari)');
                 setLoading(false);
             } else if (error.message?.includes('เปิดในเบราว์เซอร์') || 
                        error.message?.includes('sessionStorage') ||
                        error.message?.includes('initial state') ||
                        error.message?.includes('missing initial state')) {
-                // สำหรับ WebView ที่ sessionStorage ไม่ทำงาน → แสดง Modal พร้อม link
-                const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-                setCopyLinkModal({
-                    visible: true,
-                    link: currentUrl,
-                    provider: provider,
-                });
+                // สำหรับ WebView ที่ sessionStorage ไม่ทำงาน → แสดง message แนะนำ
+                message.warning('เบราว์เซอร์นี้อาจไม่รองรับการเข้าสู่ระบบ กรุณาเปิดในเบราว์เซอร์ภายนอก (Chrome/Safari)');
                 setLoading(false);
             } else {
                 // ไม่ทราบสาเหตุ → แสดงข้อความผิดพลาดและเคลียร์ loading
@@ -1273,7 +1303,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     // Guest Flow - ใช้ isAdmin = false
                     await endSession(currentUser, false);
                 } catch (sessionError) {
-                    console.error('Error ending session:', sessionError);
+                    logger.error('Error ending session:', sessionError);
                     // ไม่ต้องบล็อกการทำงาน ถ้า session end ล้มเหลว
                 }
             }
@@ -1281,7 +1311,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             await AuthService.getInstance().logout();
             logoutSuccess = true;
         } catch (error) {
-            console.error('Error logging out:', error);
+            logger.error('Error logging out:', error);
             message.error('เกิดข้อผิดพลาดในการออกจากระบบ');
         } finally {
             // รีเซ็ต state เสมอ แม้ว่า logout() จะ throw exception
@@ -1329,7 +1359,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setCurrentUser(effectiveUserId);
                 setUserInfo(firebaseUser);
                 setIsLoggedIn(true);
-                console.log('✅ Got user from Firebase Auth directly:', effectiveUserId);
+                logger.log('✅ Got user from Firebase Auth directly:', effectiveUserId);
             }
         }
         
@@ -1406,7 +1436,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             try {
                 existingRSVP = await RSVPService.getInstance().getByUid(effectiveUserId);
             } catch (error) {
-                console.error('Error fetching existing RSVP:', error);
+                logger.error('Error fetching existing RSVP:', error);
                 // ยังคงดำเนินการต่อแม้ว่าจะดึงข้อมูลไม่ได้
             }
             
@@ -1414,10 +1444,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             if (existingRSVP && existingRSVP.id) {
                 // Update RSVP ที่มีอยู่แล้ว
                 try {
-                    console.log('🔄 [RSVP] กำลังอัปเดต RSVP ID:', existingRSVP.id);
-                    console.log('📝 [RSVP] ข้อมูลที่อัปเดต:', JSON.stringify(rsvpData, null, 2));
+                    logger.log('🔄 [RSVP] กำลังอัปเดต RSVP ID:', existingRSVP.id);
+                    logger.log('📝 [RSVP] ข้อมูลที่อัปเดต:', JSON.stringify(rsvpData, null, 2));
                     await RSVPService.getInstance().update(existingRSVP.id, rsvpData);
-                    console.log('✅ [RSVP] อัปเดต RSVP สำเร็จ');
+                    logger.log('✅ [RSVP] อัปเดต RSVP สำเร็จ');
                     rsvpId = existingRSVP.id;
                     setSubmittedData({ 
                         ...rsvpData, 
@@ -1427,8 +1457,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     } as RSVPData);
                     message.success('อัพเดทข้อมูลเรียบร้อย');
                 } catch (error: unknown) {
-                    console.error('Error updating RSVP:', error);
-                    const errorMessage = (error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัพเดทข้อมูล RSVP');
+                    logger.error('Error updating RSVP:', error);
+                    const errorMessage = (error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัพเดทข้อมูลตอบรับร่วมงาน');
                     message.error(errorMessage);
                     setLoading(false);
                     return;
@@ -1436,10 +1466,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             } else {
                 // Create RSVP ใหม่
                 try {
-                    console.log('🆕 [RSVP] กำลังสร้าง RSVP ใหม่...');
-                    console.log('📝 [RSVP] ข้อมูล RSVP:', JSON.stringify(rsvpData, null, 2));
+                    logger.log('🆕 [RSVP] กำลังสร้าง RSVP ใหม่...');
+                    logger.log('📝 [RSVP] ข้อมูล RSVP:', JSON.stringify(rsvpData, null, 2));
                     rsvpId = await RSVPService.getInstance().create(rsvpData);
-                    console.log('✅ [RSVP] สร้าง RSVP สำเร็จ ID:', rsvpId);
+                    logger.log('✅ [RSVP] สร้าง RSVP สำเร็จ ID:', rsvpId);
                     setSubmittedData({ 
                         ...rsvpData, 
                         id: rsvpId,
@@ -1448,8 +1478,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     } as RSVPData);
                     message.success('บันทึกข้อมูลเรียบร้อย');
                 } catch (error: unknown) {
-                    console.error('Error creating RSVP:', error);
-                    const errorMessage = (error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล RSVP');
+                    logger.error('Error creating RSVP:', error);
+                    const errorMessage = (error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูลตอบรับร่วมงาน');
                     message.error(errorMessage);
                     setLoading(false);
                     return;
@@ -1460,30 +1490,30 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             if (values.isComing === 'yes') {
                 let allGuestsCreated = true;
                 try {
-                    console.log('🔄 [RSVP Flow] กำลังจัดการ Guest สำหรับ RSVP...');
+                    logger.log('🔄 [RSVP Flow] กำลังจัดการ Guest สำหรับ RSVP...');
                     
                     // 1. เช็ค Guest ที่ link กับ RSVP อยู่แล้ว (ถ้ามี)
                     let existingGuest = existingRSVP?.guestId ? await GuestService.getInstance().getById(existingRSVP.guestId) : null;
                     
                     // 2. 🔧 Idempotency Check: เช็คว่ามี Guest ที่มี rsvpUid นี้อยู่แล้วหรือไม่
                     if (!existingGuest) {
-                        console.log('🔍 [RSVP Flow] กำลังตรวจสอบ Guest ที่มี rsvpUid:', effectiveUserId);
+                        logger.log('🔍 [RSVP Flow] กำลังตรวจสอบ Guest ที่มี rsvpUid:', effectiveUserId);
                         existingGuest = await GuestService.getInstance().getByRsvpUid(effectiveUserId);
                         
                         if (existingGuest) {
-                            console.log('✅ [RSVP Flow] พบ Guest ที่มีอยู่แล้ว (rsvpUid):', existingGuest.id);
+                            logger.log('✅ [RSVP Flow] พบ Guest ที่มีอยู่แล้ว (rsvpUid):', existingGuest.id);
                             // Link RSVP กับ Guest ที่มีอยู่ (ถ้ายังไม่ได้ link)
                             if (!existingRSVP?.guestId || existingRSVP.guestId !== existingGuest.id) {
-                                console.log('🔗 [RSVP Flow] กำลัง link RSVP กับ Guest ที่มีอยู่...');
+                                logger.log('🔗 [RSVP Flow] กำลัง link RSVP กับ Guest ที่มีอยู่...');
                                 await RSVPService.getInstance().update(rsvpId, { guestId: existingGuest.id });
-                                console.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
+                                logger.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
                             }
                         }
                     }
                     
                     if (existingGuest) {
                         // Update Guest ที่มีอยู่แล้ว - ใช้ฟังก์ชันสำหรับ RSVP
-                        console.log('🔄 [RSVP Flow] กำลังอัปเดต Guest ที่มีอยู่:', existingGuest.id);
+                        logger.log('🔄 [RSVP Flow] กำลังอัปเดต Guest ที่มีอยู่:', existingGuest.id);
                         const updatedGuest: Partial<Guest> = {
                             firstName: rsvpData.firstName || existingGuest.firstName,
                             lastName: rsvpData.lastName || existingGuest.lastName,
@@ -1506,17 +1536,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // ใช้ฟังก์ชันสำหรับ RSVP (ไม่ต้อง requireAdmin)
                         await GuestService.getInstance().updateFromRSVP(existingGuest.id, updatedGuest, effectiveUserId);
-                        console.log('✅ [RSVP Flow] อัปเดต Guest สำเร็จ:', existingGuest.id);
+                        logger.log('✅ [RSVP Flow] อัปเดต Guest สำเร็จ:', existingGuest.id);
                         
                         // Update RSVP ให้ link กับ Guest (ถ้ายังไม่ได้ link)
                         if (!existingRSVP?.guestId || existingRSVP.guestId !== existingGuest.id) {
                             await RSVPService.getInstance().update(rsvpId, { guestId: existingGuest.id });
-                            console.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
+                            logger.log('✅ [RSVP Flow] Link RSVP กับ Guest สำเร็จ');
                         }
                         
                         // 🔧 DevOps Fix: จัดการ accompanying guests เมื่อ update RSVP
                         if (rsvpData.accompanyingGuests && rsvpData.accompanyingGuests.length > 0) {
-                            console.log(`🔄 [RSVP Flow] กำลังจัดการ Guest ผู้ติดตาม ${rsvpData.accompanyingGuests.length} คน...`);
+                            logger.log(`🔄 [RSVP Flow] กำลังจัดการ Guest ผู้ติดตาม ${rsvpData.accompanyingGuests.length} คน...`);
                             
                             // หา groupId จาก existingGuest
                             const groupId = existingGuest.groupId || `GROUP_${existingGuest.id}`;
@@ -1567,7 +1597,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                         });
                                         
                                         await GuestService.getInstance().updateFromRSVP(existingAccGuest.id, updatedAccGuest, effectiveUserId);
-                                        console.log(`✅ [RSVP Flow] อัปเดต Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, existingAccGuest.id, accGuest.name);
+                                        logger.log(`✅ [RSVP Flow] อัปเดต Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, existingAccGuest.id, accGuest.name);
                                     } else {
                                         // สร้าง Guest ใหม่สำหรับผู้ติดตาม
                                         const accGuestId = generateId();
@@ -1602,13 +1632,13 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                         });
                                         
                                                                         await GuestService.getInstance().createFromRSVP(accGuestData, effectiveUserId);
-                                        console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
+                                        logger.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
                                     }
                                 } catch (accError: unknown) {
                                     allGuestsCreated = false;
-                                    console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest ผู้ติดตาม ${i + 1}:`, accError);
+                                    logger.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest ผู้ติดตาม ${i + 1}:`, accError);
                                     if (accError && typeof accError === 'object' && 'code' in accError && accError.code === 'PERMISSION_DENIED') {
-                                        console.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
+                                        logger.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
                                     }
                                 }
                             }
@@ -1620,17 +1650,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                             for (const guestToRemove of guestsToRemove) {
                                 try {
                                     await remove(ref(database, `guests/${guestToRemove.id}`));
-                                    console.log(`🗑️ [RSVP Flow] ลบ Guest ที่ไม่ตรงกับ RSVP:`, guestToRemove.id);
+                                    logger.log(`🗑️ [RSVP Flow] ลบ Guest ที่ไม่ตรงกับ RSVP:`, guestToRemove.id);
                                 } catch (error) {
-                                    console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการลบ Guest:`, error);
+                                    logger.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการลบ Guest:`, error);
                                 }
                             }
                             
-                            console.log(`✅ [RSVP Flow] จัดการ Guest ผู้ติดตามเสร็จสิ้น (${rsvpData.accompanyingGuests.length} คน)`);
+                            logger.log(`✅ [RSVP Flow] จัดการ Guest ผู้ติดตามเสร็จสิ้น (${rsvpData.accompanyingGuests.length} คน)`);
                         }
                     } else {
                         // 🔧 DevOps: สร้างกลุ่ม (Group) จาก RSVP
-                        console.log('🆕 [RSVP Flow] กำลังสร้าง Guest ใหม่ (พร้อมกลุ่ม)...');
+                        logger.log('🆕 [RSVP Flow] กำลังสร้าง Guest ใหม่ (พร้อมกลุ่ม)...');
                         const groupId = `GROUP_${generateId()}`;
                         const groupName = `${rsvpData.firstName || 'ไม่ระบุชื่อ'} ${rsvpData.lastName || ''}`.trim();
                         const mainGuestId = generateId();
@@ -1678,7 +1708,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // 2. สร้าง Guest สำหรับผู้ติดตาม (accompanyingGuests)
                         if (rsvpData.accompanyingGuests && rsvpData.accompanyingGuests.length > 0) {
-                            console.log(`🔄 [RSVP Flow] กำลังสร้าง Guest ผู้ติดตาม ${rsvpData.accompanyingGuests.length} คน...`);
+                            logger.log(`🔄 [RSVP Flow] กำลังสร้าง Guest ผู้ติดตาม ${rsvpData.accompanyingGuests.length} คน...`);
                             
                             for (let i = 0; i < rsvpData.accompanyingGuests.length; i++) {
                                 try {
@@ -1719,16 +1749,16 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                     // แต่ต้อง bypass idempotency check สำหรับผู้ติดตาม (เพราะมี rsvpUid เดียวกัน)
                                     // ดังนั้นใช้ set โดยตรง แต่เพิ่ม error handling
                                     await GuestService.getInstance().createFromRSVP(accGuestData, effectiveUserId);
-                                    console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
+                                    logger.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตาม ${i + 1}/${rsvpData.accompanyingGuests.length} สำเร็จ:`, accGuestId, accGuest.name || `คนที่ ${i + 1}`);
                                 } catch (accError: unknown) {
-                                    console.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการสร้าง Guest ผู้ติดตาม ${i + 1}:`, accError);
+                                    logger.error(`❌ [RSVP Flow] เกิดข้อผิดพลาดในการสร้าง Guest ผู้ติดตาม ${i + 1}:`, accError);
                                     // ยังคงดำเนินการต่อแม้ว่าจะเกิด error (ไม่ throw เพื่อให้สร้าง Guest คนอื่นต่อได้)
                                     if (accError && typeof accError === 'object' && 'code' in accError && accError.code === 'PERMISSION_DENIED') {
-                                        console.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
+                                        logger.error(`🚫 [RSVP Flow] Permission denied สำหรับ Guest ผู้ติดตาม ${i + 1} - ตรวจสอบ Firebase Rules`);
                                     }
                                 }
                             }
-                            console.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตามเสร็จสิ้น (${rsvpData.accompanyingGuests.length} คน)`);
+                            logger.log(`✅ [RSVP Flow] สร้าง Guest ผู้ติดตามเสร็จสิ้น (${rsvpData.accompanyingGuests.length} คน)`);
                         }
                         
                         // 🔧 Double-check: เช็คว่า Guest ถูกสร้างจริงหรือไม่ (อาจจะถูก skip เพราะ idempotency)
@@ -1741,10 +1771,10 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         
                         // Update RSVP ให้ link กับ Guest
                         await RSVPService.getInstance().update(rsvpId, { guestId: finalGuestId });
-                        console.log('✅ [RSVP Flow] สร้าง Guest และ link RSVP สำเร็จ:', finalGuestId);
+                        logger.log('✅ [RSVP Flow] สร้าง Guest และ link RSVP สำเร็จ:', finalGuestId);
                     }
                 } catch (guestError: unknown) {
-                    console.error('❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest:', guestError);
+                    logger.error('❌ [RSVP Flow] เกิดข้อผิดพลาดในการจัดการ Guest:', guestError);
                     const errorMessage = guestError instanceof Error ? guestError.message : String(guestError || 'Unknown error');
                     // แสดง error message ที่ชัดเจนขึ้น
                     message.warning(`บันทึก RSVP สำเร็จ แต่เกิดปัญหาในการสร้างข้อมูล Guest: ${errorMessage}`);
@@ -1763,7 +1793,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         // ถ้า Guest ถูกสร้างโดย admin ให้ข้าม (ไม่สามารถแก้ไขได้)
                     }
                 } catch (guestError) {
-                    console.error('Error updating guest isComing:', guestError);
+                    logger.error('Error updating guest isComing:', guestError);
                     // ไม่ throw error เพื่อไม่ให้กระทบการบันทึก RSVP
                 }
             }
@@ -1771,7 +1801,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             setIsEditing(false);
             setLoading(false);
         } catch (error: unknown) {
-            console.error('Error saving RSVP:', error);
+            logger.error('Error saving RSVP:', error);
             setLoading(false);
             const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
             message.error(`เกิดข้อผิดพลาดในการบันทึกข้อมูล: ${errorMessage}`);
@@ -1809,7 +1839,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // ตรวจสอบว่าอยู่ใน WebView หรือไม่
             const webViewInfo = AuthService.getInstance().getWebViewInfo();
             const isInWebView = webViewInfo.isInWebView;
-            const sessionStorageAvailable = webViewInfo.sessionStorageAvailable;
 
             return (
 
@@ -1819,12 +1848,33 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                     <Text type="secondary" className="block mb-6 text-xs">กรุณายืนยันตัวตนเพื่อลงทะเบียน</Text>
 
-                    {/* แสดงคำเตือนสำหรับ WebView ที่ sessionStorage ไม่ทำงาน */}
-                    {isInWebView && !sessionStorageAvailable && (
+                    {/* Inline Banner สำหรับ Embedded Browser Warning */}
+                    {isInWebView && (
                         <Alert
-                            message="คำแนะนำ"
-                            description="หากไม่สามารถเข้าสู่ระบบได้ กรุณากดปุ่ม 'เปิดในเบราว์เซอร์' (⋮) ที่มุมบนขวา แล้วเลือก 'เปิดใน Chrome' หรือ 'เปิดใน Safari'"
-                            type="info"
+                            message="เบราว์เซอร์ในแอปนี้อาจไม่รองรับการเข้าสู่ระบบด้วย Facebook/Google"
+                            description={
+                                <div className="mt-2 space-y-2">
+                                    <p className="text-sm">หากล็อกอินไม่สำเร็จ แนะนำให้เปิดการ์ดนี้ในเบราว์เซอร์ภายนอก</p>
+                                    <div className="flex gap-2 mt-3">
+                                        <Button 
+                                            size="small" 
+                                            onClick={handleCopyLink}
+                                            icon={<CheckOutlined />}
+                                        >
+                                            คัดลอกลิงก์
+                                        </Button>
+                                        <Button 
+                                            size="small" 
+                                            type="primary"
+                                            onClick={handleOpenInBrowser}
+                                            icon={<EnvironmentOutlined />}
+                                        >
+                                            เปิดในเบราว์เซอร์
+                                        </Button>
+                                    </div>
+                                </div>
+                            }
+                            type="warning"
                             showIcon
                             className="mb-4 text-left"
                             closable
@@ -1832,8 +1882,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     )}
 
                     <div className="space-y-3">
-
-                        <Button block size="large" icon={<FacebookFilled />} className="h-12 bg-[#1877f2] text-white border-none rounded-xl shadow-sm hover:opacity-90 font-medium" onClick={() => handleLogin('facebook')} loading={loading} disabled={loading}>เข้าสู่ระบบด้วย Facebook</Button>
+                        <Button 
+                            block 
+                            size="large" 
+                            icon={<FacebookFilled />} 
+                            className="h-12 bg-[#1877f2] text-white border-none rounded-xl shadow-sm hover:opacity-90 font-medium" 
+                            onClick={() => handleLogin('facebook')} 
+                            loading={loading} 
+                            disabled={loading}
+                        >
+                            เข้าสู่ระบบด้วย Facebook
+                        </Button>
 
                         <Button block size="large" icon={<GoogleCircleFilled />} className="h-12 bg-white text-gray-600 border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 font-medium" onClick={() => handleLogin('google')} loading={loading} disabled={loading}>เข้าสู่ระบบด้วย Google</Button>
 
@@ -2290,53 +2349,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
     };
 
-    // 🔧 DevOps: ฟังก์ชันสำหรับคัดลอก link
-    const handleCopyLink = async () => {
-        try {
-            await navigator.clipboard.writeText(copyLinkModal.link);
-            message.success('คัดลอกลิงก์เรียบร้อยแล้ว! เปิดในเบราว์เซอร์ (Chrome, Safari) แล้ววางลิงก์');
-            setCopyLinkModal({ visible: false, link: '', provider: null });
-        } catch (error) {
-            message.error('ไม่สามารถคัดลอกลิงก์ได้ กรุณาคัดลอกด้วยตนเอง');
-        }
-    };
-
     return (
         <>
-            {/* 🔧 DevOps: Modal สำหรับคัดลอก link เมื่อ popup ไม่ทำงาน */}
-            <Modal
-                title="ไม่สามารถเข้าสู่ระบบในแอปนี้ได้"
-                open={copyLinkModal.visible}
-                onCancel={() => setCopyLinkModal({ visible: false, link: '', provider: null })}
-                footer={[
-                    <Button key="copy" type="primary" onClick={handleCopyLink}>
-                        คัดลอกลิงก์
-                    </Button>,
-                    <Button key="close" onClick={() => setCopyLinkModal({ visible: false, link: '', provider: null })}>
-                        ปิด
-                    </Button>,
-                ]}
-            >
-                <Alert
-                    message="คำแนะนำ"
-                    description={
-                        <div>
-                            <p>กรุณาคัดลอกลิงก์ด้านล่าง แล้วเปิดในเบราว์เซอร์ (Chrome, Safari) เพื่อเข้าสู่ระบบ</p>
-                            <Input.TextArea
-                                value={copyLinkModal.link}
-                                readOnly
-                                rows={3}
-                                style={{ marginTop: 12 }}
-                            />
-                            <p style={{ marginTop: 12, fontSize: '12px', color: '#666' }}>
-                                💡 หลังจากเข้าสู่ระบบในเบราว์เซอร์แล้ว คุณสามารถกลับมาใช้งานในแอปนี้ได้
-                            </p>
-                        </div>
-                    }
-                    type="info"
-                    showIcon
-                />
-            </Modal>
 
             <div className="w-full h-full flex flex-col bg-[#fdfbf7] relative overflow-hidden">
 
@@ -2446,7 +2460,6 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const [weddingCardConfig, setWeddingCardConfig] = useState<WeddingCardConfig | null>(null);
     const [isConfigLoading, setIsConfigLoading] = useState(true); // สถานะการโหลด config
 
-    // eslint-disable-next-line security/detect-object-injection
     const currentTrack = PLAYLIST[currentTrackIndex];
 
     // Ref สำหรับ YouTube iframe
@@ -2520,7 +2533,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
                         }
                     })
                     .catch((error) => {
-                        console.error('Error loading app state:', error);
+                        logger.error('Error loading app state:', error);
                     });
 
                 // Subscribe to state changes จาก Firebase (sync ระหว่างแท็บ/อุปกรณ์)
@@ -2609,7 +2622,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         const timeoutId = setTimeout(() => {
             updateUserAppState(user.uid, { isFlipped })
                 .catch((error) => {
-                    console.error('Error saving isFlipped state:', error);
+                    logger.error('Error saving isFlipped state:', error);
                 });
         }, 300);
 
@@ -2629,7 +2642,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         const timeoutId = setTimeout(() => {
             updateUserAppState(user.uid, { musicPlaying })
                 .catch((error) => {
-                    console.error('Error saving musicPlaying state:', error);
+                    logger.error('Error saving musicPlaying state:', error);
                 });
         }, 300);
 
@@ -2647,7 +2660,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         const timeoutId = setTimeout(() => {
             updateUserAppState(user.uid, { currentTrackIndex })
                 .catch((error) => {
-                    console.error('Error saving currentTrackIndex state:', error);
+                    logger.error('Error saving currentTrackIndex state:', error);
                 });
         }, 300);
 
@@ -2672,7 +2685,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
             // Guest Flow - ใช้ userAppState ตามปกติ
             updateUserAppState(user.uid, { hasStarted: true, isFlipped: shouldFlip })
                 .catch((error) => {
-                    console.error('Error saving hasStarted state:', error);
+                    logger.error('Error saving hasStarted state:', error);
                 });
         }
         // Set flag เพื่อบอกว่าเป็น manual control (initial start)
@@ -2699,7 +2712,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         if (user) {
             updateUserAppState(user.uid, { isFlipped: false })
                 .catch((error) => {
-                    console.error('Error saving isFlipped state:', error);
+                    logger.error('Error saving isFlipped state:', error);
                 });
         }
     };
@@ -2731,7 +2744,6 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const handleNext = () => {
         const nextIndex = (currentTrackIndex + 1) % PLAYLIST.length;
         setCurrentTrackIndex(nextIndex);
-        // eslint-disable-next-line security/detect-object-injection
         sendCommand('loadVideoById', [PLAYLIST[nextIndex].id], false); // Don't require ready for manual control
         // Keep playing state true if we change track
         if (!musicPlaying) setMusicPlaying(true);
@@ -2741,7 +2753,6 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
     const handlePrev = () => {
         const prevIndex = (currentTrackIndex - 1 + PLAYLIST.length) % PLAYLIST.length;
         setCurrentTrackIndex(prevIndex);
-        // eslint-disable-next-line security/detect-object-injection
         sendCommand('loadVideoById', [PLAYLIST[prevIndex].id], false); // Don't require ready for manual control
         if (!musicPlaying) setMusicPlaying(true);
     };

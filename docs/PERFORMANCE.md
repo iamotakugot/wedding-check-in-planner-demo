@@ -8,12 +8,12 @@
 ## Firebase Optimization
 - ใช้ `.indexOn` rules สำหรับ queries:
   - `rsvps`: uid, isComing, guestId
-  - `guests`: rsvpUid, rsvpId, groupId, zoneId, tableId, checkedInAt
+  - `guests`: rsvpUid, rsvpId, groupId, zoneId, tableId, checkedInAt, isComing
   - `zones`: order
   - `tables`: zoneId, order
 - Limit data ที่ fetch
 - ใช้ offline persistence
-- Debounce สำหรับ frequent updates (drag operations, state updates)
+- Debounce สำหรับ frequent updates (drag operations, state updates, modal/select operations)
 
 ## Mobile Optimization
 - Facebook Messenger WebView compatibility

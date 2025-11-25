@@ -10,6 +10,8 @@
     "lint:loops": "eslint . --ext ts,tsx --format compact",
     "check:loops": "npm run lint:loops",
     "typecheck": "tsc --noEmit",
+    "validate": "npm run typecheck && npm run build",
+    "predeploy": "npm run validate",
     "audit:ci": "npm audit --audit-level=high",
     "preview": "vite preview"
   },

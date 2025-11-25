@@ -5,7 +5,7 @@
  * Usage: npx ts-node scripts/migrate-database.ts
  */
 
-import { ref, get, set, update } from 'firebase/database';
+import { ref, get, update } from 'firebase/database';
 import { database } from '../src/firebase/config';
 
 interface OldGuest {

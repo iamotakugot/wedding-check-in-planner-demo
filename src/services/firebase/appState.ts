@@ -6,6 +6,7 @@
 import { ref, get, update, onValue, DataSnapshot } from 'firebase/database';
 import { database } from '@/firebase/config';
 import { AuthService } from './AuthService';
+import { logger } from '@/utils/logger';
 
 // Types
 export interface UserAppState {
@@ -32,7 +33,7 @@ export const getUserAppState = async (uid: string): Promise<UserAppState | null>
     if (!snapshot.exists()) return null;
     return snapshot.val();
   } catch (error) {
-    console.error('Error getting user app state:', error);
+    logger.error('Error getting user app state:', error);
     return null;
   }
 };
@@ -78,7 +79,7 @@ export const getAdminAppState = async (uid: string): Promise<AdminAppState | nul
     if (!snapshot.exists()) return null;
     return snapshot.val();
   } catch (error) {
-    console.error('Error getting admin app state:', error);
+    logger.error('Error getting admin app state:', error);
     return null;
   }
 };

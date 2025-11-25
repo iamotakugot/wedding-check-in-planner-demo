@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { ConfigProvider, App as AntApp, Spin, message } from 'antd';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import GuestRSVPApp from '@/card/GuestRSVPApp';
-import ErrorBoundary from '@/components/ErrorBoundary';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 // Admin Panel ใหม่ - Lazy load สำหรับ code splitting
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'));
 const DashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
@@ -20,6 +20,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useRSVPSync } from '@/hooks/useRSVPSync';
 // Services ใหม่
 import { getAdminAppState, updateAdminAppState, subscribeAdminAppState } from '@/services/firebase/appState';
+import { logger } from '@/utils/logger';
 
 const App: React.FC = () => {
   // Check URL path
@@ -64,7 +65,7 @@ const App: React.FC = () => {
         isInitialStateLoadedRef.current = true;
       })
       .catch((error) => {
-        console.error('Error loading admin app state:', error);
+        logger.error('Error loading admin app state:', error);
         isInitialStateLoadedRef.current = true;
       });
 
@@ -89,7 +90,7 @@ const App: React.FC = () => {
     const timeoutId = setTimeout(() => {
       updateAdminAppState(user.uid, { currentView })
         .catch((error) => {
-          console.error('Error saving admin app state:', error);
+          logger.error('Error saving admin app state:', error);
         });
     }, 300);
 
@@ -180,7 +181,7 @@ const App: React.FC = () => {
                   try {
                     await logout();
                   } catch (error) {
-                    console.error('Error logging out:', error);
+                    logger.error('Error logging out:', error);
                   }
                 }}
               >

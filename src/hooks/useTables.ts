@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { TableData } from '@/types';
 import { TableService } from '@/services/firebase/TableService';
+import { logger } from '@/utils/logger';
 
 export const useTables = (isEnabled: boolean = true) => {
   const [tables, setTables] = useState<TableData[]>([]);
@@ -27,7 +28,7 @@ export const useTables = (isEnabled: boolean = true) => {
         setIsLoading(false);
       })
       .catch((error) => {
-        console.error('Error loading tables:', error);
+        logger.error('Error loading tables:', error);
         setIsLoading(false);
       });
 

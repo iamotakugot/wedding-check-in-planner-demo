@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { ConfigService, WeddingConfig, WeddingCardConfigFirebase } from '@/services/firebase/ConfigService';
+import { logger } from '@/utils/logger';
 
 export const useConfig = (isEnabled: boolean = true) => {
   const [config, setConfig] = useState<WeddingConfig | null>(null);
@@ -31,7 +32,7 @@ export const useConfig = (isEnabled: boolean = true) => {
         setIsLoading(false);
       })
       .catch((error) => {
-        console.error('Error loading config:', error);
+        logger.error('Error loading config:', error);
         setIsLoading(false);
       });
 

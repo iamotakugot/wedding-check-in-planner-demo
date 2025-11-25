@@ -6,6 +6,7 @@ import { Layout, Card, Form, Input, Button, Typography, Alert, App } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 // นำเข้า Firebase service functions สำหรับ authentication
 import { AuthService } from '@/services/firebase/AuthService';
+import { logger } from '@/utils/logger';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -71,7 +72,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
         const currentIsAdmin = await AuthService.getInstance().checkIsAdmin(currentUser.uid);
         if (!currentIsAdmin) {
           // Guest ที่ล็อคอินแล้ว → logout ก่อน
-          console.log('ℹ️ [Admin Login] Logging out Guest account before admin login');
+          logger.log('ℹ️ [Admin Login] Logging out Guest account before admin login');
           await AuthService.getInstance().logout();
         }
       }
@@ -97,7 +98,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess }) => {
       setLoading(false);
       onLoginSuccess(); // เรียก callback เพื่อบอก parent component
     } catch (error: unknown) {
-      console.error('Login error:', error);
+      logger.error('Login error:', error);
       
       // แสดง error message ที่เข้าใจง่าย - รองรับ Firebase error codes ทุกเวอร์ชัน
       let errorMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';

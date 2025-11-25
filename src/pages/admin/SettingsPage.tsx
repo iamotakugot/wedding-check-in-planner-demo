@@ -11,6 +11,7 @@ import { useRSVPs } from '@/hooks/useRSVPs';
 import { ConfigService } from '@/services/firebase/ConfigService';
 import { defaultWeddingCardConfig, type WeddingCardConfig } from '@/constants/weddingCard';
 import { calculateTotalAttendees, calculateRsvpStats } from '@/utils/rsvpHelpers';
+import { logger } from '@/utils/logger';
 
 const { TabPane } = Tabs;
 
@@ -39,7 +40,7 @@ const SettingsPage: React.FC = () => {
       await configService.updateWeddingCardConfig(configToSave);
       message.success('บันทึกข้อมูลการ์ดแต่งงานเรียบร้อย');
     } catch (error) {
-      console.error('Error saving config:', error);
+      logger.error('Error saving config:', error);
       message.error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     } finally {
       setSaving(false);

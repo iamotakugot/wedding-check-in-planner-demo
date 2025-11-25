@@ -51,9 +51,9 @@ export interface WeddingCardConfig {
 export const defaultWeddingCardConfig: WeddingCardConfig = {
   groom: {
     firstName: 'Pattarapong',
-    lastName: 'Pisapeng',
+    lastName: 'Phitpheng',
     nickname: 'Got',
-    fullNameThai: 'นายภัทรพงษ์ พิศเพ็ง',
+    fullNameThai: 'นายภัทรพงษ์ พิทเพ็ง',
   },
   bride: {
     firstName: 'Supannee',
@@ -63,8 +63,8 @@ export const defaultWeddingCardConfig: WeddingCardConfig = {
   },
   parents: {
     groom: {
-      father: 'นาย บัณฑิต พิศเพ็ง',
-      mother: 'นาง อุบลวรรณ พิศเพ็ง',
+      father: 'นาย บัณฑิต พิทเพ็ง',
+      mother: 'นาง อุบลวรรณ พิทเพ็ง',
     },
     bride: {
       father: 'ร.ต.ท. อุดม ทอนสูงเนิน',

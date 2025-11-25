@@ -333,10 +333,95 @@ firebase deploy
 
 ---
 
+## Phase 9: Post-refactor Validation ✅
+**สถานะ:** ผ่านการตรวจสอบ
+
+### New Features Validation
+
+**Group Check-in with Checkbox Selection:**
+- ✅ `CheckInManager.checkInGroupMembers()` method ทำงานถูกต้อง
+- ✅ GuestsPage แสดง Group Check-in buttons
+- ✅ Modal แสดง checkbox สำหรับแต่ละ guest
+- ✅ RSVP status integration ทำงานถูกต้อง (disable check-in สำหรับ `isComing === 'no'`)
+- ✅ Real-time sync ไปยัง Admin Panel
+
+**Click-based Seating Assignment:**
+- ✅ SeatingPage มี Sidebar สำหรับ guest selection
+- ✅ Click flow: เลือก guest → คลิกโต๊ะ → assign สำเร็จ
+- ✅ Drag & drop ถูก disable เมื่ออยู่ใน Assign Mode
+- ✅ Visual indicator (border highlight) แสดงเมื่ออยู่ใน Assign Mode
+- ✅ `SeatingManager.assignGuestToTable()` ทำงานถูกต้อง
+
+**RSVP Status Integration:**
+- ✅ GuestsPage แสดง column "สถานะตอบรับ"
+- ✅ Check-in button disabled สำหรับแขกที่ไม่มาร่วมงาน
+- ✅ Real-time sync เมื่อ RSVP status เปลี่ยน
+
+**UI Text Updates:**
+- ✅ GuestRSVPApp เปลี่ยนข้อความ "RSVP" เป็น "ตอบรับร่วมงาน" แล้ว
+- ✅ URL `/rsvp` คงเดิม (ไม่เปลี่ยน route)
+
+**Configuration Updates:**
+- ✅ weddingCard.ts แก้ไขนามสกุล "Pisapeng" → "Phitpheng" แล้ว
+- ✅ SettingsPage ใช้ defaultWeddingCardConfig จาก weddingCard.ts
+
+**Facebook Login Fix:**
+- ✅ AuthService มี methods สำหรับ detect Messenger WebView
+- ✅ GuestRSVPApp แสดง warning modal สำหรับ in-app browser
+- ✅ Facebook login button disabled ใน Messenger WebView
+- ✅ "Open in browser" button ทำงานถูกต้อง
+
+### Code Quality
+- ✅ ไม่มี infinite loops ใหม่
+- ✅ ไม่มี memory leaks ใหม่
+- ✅ TypeScript strict mode ผ่าน
+- ✅ Error handling ครบถ้วน
+- ✅ OOP patterns ถูกต้อง
+
+### Performance
+- ✅ Bundle size ยังคงอยู่ในเกณฑ์ที่ยอมรับได้
+- ✅ Code splitting ทำงานถูกต้อง
+- ✅ Firebase `.indexOn` rules ครบถ้วน
+
+---
+
 ## 📅 วันที่ตรวจสอบ
 
 **วันที่:** 2025-01-27  
 **สถานะ:** ✅ **ผ่านแล้วพร้อม production**
+
+---
+
+---
+
+## UX Improvement: Embedded Browser Warning
+
+**วันที่เปลี่ยนแปลง:** 2025-01-27  
+**สถานะ:** ✅ **เสร็จสมบูรณ์**
+
+### การเปลี่ยนแปลง
+- **Before**: ใช้ full-screen modal บังการ์ดหน้าแรกเมื่อ detect embedded browser
+- **After**: ใช้ inline banner เตือนเฉพาะหน้า login/RSVP (หลัง flip จากการ์ด)
+
+### Implementation Details
+1. **ลบ Modal Components**:
+   - ลบ `isInAppBrowserWarningVisible` state
+   - ลบ `copyLinkModal` state
+   - ลบ Modal components ที่แสดง warning
+
+2. **เพิ่ม Inline Banner**:
+   - แสดงเฉพาะเมื่อ `isFlipped === true` และ `isInWebView === true`
+   - ใช้ Antd `<Alert>` component
+   - มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
+
+3. **ปรับ Auth Logic**:
+   - ลบการ block login ใน `signInWithFacebook()`
+   - ปล่อยให้ผู้ใช้ลอง login ได้ แต่ banner จะเตือนว่าอาจไม่สำเร็จ
+
+### Validation
+- ✅ `npm run typecheck` - ไม่มี errors
+- ✅ `npm run build` - สำเร็จ
+- ✅ `npm run lint` - ไม่มี critical errors
 
 ---
 

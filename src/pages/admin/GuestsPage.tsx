@@ -6,15 +6,20 @@
 import React, { useState, useMemo } from 'react';
 import { Tabs, Input, Table, Tag, Button, Space, message, Modal } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CheckCircleOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, EditOutlined, DeleteOutlined, UsergroupAddOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
 import { useRSVPs } from '@/hooks/useRSVPs';
-import { Guest, Side } from '@/types';
+import { Guest, Side, RSVPData } from '@/types';
 import { GuestService } from '@/services/firebase/GuestService';
+import { CheckInManager } from '@/managers/CheckInManager';
 import { calculateCheckedInCount } from '@/utils/rsvpHelpers';
-import GuestFormDrawer from '@/pages/GuestListPage/components/GuestFormDrawer';
+import GuestFormDrawer from '@/components/admin/GuestFormDrawer';
+import GroupCheckInModal from '@/components/admin/GroupCheckInModal';
+import RSVPStatusTag from '@/components/admin/RSVPStatusTag';
+import { formatGuestName, getGuestRSVPStatus } from '@/utils/guestHelpers';
+import { logger } from '@/utils/logger';
 
 const { TabPane } = Tabs;
 const { Search } = Input;
@@ -23,20 +28,26 @@ const GuestsPage: React.FC = () => {
   const { guests, isLoading } = useGuests();
   const { zones } = useZones();
   const { tables } = useTables();
-  useRSVPs(); // Keep hook active for data sync
+  const { rsvps } = useRSVPs(); // Get RSVP data for status integration
   const guestService = GuestService.getInstance();
+  const checkInManager = new CheckInManager();
   
   const [activeTab, setActiveTab] = useState('list');
   const [searchText, setSearchText] = useState('');
   const [selectedSide, setSelectedSide] = useState<Side | 'all'>('all');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  
+  // Group Check-in Modal state
+  const [isGroupCheckInModalVisible, setIsGroupCheckInModalVisible] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<{ groupId: string; guests: Guest[]; groupName: string } | null>(null);
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
 
   // Filter guests
   const filteredGuests = useMemo(() => {
     return guests.filter(guest => {
       const matchesSearch = !searchText || 
-        `${guest.firstName} ${guest.lastName}`.toLowerCase().includes(searchText.toLowerCase());
+        formatGuestName(guest).toLowerCase().includes(searchText.toLowerCase());
       const matchesSide = selectedSide === 'all' || guest.side === selectedSide;
       return matchesSearch && matchesSide;
     });
@@ -45,8 +56,38 @@ const GuestsPage: React.FC = () => {
   // Check-in stats
   const totalCheckedIn = useMemo(() => calculateCheckedInCount(guests), [guests]);
 
+  // Group guests by groupId
+  const groupedGuests = useMemo(() => {
+    const groups = new Map<string, { guests: Guest[]; groupName: string }>();
+    guests.forEach(g => {
+      if (g.groupId) {
+        const existing = groups.get(g.groupId) || { guests: [], groupName: g.groupName || '' };
+        existing.guests.push(g);
+        groups.set(g.groupId, existing);
+      }
+    });
+    return groups;
+  }, [guests]);
+
+  // RSVP Map for status lookup
+  const rsvpMap = useMemo(() => {
+    const map = new Map<string, RSVPData>();
+    rsvps.forEach(r => {
+      if (r.uid) map.set(r.uid, r);
+      if (r.id) map.set(r.id, r);
+    });
+    return map;
+  }, [rsvps]);
+
   // Handle check-in
   const handleCheckIn = async (guest: Guest) => {
+    // Check RSVP status - disable check-in if isComing === 'no'
+    const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
+    if (rsvpStatus === 'no') {
+      message.warning('แขกคนนี้ไม่ได้ตอบรับเข้าร่วมงาน ไม่สามารถเช็คอินได้');
+      return;
+    }
+
     try {
       const now = new Date().toISOString();
       await guestService.update(guest.id, {
@@ -55,8 +96,37 @@ const GuestsPage: React.FC = () => {
       });
       message.success(guest.checkedInAt ? 'ยกเลิกเช็คอินแล้ว' : 'เช็คอินสำเร็จ');
     } catch (error) {
-      console.error('Error checking in:', error);
+      logger.error('Error checking in:', error);
       message.error('เกิดข้อผิดพลาด');
+    }
+  };
+
+  // Handle group check-in modal open
+  const handleOpenGroupCheckIn = (groupId: string) => {
+    const group = groupedGuests.get(groupId);
+    if (group) {
+      setSelectedGroup({ groupId, guests: group.guests, groupName: group.groupName });
+      setSelectedGuestIds([]);
+      setIsGroupCheckInModalVisible(true);
+    }
+  };
+
+  // Handle group check-in submit
+  const handleGroupCheckInSubmit = async () => {
+    if (!selectedGroup || selectedGuestIds.length === 0) {
+      message.warning('กรุณาเลือกแขกที่ต้องการเช็คอิน');
+      return;
+    }
+
+    try {
+      await checkInManager.checkInGroupMembers(selectedGroup.groupId, selectedGuestIds, 'manual');
+      message.success(`เช็คอิน ${selectedGuestIds.length} คนสำเร็จ`);
+      setIsGroupCheckInModalVisible(false);
+      setSelectedGroup(null);
+      setSelectedGuestIds([]);
+    } catch (error) {
+      logger.error('Error checking in group:', error);
+      message.error('เกิดข้อผิดพลาดในการเช็คอินกลุ่ม');
     }
   };
 
@@ -73,7 +143,7 @@ const GuestsPage: React.FC = () => {
       setIsDrawerVisible(false);
       setEditingGuest(null);
     } catch (error) {
-      console.error('Error saving guest:', error);
+      logger.error('Error saving guest:', error);
       message.error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
   };
@@ -88,7 +158,7 @@ const GuestsPage: React.FC = () => {
           await guestService.delete(id);
           message.success('ลบแขกเรียบร้อย');
         } catch (error) {
-          console.error('Error deleting guest:', error);
+          logger.error('Error deleting guest:', error);
           message.error('เกิดข้อผิดพลาดในการลบข้อมูล');
         }
       },
@@ -100,7 +170,19 @@ const GuestsPage: React.FC = () => {
     {
       title: 'ชื่อ-นามสกุล',
       key: 'name',
-      render: (_, guest) => `${guest.firstName} ${guest.lastName}`,
+      render: (_, guest) => {
+        // Show group name if exists
+        const groupName = guest.groupName;
+        const groupSize = guest.groupId ? groupedGuests.get(guest.groupId)?.guests.length || 0 : 0;
+        return (
+          <div>
+            <div>{formatGuestName(guest)}</div>
+            {groupName && groupSize > 1 && (
+              <div className="text-xs text-gray-500">{`${groupName} (${groupSize} คน)`}</div>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: 'ฝ่าย',
@@ -112,6 +194,13 @@ const GuestsPage: React.FC = () => {
           case 'both': return <Tag color="purple">ทั้งคู่</Tag>;
           default: return <Tag>ไม่ระบุ</Tag>;
         }
+      },
+    },
+    {
+      title: 'สถานะตอบรับ',
+      key: 'rsvpStatus',
+      render: (_, guest) => {
+        return <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />;
       },
     },
     {
@@ -140,35 +229,41 @@ const GuestsPage: React.FC = () => {
     {
       title: 'จัดการ',
       key: 'actions',
-      render: (_, guest) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<CheckCircleOutlined />}
-            onClick={() => handleCheckIn(guest)}
-          >
-            {guest.checkedInAt ? 'ยกเลิกเช็คอิน' : 'เช็คอิน'}
-          </Button>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingGuest(guest);
-              setIsDrawerVisible(true);
-            }}
-          >
-            แก้ไข
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(guest.id)}
-          >
-            ลบ
-          </Button>
-        </Space>
-      ),
+      render: (_, guest) => {
+        const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
+        const canCheckIn = rsvpStatus !== 'no';
+        
+        return (
+          <Space>
+            <Button
+              type="link"
+              icon={<CheckCircleOutlined />}
+              onClick={() => handleCheckIn(guest)}
+              disabled={!canCheckIn && !guest.checkedInAt}
+            >
+              {guest.checkedInAt ? 'ยกเลิกเช็คอิน' : 'เช็คอิน'}
+            </Button>
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditingGuest(guest);
+                setIsDrawerVisible(true);
+              }}
+            >
+              แก้ไข
+            </Button>
+            <Button
+              type="link"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(guest.id)}
+            >
+              ลบ
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -218,6 +313,28 @@ const GuestsPage: React.FC = () => {
               </Button>
             </Space>
           </div>
+          
+          {/* Group Check-in Buttons */}
+          {groupedGuests.size > 0 && (
+            <div className="mb-4">
+              <Space wrap>
+                {Array.from(groupedGuests.entries()).map(([groupId, group]) => {
+                  const mainGuest = group.guests.find(g => !g.rsvpUid || g.rsvpUid === g.id) || group.guests[0];
+                  const groupName = group.groupName || formatGuestName(mainGuest);
+                  return (
+                    <Button
+                      key={groupId}
+                      icon={<UsergroupAddOutlined />}
+                      onClick={() => handleOpenGroupCheckIn(groupId)}
+                    >
+                      {groupName} ({group.guests.length} คน)
+                    </Button>
+                  );
+                })}
+              </Space>
+            </div>
+          )}
+          
           <Table
             columns={columns}
             dataSource={filteredGuests}
@@ -234,7 +351,7 @@ const GuestsPage: React.FC = () => {
               style={{ width: 300 }}
               onSearch={(value) => {
                 const guest = guests.find(g => 
-                  `${g.firstName} ${g.lastName}`.toLowerCase().includes(value.toLowerCase())
+                  formatGuestName(g).toLowerCase().includes(value.toLowerCase())
                 );
                 if (guest && !guest.checkedInAt) {
                   handleCheckIn(guest);
@@ -260,8 +377,21 @@ const GuestsPage: React.FC = () => {
         }}
         guestToEdit={editingGuest}
         onSubmit={handleFormSubmit}
-        zones={zones}
-        tables={tables}
+      />
+
+      {/* Group Check-in Modal */}
+      <GroupCheckInModal
+        visible={isGroupCheckInModalVisible}
+        onClose={() => {
+          setIsGroupCheckInModalVisible(false);
+          setSelectedGroup(null);
+          setSelectedGuestIds([]);
+        }}
+        onSubmit={handleGroupCheckInSubmit}
+        group={selectedGroup}
+        selectedGuestIds={selectedGuestIds}
+        onSelectionChange={setSelectedGuestIds}
+        rsvpMap={rsvpMap}
       />
     </div>
   );

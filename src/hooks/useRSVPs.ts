@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { RSVPData } from '@/types';
 import { RSVPService } from '@/services/firebase/RSVPService';
+import { logger } from '@/utils/logger';
 
 export const useRSVPs = (isEnabled: boolean = true) => {
   const [rsvps, setRsvps] = useState<RSVPData[]>([]);
@@ -27,7 +28,7 @@ export const useRSVPs = (isEnabled: boolean = true) => {
         setIsLoading(false);
       })
       .catch((error) => {
-        console.error('Error loading RSVPs:', error);
+        logger.error('Error loading RSVPs:', error);
         setIsLoading(false);
       });
 

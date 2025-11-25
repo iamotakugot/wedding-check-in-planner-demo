@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Zone } from '@/types';
 import { ZoneService } from '@/services/firebase/ZoneService';
+import { logger } from '@/utils/logger';
 
 export const useZones = (isEnabled: boolean = true) => {
   const [zones, setZones] = useState<Zone[]>([]);
@@ -27,7 +28,7 @@ export const useZones = (isEnabled: boolean = true) => {
         setIsLoading(false);
       })
       .catch((error) => {
-        console.error('Error loading zones:', error);
+        logger.error('Error loading zones:', error);
         setIsLoading(false);
       });
 

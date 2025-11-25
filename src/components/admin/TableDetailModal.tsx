@@ -81,3 +81,4 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
 };
 
 export default TableDetailModal;
+

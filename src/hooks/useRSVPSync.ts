@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { RSVPData } from '@/types';
 import { RSVPService } from '@/services/firebase/RSVPService';
 import { RSVPManager } from '@/managers/RSVPManager';
+import { logger } from '@/utils/logger';
 
 export const useRSVPSync = (isEnabled: boolean = true) => {
   // Track RSVPs ที่กำลังประมวลผลอยู่ (ป้องกัน duplicate processing)
@@ -22,7 +23,7 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
     if (!isEnabled) return;
 
     isMountedRef.current = true;
-    console.log('🔄 [RSVP Sync] เริ่ม watch RSVPs...');
+    logger.log('🔄 [RSVP Sync] เริ่ม watch RSVPs...');
     const processingSet = processingRsvpUidsRef.current;
     const processedSet = processedRsvpUidsRef.current;
     
@@ -35,7 +36,7 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
     const unsubscribeRSVPs = rsvpService.subscribe(async (rsvps: RSVPData[]) => {
       // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
       if (!isMountedRef.current) return;
-      console.log('📊 [RSVP Sync] รับข้อมูล RSVP:', rsvps.length, 'รายการ');
+      logger.log('📊 [RSVP Sync] รับข้อมูล RSVP:', rsvps.length, 'รายการ');
 
       // กรอง RSVPs ที่ต้องสร้าง Guest:
       // 1. isComing === 'yes'
@@ -54,7 +55,7 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
         return;
       }
 
-      console.log(`🔄 [RSVP Sync] พบ RSVPs ที่ต้องสร้าง Guest: ${rsvpsToProcess.length} รายการ`);
+      logger.log(`🔄 [RSVP Sync] พบ RSVPs ที่ต้องสร้าง Guest: ${rsvpsToProcess.length} รายการ`);
 
       // ประมวลผลทีละรายการ (เพื่อป้องกัน race condition)
       for (const rsvp of rsvpsToProcess) {
@@ -73,13 +74,13 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
           
           if (!isMountedRef.current) return;
           
-          console.log(`✅ [RSVP Sync] Sync RSVP สำเร็จสำหรับ RSVP UID: ${rsvpUid}`);
+          logger.log(`✅ [RSVP Sync] Sync RSVP สำเร็จสำหรับ RSVP UID: ${rsvpUid}`);
           
           // Mark ว่าประมวลผลแล้ว
           processedSet.add(rsvpUid);
         } catch (error) {
           if (!isMountedRef.current) return;
-          console.error(`❌ [RSVP Sync] เกิดข้อผิดพลาดในการประมวลผล RSVP UID: ${rsvpUid}`, error);
+          logger.error(`❌ [RSVP Sync] เกิดข้อผิดพลาดในการประมวลผล RSVP UID: ${rsvpUid}`, error);
           // ไม่แสดง message เพื่อไม่รบกวนผู้ใช้ (เป็น background process)
         } finally {
           // ลบออกจาก processing set (ถ้ายัง mount อยู่)
@@ -92,7 +93,7 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
 
     return () => {
       isMountedRef.current = false;
-      console.log('🛑 [RSVP Sync] หยุด watch RSVPs');
+      logger.log('🛑 [RSVP Sync] หยุด watch RSVPs');
       unsubscribeRSVPs();
       // Reset processing sets
       processingSet.clear();

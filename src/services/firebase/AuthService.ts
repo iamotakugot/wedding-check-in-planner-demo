@@ -15,6 +15,7 @@ import {
   FacebookAuthProvider
 } from 'firebase/auth';
 import { auth } from '@/firebase/config';
+import { logger } from '@/utils/logger';
 
 interface FirebaseError {
   code?: string;
@@ -36,6 +37,53 @@ const isFacebookWebView = (): boolean => {
     /FBAN/i, /FBAV/i, /FB_IAB/i, /FB4A/i, /Messenger/i, /FBMD/i, /FBSV/i,
   ];
   return facebookWebViewPatterns.some(pattern => pattern.test(userAgent));
+};
+
+const isInFacebookMessengerWebView = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  const messengerPatterns = [
+    /FBAN\/Messenger/i,
+    /Messenger\/\d+/i,
+    /FB_IAB.*Messenger/i,
+  ];
+  return messengerPatterns.some(pattern => pattern.test(userAgent));
+};
+
+const isInInstagramWebView = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  const instagramPatterns = [
+    /Instagram/i,
+    /FB_IAB.*Instagram/i,
+    /FBAN\/Instagram/i,
+  ];
+  return instagramPatterns.some(pattern => pattern.test(userAgent));
+};
+
+const isInFacebookAppWebView = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  // Facebook App WebView (ไม่ใช่ Messenger)
+  const facebookAppPatterns = [
+    /FBAN\/FB/i,
+    /FB_IAB.*FB/i,
+    /FB4A/i,
+  ];
+  // ตรวจสอบว่าเป็น Facebook App แต่ไม่ใช่ Messenger
+  const isFacebookApp = facebookAppPatterns.some(pattern => pattern.test(userAgent));
+  const isMessenger = isInFacebookMessengerWebView();
+  return isFacebookApp && !isMessenger;
+};
+
+const isInInAppBrowser = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  const inAppPatterns = [
+    /FBAN/i, /FBAV/i, /FB_IAB/i, /FB4A/i,
+    /Messenger/i, /Instagram/i, /Line/i,
+  ];
+  return inAppPatterns.some(pattern => pattern.test(userAgent));
 };
 
 const isAndroidWebView = (): boolean => {
@@ -97,6 +145,9 @@ export class AuthService {
   getWebViewInfo() {
     const isInWebView = isFacebookWebView() || isAndroidWebView() || isIOSWebView() || isGeneralWebView();
     const isFacebook = isFacebookWebView();
+    const isMessenger = isInFacebookMessengerWebView();
+    const isInstagram = isInInstagramWebView();
+    const isFacebookApp = isInFacebookAppWebView();
     const sessionStorageAvailable = isSessionStorageAvailable();
     const platform = typeof window !== 'undefined' ? window.navigator.platform : 'unknown';
     const isMobile = /iPhone|iPad|iPod|Android/i.test(platform);
@@ -104,11 +155,65 @@ export class AuthService {
     return {
       isInWebView,
       isFacebookWebView: isFacebook,
+      isMessengerWebView: isMessenger,
+      isInstagramWebView: isInstagram,
+      isFacebookAppWebView: isFacebookApp,
       sessionStorageAvailable,
       platform,
       isMobile,
       localStorageAvailable: typeof Storage !== 'undefined',
     };
+  }
+
+  /**
+   * ตรวจสอบว่าควร block Facebook login หรือไม่
+   * Block ใน Messenger, Instagram, Facebook App WebView เพราะ redirect flow ไม่ทำงาน
+   */
+  shouldBlockFacebookLogin(): boolean {
+    const webViewInfo = this.getWebViewInfo();
+    // Block Facebook login ใน Messenger, Instagram, Facebook App WebView
+    // เพราะ redirect flow ไม่ทำงาน (sessionStorage/cookies ไม่ persist)
+    return (
+      (webViewInfo.isFacebookWebView && isInFacebookMessengerWebView()) ||
+      isInInstagramWebView() ||
+      isInFacebookAppWebView()
+    );
+  }
+
+  /**
+   * ตรวจสอบว่าอยู่ใน Instagram WebView หรือไม่
+   */
+  isInInstagramWebView(): boolean {
+    return isInInstagramWebView();
+  }
+
+  /**
+   * ตรวจสอบว่าอยู่ใน Facebook App WebView หรือไม่ (ไม่ใช่ Messenger)
+   */
+  isInFacebookAppWebView(): boolean {
+    return isInFacebookAppWebView();
+  }
+
+  /**
+   * ตรวจสอบว่าอยู่ใน in-app browser หรือไม่
+   */
+  isInInAppBrowser(): boolean {
+    return isInInAppBrowser();
+  }
+
+  /**
+   * ตรวจสอบว่าอยู่ใน Messenger WebView หรือไม่
+   */
+  isInFacebookMessengerWebView(): boolean {
+    return isInFacebookMessengerWebView();
+  }
+
+  /**
+   * Get URL สำหรับเปิดใน external browser
+   */
+  getOpenInBrowserUrl(): string {
+    if (typeof window === 'undefined') return '';
+    return window.location.href;
   }
 
   async loginWithEmail(email: string, password: string): Promise<User> {
@@ -156,10 +261,18 @@ export class AuthService {
   async signInWithFacebook(): Promise<void> {
     const webViewInfo = this.getWebViewInfo();
     const { isInWebView, isFacebookWebView, sessionStorageAvailable } = webViewInfo;
+    
+    // ไม่ block login แล้ว - ให้ banner เตือนแทน
+    // ผู้ใช้สามารถลอง login ได้ แต่ banner จะเตือนว่าอาจไม่สำเร็จ
+    
     const shouldUseRedirect = isFacebookWebView || (isInWebView && !sessionStorageAvailable);
 
     try {
       if (shouldUseRedirect) {
+        // ตรวจสอบ sessionStorage availability ก่อน redirect
+        if (!sessionStorageAvailable) {
+          logger.warn('[AuthService] SessionStorage ไม่ available - redirect อาจไม่สำเร็จ');
+        }
         await signInWithRedirect(auth, this.facebookProvider);
         return;
       }
@@ -171,6 +284,11 @@ export class AuthService {
         error.code === 'auth/cancelled-popup-request' ||
         error.code === 'auth/operation-not-supported-in-this-environment'
       )) {
+        // Fallback: ใช้ redirect เมื่อ popup ไม่ทำงาน
+        // แต่ถ้า sessionStorage ไม่ available → redirect อาจไม่สำเร็จ
+        if (!sessionStorageAvailable) {
+          logger.warn('[AuthService] Popup ไม่ทำงาน และ sessionStorage ไม่ available - redirect อาจไม่สำเร็จ');
+        }
         await signInWithRedirect(auth, this.facebookProvider);
         return;
       }
@@ -184,10 +302,43 @@ export class AuthService {
       if (result && result.user) {
         return result.user;
       }
+      
+      // ตรวจสอบว่า redirect result ไม่สำเร็จใน WebView หรือไม่
+      const webViewInfo = this.getWebViewInfo();
+      if (webViewInfo.isInWebView && !result) {
+        // Log warning เมื่อ detect WebView แต่ redirect result ไม่สำเร็จ
+        logger.warn(
+          '[AuthService] Redirect result ไม่สำเร็จใน WebView:',
+          {
+            isFacebookWebView: webViewInfo.isFacebookWebView,
+            isInWebView: webViewInfo.isInWebView,
+            sessionStorageAvailable: webViewInfo.sessionStorageAvailable,
+            userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'unknown',
+          }
+        );
+      }
+      
       return null;
     } catch (error: unknown) {
-      if (isFirebaseError(error) && error.code === 'auth/account-exists-with-different-credential') {
-        throw new Error('บัญชีนี้ถูกใช้ด้วย provider อื่นแล้ว');
+      // เพิ่ม error handling สำหรับ WebView scenarios
+      if (isFirebaseError(error)) {
+        if (error.code === 'auth/account-exists-with-different-credential') {
+          throw new Error('บัญชีนี้ถูกใช้ด้วย provider อื่นแล้ว');
+        }
+        
+        // Log error สำหรับ WebView scenarios
+        const webViewInfo = this.getWebViewInfo();
+        if (webViewInfo.isInWebView) {
+          logger.error(
+            '[AuthService] Error checking redirect result in WebView:',
+            {
+              code: error.code,
+              message: error.message,
+              isFacebookWebView: webViewInfo.isFacebookWebView,
+              sessionStorageAvailable: webViewInfo.sessionStorageAvailable,
+            }
+          );
+        }
       }
       throw error;
     }
@@ -200,7 +351,7 @@ export class AuthService {
       const snapshot = await get(ref(database, `admins/${uid}`));
       return snapshot.exists() && snapshot.val() === true;
     } catch (error) {
-      console.error('Error checking admin status:', error);
+      logger.error('Error checking admin status:', error);
       return false;
     }
   }

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 // นำเข้า Firebase service functions สำหรับจัดการ app state
 import { getUserAppState, updateUserAppState, subscribeUserAppState } from '@/services/firebase/appState';
 import { AuthService } from '@/services/firebase/AuthService';
+import { logger } from '@/utils/logger';
 
 // Music Playlist Configuration - รายการเพลงที่ใช้ในงานแต่งงาน
 const PLAYLIST = [
@@ -95,7 +96,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ showIntro, children })
             }
           })
           .catch((error) => {
-            console.error('Error loading app state:', error);
+            logger.error('Error loading app state:', error);
           });
 
         // Subscribe เพื่อรับการเปลี่ยนแปลง state แบบ real-time
@@ -133,7 +134,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ showIntro, children })
     const timeoutId = setTimeout(() => {
       updateUserAppState(user.uid, { musicPlaying })
         .catch((error) => {
-          console.error('Error saving musicPlaying state:', error);
+          logger.error('Error saving musicPlaying state:', error);
         });
     }, 300);
 
@@ -149,7 +150,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ showIntro, children })
     const timeoutId = setTimeout(() => {
       updateUserAppState(user.uid, { currentTrackIndex })
         .catch((error) => {
-          console.error('Error saving currentTrackIndex state:', error);
+          logger.error('Error saving currentTrackIndex state:', error);
         });
     }, 300);
 

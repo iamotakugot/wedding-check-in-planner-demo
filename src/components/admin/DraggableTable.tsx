@@ -12,6 +12,9 @@ interface DraggableTableProps {
   zoneColor: string;
   onTablePositionUpdate: (id: string, newX: number, newY: number) => void;
   onOpenDetail: (table: TableData, guests: Guest[]) => void;
+  onTableClick?: (table: TableData) => void;
+  isAssignMode?: boolean;
+  disabled?: boolean;
 }
 
 const DraggableTable: React.FC<DraggableTableProps> = ({
@@ -20,6 +23,9 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
   zoneColor,
   onTablePositionUpdate,
   onOpenDetail,
+  onTableClick,
+  isAssignMode = false,
+  disabled = false,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -32,6 +38,11 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
   else if (percent > 0) opacity = 0.9;
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Disable drag when in assign mode or disabled
+    if (isAssignMode || disabled) {
+      return;
+    }
+
     const target = e.target as HTMLElement;
     if (target.closest('.ant-btn')) {
       return;
@@ -41,6 +52,19 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
     const rect = e.currentTarget.getBoundingClientRect();
     setOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     e.preventDefault();
+  };
+
+  // Handle table click for assignment
+  const handleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    // Don't trigger if clicking on button
+    if (target.closest('.ant-btn')) {
+      return;
+    }
+
+    if (isAssignMode && onTableClick) {
+      onTableClick(table);
+    }
   };
 
   const handleMouseMove = useCallback(
@@ -153,18 +177,23 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
         position: 'absolute',
         left: `${table.x}%`,
         top: `${table.y}%`,
-        cursor: isDragging ? 'grabbing' : 'grab',
-        borderColor: isDragging ? zoneColor : '#f0f0f0',
-        borderWidth: isDragging ? 2 : 1,
-        boxShadow: isDragging ? `0 0 15px 0 ${zoneColor}66` : '0 1px 2px rgba(0,0,0,0.07)',
+        cursor: isAssignMode ? 'pointer' : isDragging ? 'grabbing' : 'grab',
+        borderColor: isAssignMode ? '#52c41a' : isDragging ? zoneColor : '#f0f0f0',
+        borderWidth: isAssignMode ? 3 : isDragging ? 2 : 1,
+        boxShadow: isAssignMode 
+          ? `0 0 20px 0 #52c41a66` 
+          : isDragging 
+          ? `0 0 15px 0 ${zoneColor}66` 
+          : '0 1px 2px rgba(0,0,0,0.07)',
         backgroundColor: `${zoneColor}${opacity > 0.9 ? '66' : '33'}`,
         transition: isDragging
           ? 'none'
           : 'left 0.3s, top 0.3s, box-shadow 0.3s, border-color 0.3s',
-        zIndex: isDragging ? 10 : 1,
+        zIndex: isAssignMode ? 10 : isDragging ? 10 : 1,
       }}
       styles={{ header: { padding: '0 8px', minHeight: 30 }, body: { padding: '4px 8px', textAlign: 'center' } }}
       onMouseDown={handleMouseDown}
+      onClick={handleClick}
     >
       <div style={{ fontSize: 10, lineHeight: '14px' }}>
         <Text strong>
@@ -186,3 +215,4 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
 };
 
 export default DraggableTable;
+

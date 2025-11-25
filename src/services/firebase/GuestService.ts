@@ -3,10 +3,11 @@
  * Singleton pattern สำหรับจัดการ Guest operations
  */
 
-import { ref, get, set, update, remove, onValue, DataSnapshot } from 'firebase/database';
+import { ref, get, set, update, remove, onValue, query, orderByChild, equalTo, DataSnapshot } from 'firebase/database';
 import { database } from '@/firebase/config';
 import { Guest } from '@/types';
 import { AuthService } from './AuthService';
+import { logger } from '@/utils/logger';
 
 export class GuestService {
   private static instance: GuestService;
@@ -51,19 +52,55 @@ export class GuestService {
 
   async getByRsvpUid(rsvpUid: string): Promise<Guest | null> {
     try {
-      const snapshot = await get(this.guestsRef());
-      if (!snapshot.exists()) return null;
+      const user = AuthService.getInstance().getCurrentUser();
+      if (!user) {
+        throw new Error('ต้องเข้าสู่ระบบก่อน');
+      }
       
-      const data = snapshot.val();
-      const guests = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+      // ตรวจสอบว่าเป็น admin หรือไม่
+      const isAdmin = await AuthService.getInstance().checkIsAdmin(user.uid);
       
-      const existingGuest = guests.find((g: Guest) => 
-        g.rsvpUid === rsvpUid || g.rsvpId === rsvpUid
-      );
-      
-      return existingGuest || null;
+      if (isAdmin) {
+        // Admin อ่านได้ทั้งหมด
+        const snapshot = await get(this.guestsRef());
+        if (!snapshot.exists()) return null;
+        
+        const data = snapshot.val();
+        const guests = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        
+        const existingGuest = guests.find((g: Guest) => 
+          g.rsvpUid === rsvpUid || g.rsvpId === rsvpUid
+        );
+        
+        return existingGuest || null;
+      } else {
+        // User ใช้ query เฉพาะ guest ที่มี rsvpUid ตรงกับ uid
+        if (user.uid !== rsvpUid) {
+          // ถ้าไม่ใช่เจ้าของ RSVP ให้ return null
+          return null;
+        }
+        
+        // Query เฉพาะ guest ที่มี rsvpUid ตรงกับ uid
+        const rsvpUidQuery = query(this.guestsRef(), orderByChild('rsvpUid'), equalTo(rsvpUid));
+        const snapshot = await get(rsvpUidQuery);
+        
+        if (!snapshot.exists()) {
+          // ลอง query ด้วย rsvpId
+          const rsvpIdQuery = query(this.guestsRef(), orderByChild('rsvpId'), equalTo(rsvpUid));
+          const snapshot2 = await get(rsvpIdQuery);
+          if (!snapshot2.exists()) return null;
+          
+          const data = snapshot2.val();
+          const guestId = Object.keys(data)[0];
+          return { id: guestId, ...data[guestId] };
+        }
+        
+        const data = snapshot.val();
+        const guestId = Object.keys(data)[0];
+        return { id: guestId, ...data[guestId] };
+      }
     } catch (error) {
-      console.error('Error finding guest by RSVP UID:', error);
+      logger.error('Error finding guest by RSVP UID:', error);
       throw error;
     }
   }
@@ -91,7 +128,10 @@ export class GuestService {
     if (!user) {
       throw new Error('ต้องเข้าสู่ระบบก่อน');
     }
-    if (user.uid !== rsvpUid) {
+    
+    // ตรวจสอบว่าเป็น admin หรือเป็นเจ้าของ RSVP
+    const isAdmin = await AuthService.getInstance().checkIsAdmin(user.uid);
+    if (!isAdmin && user.uid !== rsvpUid) {
       throw new Error('ไม่สามารถสร้าง Guest สำหรับ RSVP ของผู้อื่นได้');
     }
     
@@ -101,7 +141,14 @@ export class GuestService {
     }
     
     const guestWithRsvpUid = { ...guest, rsvpUid };
-    await set(ref(database, `guests/${guest.id}`), guestWithRsvpUid);
+    
+    // ถ้าเป็น admin ให้ใช้ create (ซึ่งมี requireAdmin)
+    // ถ้าเป็น user ให้ใช้ set โดยตรง (เพราะ rules อนุญาตให้ write ถ้า rsvpUid === auth.uid)
+    if (isAdmin) {
+      await this.create(guestWithRsvpUid);
+    } else {
+      await set(ref(database, `guests/${guest.id}`), guestWithRsvpUid);
+    }
   }
 
   async updateFromRSVP(id: string, updates: Partial<Guest>, rsvpUid: string): Promise<void> {

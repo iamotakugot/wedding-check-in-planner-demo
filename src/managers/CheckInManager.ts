@@ -51,6 +51,25 @@ export class CheckInManager {
   }
 
   /**
+   * Check-in group members (เฉพาะ guests ที่เลือกจาก checkbox)
+   * @param groupId - ID ของกลุ่ม
+   * @param guestIds - Array ของ guest IDs ที่เลือกเช็คอิน
+   * @param method - วิธีการเช็คอิน ('manual' หรือ 'qr')
+   */
+  async checkInGroupMembers(groupId: string, guestIds: string[], method: 'manual' | 'qr' = 'manual'): Promise<void> {
+    const guests = await this.guestService.getAll();
+    const groupGuests = guests.filter(g => g.groupId === groupId && guestIds.includes(g.id));
+    
+    const now = new Date().toISOString();
+    for (const guest of groupGuests) {
+      await this.guestService.update(guest.id, {
+        checkedInAt: now,
+        checkInMethod: method,
+      });
+    }
+  }
+
+  /**
    * Check-out group
    */
   async checkOutGroup(groupId: string): Promise<void> {
