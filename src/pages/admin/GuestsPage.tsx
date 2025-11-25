@@ -111,11 +111,49 @@ const GuestsPage: React.FC = () => {
 
     try {
       const now = new Date().toISOString();
+      const isCheckingIn = !guest.checkedInAt;
+      
+      // เช็คอิน/ยกเลิกเช็คอินแขกหลัก
       await guestService.update(guest.id, {
-        checkedInAt: guest.checkedInAt ? null : now,
-        checkInMethod: guest.checkedInAt ? null : 'manual',
+        checkedInAt: isCheckingIn ? now : null,
+        checkInMethod: isCheckingIn ? 'manual' : null,
       });
-      message.success(guest.checkedInAt ? 'ยกเลิกเช็คอินแล้ว' : 'เช็คอินสำเร็จ');
+
+      // ถ้ากำลังเช็คอิน และแขกอยู่ในกลุ่ม → เช็คอินสมาชิกอื่นในกลุ่มด้วย
+      if (isCheckingIn && guest.groupId) {
+        const group = guestGroups.find(g => g.groupId === guest.groupId);
+        if (group && group.totalCount > 1) {
+          // หาสมาชิกอื่นในกลุ่มที่ยังไม่เช็คอิน
+          const otherMembers = group.members
+            .filter(m => m.id !== guest.id && !m.checkedInAt)
+            .map(m => guests.find(g => g.id === m.id))
+            .filter((g): g is Guest => g !== undefined);
+
+          // เช็คอินสมาชิกอื่นในกลุ่ม
+          let checkedInCount = 0;
+          for (const memberGuest of otherMembers) {
+            const memberRsvpStatus = getGuestRSVPStatus(memberGuest, rsvpMap);
+            // เช็คอินเฉพาะคนที่ตอบรับเข้างาน
+            if (memberRsvpStatus !== 'no') {
+              await guestService.update(memberGuest.id, {
+                checkedInAt: now,
+                checkInMethod: 'manual',
+              });
+              checkedInCount++;
+            }
+          }
+
+          if (checkedInCount > 0) {
+            message.success(`เช็คอินสำเร็จ (รวมผู้ติดตาม ${checkedInCount} คน)`);
+          } else {
+            message.success('เช็คอินสำเร็จ');
+          }
+        } else {
+          message.success('เช็คอินสำเร็จ');
+        }
+      } else {
+        message.success(guest.checkedInAt ? 'ยกเลิกเช็คอินแล้ว' : 'เช็คอินสำเร็จ');
+      }
     } catch (error) {
       logger.error('Error checking in:', error);
       message.error('เกิดข้อผิดพลาด');
@@ -133,19 +171,50 @@ const GuestsPage: React.FC = () => {
       const now = new Date().toISOString();
       let successCount = 0;
       let failCount = 0;
+      const processedGroupIds = new Set<string>();
 
       for (const guestId of selectedCheckInIds) {
         const guest = guests.find(g => g.id === guestId);
-        if (guest) {
-          const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
-          if (rsvpStatus !== 'no') {
-            await guestService.update(guestId, {
-              checkedInAt: now,
-              checkInMethod: 'manual',
-            });
-            successCount++;
-          } else {
-            failCount++;
+        if (!guest) continue;
+
+        const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
+        if (rsvpStatus === 'no') {
+          failCount++;
+          continue;
+        }
+
+        // เช็คอินแขกหลัก
+        await guestService.update(guestId, {
+          checkedInAt: now,
+          checkInMethod: 'manual',
+        });
+        successCount++;
+
+        // ถ้าแขกอยู่ในกลุ่ม → เช็คอินสมาชิกอื่นในกลุ่มด้วย (เช็คอินครั้งเดียวต่อกลุ่ม)
+        if (guest.groupId && !processedGroupIds.has(guest.groupId)) {
+          const group = guestGroups.find(g => g.groupId === guest.groupId);
+          if (group && group.totalCount > 1) {
+            // หาสมาชิกอื่นในกลุ่มที่ยังไม่เช็คอิน
+            const otherMembers = group.members
+              .filter(m => !selectedCheckInIds.includes(m.id) && !m.checkedInAt)
+              .map(m => guests.find(g => g.id === m.id))
+              .filter((g): g is Guest => g !== undefined);
+
+            // เช็คอินสมาชิกอื่นในกลุ่ม
+            for (const memberGuest of otherMembers) {
+              const memberRsvpStatus = getGuestRSVPStatus(memberGuest, rsvpMap);
+              if (memberRsvpStatus !== 'no') {
+                await guestService.update(memberGuest.id, {
+                  checkedInAt: now,
+                  checkInMethod: 'manual',
+                });
+                successCount++;
+              } else {
+                failCount++;
+              }
+            }
+
+            processedGroupIds.add(guest.groupId);
           }
         }
       }
