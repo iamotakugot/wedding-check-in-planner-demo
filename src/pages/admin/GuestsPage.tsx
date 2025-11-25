@@ -262,9 +262,14 @@ const GuestsPage: React.FC = () => {
   const treeData = useMemo(() => {
     const data: Array<Guest & { children?: Guest[] }> = [];
     const processedGroupIds = new Set<string>();
+    const processedGuestIds = new Set<string>();
     
-    // Add groups with children
-    guestGroups.forEach(group => {
+    // Add groups with children (sorted by group name)
+    const sortedGroups = [...guestGroups].sort((a, b) => 
+      a.groupName.localeCompare(b.groupName)
+    );
+    
+    sortedGroups.forEach(group => {
       if (group.totalCount > 1 && !processedGroupIds.has(group.groupId)) {
         const groupGuests = group.members
           .map(member => guests.find(g => g.id === member.id))
@@ -279,6 +284,8 @@ const GuestsPage: React.FC = () => {
             children: childrenGuests.length > 0 ? childrenGuests : undefined,
           });
           
+          // Mark all guests in this group as processed
+          groupGuests.forEach(g => processedGuestIds.add(g.id));
           processedGroupIds.add(group.groupId);
         }
       }
@@ -286,10 +293,11 @@ const GuestsPage: React.FC = () => {
     
     // Add individual guests (not in groups or groups with 1 member)
     guests.forEach(guest => {
-      if (!guest.groupId || !processedGroupIds.has(guest.groupId)) {
+      if (!processedGuestIds.has(guest.id)) {
         const group = guestGroups.find(g => g.groupId === guest.groupId);
         if (!group || group.totalCount <= 1) {
           data.push(guest);
+          processedGuestIds.add(guest.id);
         }
       }
     });
