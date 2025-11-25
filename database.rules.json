@@ -9,7 +9,7 @@
       }
     },
     "guests": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      ".read": "auth != null",
       ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
       "$guestId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || data.child('rsvpUid').val() === auth.uid || data.child('rsvpId').val() === auth.uid)",
