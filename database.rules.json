@@ -13,7 +13,7 @@
       ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
       "$guestId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || data.child('rsvpUid').val() === auth.uid || data.child('rsvpId').val() === auth.uid)",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (data.child('rsvpUid').val() === auth.uid && !data.exists()))"
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (data.exists() && data.child('rsvpUid').val() === auth.uid) || (!data.exists() && newData.child('rsvpUid').val() === auth.uid))"
       },
       ".indexOn": ["rsvpUid", "rsvpId", "groupId", "zoneId", "tableId", "checkedInAt"]
     },
