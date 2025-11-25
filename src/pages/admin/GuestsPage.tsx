@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Tabs, Input, Table, Tag, Button, Space, message, Modal } from 'antd';
+import { Tabs, Input, Table, Tag, Button, Space, message, Modal, Card, List, Avatar, Checkbox, Row, Col, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CheckCircleOutlined, EditOutlined, DeleteOutlined, UsergroupAddOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, EditOutlined, DeleteOutlined, UserOutlined, SearchOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
@@ -14,14 +14,13 @@ import { useRSVPs } from '@/hooks/useRSVPs';
 import { useGuestGroups } from '@/hooks/useGuestGroups';
 import { Guest, Side, RSVPData } from '@/types';
 import { GuestService } from '@/services/firebase/GuestService';
-import { CheckInManager } from '@/managers/CheckInManager';
 import { calculateCheckedInCount } from '@/utils/rsvpHelpers';
 import GuestFormDrawer from '@/components/admin/GuestFormDrawer';
-import GroupCheckInModal from '@/components/admin/GroupCheckInModal';
 import RSVPStatusTag from '@/components/admin/RSVPStatusTag';
-import GroupMemberTooltip from '@/components/admin/GroupMemberTooltip';
-import { formatGuestName, getGuestRSVPStatus } from '@/utils/guestHelpers';
+import { formatGuestName, getGuestRSVPStatus, renderMemberLabel } from '@/utils/guestHelpers';
 import { logger } from '@/utils/logger';
+
+const { Text } = Typography;
 
 const { TabPane } = Tabs;
 const { Search } = Input;
@@ -33,20 +32,17 @@ const GuestsPage: React.FC = () => {
   const { rsvps } = useRSVPs(); // Get RSVP data for status integration
   const { guestGroups } = useGuestGroups(); // Get GuestGroup data
   const guestService = GuestService.getInstance();
-  const checkInManager = new CheckInManager();
   
   const [activeTab, setActiveTab] = useState('list');
   const [searchText, setSearchText] = useState('');
+  const [checkInSearchText, setCheckInSearchText] = useState('');
   const [selectedSide, setSelectedSide] = useState<Side | 'all'>('all');
+  const [checkInSelectedSide, setCheckInSelectedSide] = useState<Side | 'all'>('all');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-  
-  // Group Check-in Modal state
-  const [isGroupCheckInModalVisible, setIsGroupCheckInModalVisible] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<{ groupId: string; guests: Guest[]; groupName: string } | null>(null);
-  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
+  const [selectedCheckInIds, setSelectedCheckInIds] = useState<string[]>([]);
 
-  // Filter guests
+  // Filter guests for list tab
   const filteredGuests = useMemo(() => {
     return guests.filter(guest => {
       const matchesSearch = !searchText || 
@@ -56,39 +52,43 @@ const GuestsPage: React.FC = () => {
     });
   }, [guests, searchText, selectedSide]);
 
+  // Get all members from groups for check-in
+  const allMembersForCheckIn = useMemo(() => {
+    const members: Array<{ guest: Guest; group: typeof guestGroups[0] | null; member: typeof guestGroups[0]['members'][0] | null }> = [];
+    
+    // Add members from groups
+    guestGroups.forEach(group => {
+      group.members.forEach(member => {
+        const guest = guests.find(g => g.id === member.id);
+        if (guest && !guest.checkedInAt) {
+          members.push({ guest, group, member });
+        }
+      });
+    });
+    
+    // Add individual guests (not in groups)
+    guests.forEach(guest => {
+      if (!guest.checkedInAt && !guest.groupId) {
+        members.push({ guest, group: null, member: null });
+      }
+    });
+    
+    return members;
+  }, [guests, guestGroups]);
+
+  // Filter members for check-in tab
+  const filteredCheckInMembers = useMemo(() => {
+    return allMembersForCheckIn.filter(({ guest, group }) => {
+      const matchesSearch = !checkInSearchText || 
+        formatGuestName(guest).toLowerCase().includes(checkInSearchText.toLowerCase()) ||
+        (group && group.groupName.toLowerCase().includes(checkInSearchText.toLowerCase()));
+      const matchesSide = checkInSelectedSide === 'all' || guest.side === checkInSelectedSide;
+      return matchesSearch && matchesSide;
+    });
+  }, [allMembersForCheckIn, checkInSearchText, checkInSelectedSide]);
+
   // Check-in stats
   const totalCheckedIn = useMemo(() => calculateCheckedInCount(guests), [guests]);
-
-  // Group guests by groupId (ใช้ guestGroups เป็นหลัก, fallback ไปที่ guests ถ้าไม่มี)
-  const groupedGuests = useMemo(() => {
-    const groups = new Map<string, { guests: Guest[]; groupName: string }>();
-    
-    // ใช้ guestGroups เป็นหลัก
-    guestGroups.forEach(group => {
-      const groupGuests = group.members.map(member => {
-        // หา Guest object จาก member.id
-        return guests.find(g => g.id === member.id);
-      }).filter((g): g is Guest => g !== undefined);
-      
-      if (groupGuests.length > 0) {
-        groups.set(group.groupId, {
-          guests: groupGuests,
-          groupName: group.groupName,
-        });
-      }
-    });
-    
-    // Fallback: group guests ที่ไม่มีใน guestGroups (backward compatibility)
-    guests.forEach(g => {
-      if (g.groupId && !groups.has(g.groupId)) {
-        const existing = groups.get(g.groupId) || { guests: [], groupName: g.groupName || '' };
-        existing.guests.push(g);
-        groups.set(g.groupId, existing);
-      }
-    });
-    
-    return groups;
-  }, [guests, guestGroups]);
 
   // RSVP Map for status lookup
   const rsvpMap = useMemo(() => {
@@ -122,32 +122,43 @@ const GuestsPage: React.FC = () => {
     }
   };
 
-  // Handle group check-in modal open
-  const handleOpenGroupCheckIn = (groupId: string) => {
-    const group = groupedGuests.get(groupId);
-    if (group) {
-      setSelectedGroup({ groupId, guests: group.guests, groupName: group.groupName });
-      setSelectedGuestIds([]);
-      setIsGroupCheckInModalVisible(true);
-    }
-  };
-
-  // Handle group check-in submit
-  const handleGroupCheckInSubmit = async () => {
-    if (!selectedGroup || selectedGuestIds.length === 0) {
+  // Handle bulk check-in
+  const handleBulkCheckIn = async () => {
+    if (selectedCheckInIds.length === 0) {
       message.warning('กรุณาเลือกแขกที่ต้องการเช็คอิน');
       return;
     }
 
     try {
-      await checkInManager.checkInGroupMembers(selectedGroup.groupId, selectedGuestIds, 'manual');
-      message.success(`เช็คอิน ${selectedGuestIds.length} คนสำเร็จ`);
-      setIsGroupCheckInModalVisible(false);
-      setSelectedGroup(null);
-      setSelectedGuestIds([]);
+      const now = new Date().toISOString();
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const guestId of selectedCheckInIds) {
+        const guest = guests.find(g => g.id === guestId);
+        if (guest) {
+          const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
+          if (rsvpStatus !== 'no') {
+            await guestService.update(guestId, {
+              checkedInAt: now,
+              checkInMethod: 'manual',
+            });
+            successCount++;
+          } else {
+            failCount++;
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        message.success(`เช็คอิน ${successCount} คนสำเร็จ${failCount > 0 ? ` (${failCount} คนไม่สามารถเช็คอินได้)` : ''}`);
+      } else {
+        message.warning('ไม่มีแขกที่สามารถเช็คอินได้');
+      }
+      setSelectedCheckInIds([]);
     } catch (error) {
-      logger.error('Error checking in group:', error);
-      message.error('เกิดข้อผิดพลาดในการเช็คอินกลุ่ม');
+      logger.error('Error bulk checking in:', error);
+      message.error('เกิดข้อผิดพลาดในการเช็คอิน');
     }
   };
 
@@ -186,36 +197,30 @@ const GuestsPage: React.FC = () => {
     });
   };
 
+
   // Table columns
   const columns: ColumnsType<Guest> = [
     {
       title: 'ชื่อ-นามสกุล',
       key: 'name',
       render: (_, guest) => {
-        // Show group name if exists
-        const groupName = guest.groupName;
-        const groupSize = guest.groupId ? groupedGuests.get(guest.groupId)?.guests.length || 0 : 0;
         const group = guestGroups.find(g => g.groupId === guest.groupId);
+        const member = group?.members.find(m => m.id === guest.id);
         
-        const nameContent = (
-          <div>
-            <div>{formatGuestName(guest)}</div>
-            {groupName && groupSize > 1 && (
-              <div className="text-xs text-gray-500">{`${groupName} (${groupSize} คน)`}</div>
-            )}
-          </div>
-        );
-        
-        // ถ้ามี group และมีสมาชิกมากกว่า 1 คน → แสดง tooltip
-        if (group && group.totalCount > 1) {
+        if (group && member) {
           return (
-            <GroupMemberTooltip group={group}>
-              {nameContent}
-            </GroupMemberTooltip>
+            <div>
+              <div>{renderMemberLabel(group, member)}</div>
+              {group.totalCount > 1 && (
+                <Text type="secondary" className="text-xs">
+                  {group.groupName} ({group.totalCount} คน)
+                </Text>
+              )}
+            </div>
           );
         }
         
-        return nameContent;
+        return <div>{formatGuestName(guest)}</div>;
       },
     },
     {
@@ -257,27 +262,6 @@ const GuestsPage: React.FC = () => {
           <Tag color="green" icon={<CheckCircleOutlined />}>เช็คอินแล้ว</Tag>
         ) : (
           <Tag>ยังไม่เช็คอิน</Tag>
-        );
-      },
-    },
-    {
-      title: 'เช็คอินกลุ่ม',
-      key: 'groupCheckIn',
-      render: (_, guest) => {
-        if (!guest.groupId) {
-          return '-';
-        }
-        
-        // หา group จาก guestGroups
-        const group = guestGroups.find(g => g.groupId === guest.groupId);
-        if (!group || group.totalCount <= 1) {
-          return '-';
-        }
-        
-        return (
-          <Tag color={group.checkedInCount === group.totalCount ? 'green' : 'orange'}>
-            เช็คอินแล้ว {group.checkedInCount} / {group.totalCount} คน
-          </Tag>
         );
       },
     },
@@ -369,58 +353,196 @@ const GuestsPage: React.FC = () => {
             </Space>
           </div>
           
-          {/* Group Check-in Buttons */}
-          {groupedGuests.size > 0 && (
-            <div className="mb-4">
-              <Space wrap>
-                {Array.from(groupedGuests.entries()).map(([groupId, group]) => {
-                  const mainGuest = group.guests.find(g => !g.rsvpUid || g.rsvpUid === g.id) || group.guests[0];
-                  const groupName = group.groupName || formatGuestName(mainGuest);
-                  return (
-                    <Button
-                      key={groupId}
-                      icon={<UsergroupAddOutlined />}
-                      onClick={() => handleOpenGroupCheckIn(groupId)}
-                    >
-                      {groupName} ({group.guests.length} คน)
-                    </Button>
-                  );
-                })}
-              </Space>
-            </div>
-          )}
-          
           <Table
             columns={columns}
-            dataSource={filteredGuests}
+            dataSource={filteredGuests.filter(g => {
+              // Only show group headers and individual guests in main table
+              const group = guestGroups.find(gr => gr.groupId === g.groupId);
+              if (group && group.totalCount > 1) {
+                // Only show first member as header
+                return group.members[0].id === g.id;
+              }
+              return true;
+            })}
             rowKey="id"
             loading={isLoading}
             pagination={{ pageSize: 20 }}
+            expandable={{
+              expandedRowRender: (record) => {
+                const group = guestGroups.find(g => g.groupId === record.groupId);
+                if (!group || group.totalCount <= 1) {
+                  return null;
+                }
+                
+                const otherMembers = group.members.slice(1).map(member => {
+                  const memberGuest = guests.find(g => g.id === member.id);
+                  return { member, guest: memberGuest };
+                }).filter((item): item is { member: typeof group.members[0]; guest: Guest } => item.guest !== undefined);
+                
+                return (
+                  <Table
+                    columns={columns}
+                    dataSource={otherMembers.map(item => item.guest)}
+                    rowKey="id"
+                    pagination={false}
+                    size="small"
+                    showHeader={false}
+                  />
+                );
+              },
+              rowExpandable: (record) => {
+                const group = guestGroups.find(g => g.groupId === record.groupId);
+                return group ? group.totalCount > 1 : false;
+              },
+            }}
           />
         </TabPane>
         <TabPane tab={`เช็คอิน (${totalCheckedIn}/${guests.length})`} key="checkin">
           <div className="mb-4">
-            <Search
-              placeholder="ค้นหาเพื่อเช็คอิน"
-              allowClear
-              style={{ width: 300 }}
-              onSearch={(value) => {
-                const guest = guests.find(g => 
-                  formatGuestName(g).toLowerCase().includes(value.toLowerCase())
-                );
-                if (guest && !guest.checkedInAt) {
-                  handleCheckIn(guest);
-                }
-              }}
-            />
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={12} md={8}>
+                <Search
+                  placeholder="ค้นหาชื่อ/กลุ่ม"
+                  allowClear
+                  prefix={<SearchOutlined />}
+                  value={checkInSearchText}
+                  onChange={(e) => setCheckInSearchText(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={16}>
+                <Space.Compact>
+                  <Button
+                    onClick={() => setCheckInSelectedSide('all')}
+                    type={checkInSelectedSide === 'all' ? 'primary' : 'default'}
+                  >
+                    ทั้งหมด
+                  </Button>
+                  <Button
+                    onClick={() => setCheckInSelectedSide('groom')}
+                    type={checkInSelectedSide === 'groom' ? 'primary' : 'default'}
+                  >
+                    เจ้าบ่าว
+                  </Button>
+                  <Button
+                    onClick={() => setCheckInSelectedSide('bride')}
+                    type={checkInSelectedSide === 'bride' ? 'primary' : 'default'}
+                  >
+                    เจ้าสาว
+                  </Button>
+                </Space.Compact>
+              </Col>
+            </Row>
           </div>
-          <Table
-            columns={columns}
-            dataSource={filteredGuests.filter(g => !g.checkedInAt)}
-            rowKey="id"
-            loading={isLoading}
-            pagination={{ pageSize: 20 }}
-          />
+
+          {selectedCheckInIds.length > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg flex justify-between items-center">
+              <Text strong>เลือก {selectedCheckInIds.length} คน</Text>
+              <Space>
+                <Button onClick={() => setSelectedCheckInIds([])}>ยกเลิก</Button>
+                <Button type="primary" onClick={handleBulkCheckIn}>
+                  เช็คอินที่เลือก ({selectedCheckInIds.length} คน)
+                </Button>
+              </Space>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredCheckInMembers.map(({ guest, group, member }) => {
+              const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
+              const canCheckIn = rsvpStatus !== 'no';
+              const isSelected = selectedCheckInIds.includes(guest.id);
+              
+              const displayName = group && member 
+                ? renderMemberLabel(group, member)
+                : formatGuestName(guest);
+
+              return (
+                <Card
+                  key={guest.id}
+                  size="small"
+                  className={isSelected ? 'border-blue-500 border-2' : ''}
+                  actions={[
+                    <Checkbox
+                      key="select"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCheckInIds([...selectedCheckInIds, guest.id]);
+                        } else {
+                          setSelectedCheckInIds(selectedCheckInIds.filter(id => id !== guest.id));
+                        }
+                      }}
+                      disabled={!canCheckIn}
+                    >
+                      เลือก
+                    </Checkbox>,
+                    <Button
+                      key="checkin"
+                      type="primary"
+                      icon={<CheckCircleOutlined />}
+                      onClick={() => handleCheckIn(guest)}
+                      disabled={!canCheckIn}
+                      block
+                    >
+                      เช็คอิน
+                    </Button>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      <Avatar 
+                        icon={<UserOutlined />}
+                        style={{ 
+                          backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96' 
+                        }}
+                      >
+                        {displayName.charAt(0)}
+                      </Avatar>
+                    }
+                    title={
+                      <div>
+                        <Text strong>{displayName}</Text>
+                        {group && (
+                          <Tag color="blue" className="ml-2">
+                            {group.groupName}
+                          </Tag>
+                        )}
+                      </div>
+                    }
+                    description={
+                      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                        <div>
+                          <Tag color={guest.side === 'groom' ? 'blue' : 'magenta'}>
+                            {guest.side === 'groom' ? 'เจ้าบ่าว' : guest.side === 'bride' ? 'เจ้าสาว' : 'ทั้งคู่'}
+                          </Tag>
+                          <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />
+                        </div>
+                        {member && member.relationToMain && (
+                          <Text type="secondary" className="text-xs">
+                            {member.relationToMain}
+                          </Text>
+                        )}
+                        {!canCheckIn && (
+                          <Tag color="red">ไม่ตอบรับเข้าร่วมงาน</Tag>
+                        )}
+                      </Space>
+                    }
+                  />
+                </Card>
+              );
+            })}
+          </div>
+
+          {filteredCheckInMembers.length === 0 && (
+            <div className="text-center py-12">
+              <Text type="secondary">
+                {checkInSearchText || checkInSelectedSide !== 'all' 
+                  ? 'ไม่พบแขกที่ยังไม่เช็คอิน' 
+                  : 'ไม่มีแขกที่ยังไม่เช็คอิน'}
+              </Text>
+            </div>
+          )}
         </TabPane>
       </Tabs>
 
@@ -434,20 +556,6 @@ const GuestsPage: React.FC = () => {
         onSubmit={handleFormSubmit}
       />
 
-      {/* Group Check-in Modal */}
-      <GroupCheckInModal
-        visible={isGroupCheckInModalVisible}
-        onClose={() => {
-          setIsGroupCheckInModalVisible(false);
-          setSelectedGroup(null);
-          setSelectedGuestIds([]);
-        }}
-        onSubmit={handleGroupCheckInSubmit}
-        group={selectedGroup}
-        selectedGuestIds={selectedGuestIds}
-        onSelectionChange={setSelectedGuestIds}
-        rsvpMap={rsvpMap}
-      />
     </div>
   );
 };
