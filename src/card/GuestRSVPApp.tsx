@@ -72,7 +72,7 @@ import { useConfig } from '@/hooks/useConfig';
 import { useCountdown } from '@/hooks/useCountdown';
 import { FlipCard } from '@/components/common/FlipCard';
 import { InAppBrowserBanner } from '@/components/common/InAppBrowserBanner';
-import { isInAppBrowser } from '@/utils/browserDetection';
+import { isInAppBrowser, isMobileDevice } from '@/utils/browserDetection';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -1252,15 +1252,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
 
-    // ตรวจสอบ in-app browser และแสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอิน
+    // ตรวจสอบ mobile device หรือ in-app browser และแสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอิน
     useEffect(() => {
+        const isMobile = isMobileDevice();
         const isInApp = isInAppBrowser();
-        const shouldShow = !isLoggedIn && isInApp;
+        const shouldShow = !isLoggedIn && (isMobile || isInApp);
         
         // Debug logging
         if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
             console.log('[CardBack Banner Debug]', {
                 isLoggedIn,
+                isMobile,
                 isInAppBrowser: isInApp,
                 showBrowserBanner: shouldShow,
                 userAgent: window.navigator.userAgent,
@@ -1268,12 +1270,17 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             });
         }
         
-        if (isLoggedIn || !isInApp) {
+        if (isLoggedIn) {
             setShowBrowserBanner(false);
             return;
         }
-        // แสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอินและเป็น in-app browser
-        setShowBrowserBanner(true);
+        
+        // แสดงแบนเนอร์เมื่อยังไม่ล็อกอินและเป็น mobile device หรือ in-app browser
+        if (isMobile || isInApp) {
+            setShowBrowserBanner(true);
+        } else {
+            setShowBrowserBanner(false);
+        }
     }, [isLoggedIn]);
 
     // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google หรือ Facebook
@@ -1946,9 +1953,19 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         // ตรวจสอบว่า login แล้วหรือไม่ - ต้องมีทั้ง isLoggedIn และ currentUser
         // และต้องผ่านการเช็ค auth state แล้ว (isCheckingAuth === false)
         if (!isLoggedIn || !currentUser) {
+            // ตรวจสอบว่าเป็น mobile device หรือ in-app browser
+            const isMobile = isMobileDevice();
+            const isInApp = isInAppBrowser();
+            const shouldShowBanner = isMobile || isInApp;
+            
             return (
 
-                <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
+                <div className={`w-full max-w-xs mx-auto text-center animate-fade-in relative ${shouldShowBanner && showBrowserBanner ? 'pt-32 md:pt-40' : 'pt-10'}`}>
+                    
+                    {/* แบนเนอร์ช่วยเหลือสำหรับ mobile/in-app browser - แสดงในหน้า login */}
+                    {shouldShowBanner && showBrowserBanner && (
+                        <InAppBrowserBanner onDismiss={() => setShowBrowserBanner(false)} />
+                    )}
 
                     <Title level={3} className="font-cinzel text-[#5c3a58] mb-2">Welcome</Title>
 

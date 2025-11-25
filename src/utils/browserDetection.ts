@@ -44,6 +44,13 @@ export function detectOS(): 'ios' | 'android' | 'other' {
 }
 
 /**
+ * ตรวจสอบว่าเป็น mobile device หรือไม่ (iOS หรือ Android)
+ */
+export function isMobileDevice(): boolean {
+  return isIOS() || isAndroid();
+}
+
+/**
  * ตรวจสอบว่าเป็น in-app browser หรือไม่
  * รองรับ: Messenger, LINE, Instagram, X (Twitter)
  */
