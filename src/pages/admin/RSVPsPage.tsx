@@ -3,14 +3,66 @@
  * แสดงรายการ RSVP
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table, Tag, Button, Modal, Descriptions, Space, Avatar, Input } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { EyeOutlined, UserOutlined } from '@ant-design/icons';
+import { EyeOutlined, UserOutlined, SearchOutlined } from '@ant-design/icons';
 import { useRSVPs } from '@/hooks/useRSVPs';
 import { RSVPData } from '@/types';
 
-const { Search } = Input;
+// Custom Search component to avoid Input.Search addonAfter warning
+const CustomSearch: React.FC<{
+  placeholder?: string;
+  allowClear?: boolean;
+  style?: React.CSSProperties;
+  onSearch?: (value: string) => void;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  value?: string;
+}> = ({ placeholder, allowClear, style, onSearch, onChange, value }) => {
+  const [searchValue, setSearchValue] = useState(value || '');
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setSearchValue(newValue);
+    if (onChange) {
+      onChange(e);
+    }
+  };
+
+  const handleSearch = () => {
+    if (onSearch) {
+      onSearch(searchValue);
+    }
+  };
+
+  const handleClear = () => {
+    setSearchValue('');
+    if (onSearch) {
+      onSearch('');
+    }
+  };
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setSearchValue(value);
+    }
+  }, [value]);
+
+  return (
+    <Space.Compact style={style}>
+      <Input
+        placeholder={placeholder}
+        value={searchValue}
+        onChange={handleChange}
+        onPressEnter={handleSearch}
+        allowClear={allowClear}
+        onClear={handleClear}
+        style={{ flex: 1 }}
+      />
+      <Button icon={<SearchOutlined />} onClick={handleSearch} />
+    </Space.Compact>
+  );
+};
 
 const RSVPsPage: React.FC = () => {
   const { rsvps, isLoading } = useRSVPs();
@@ -107,7 +159,7 @@ const RSVPsPage: React.FC = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">รายการ RSVP</h1>
-        <Search
+        <CustomSearch
           placeholder="ค้นหา RSVP"
           allowClear
           style={{ width: 300 }}

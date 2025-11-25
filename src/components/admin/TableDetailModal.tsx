@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography, Divider } from 'antd';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography, Divider, Checkbox } from 'antd';
+import { UserDeleteOutlined } from '@ant-design/icons';
 import { TableData, Guest, GuestGroup } from '@/types';
 import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
 
@@ -12,6 +13,7 @@ interface TableDetailModalProps {
   guests: Guest[];
   guestGroups?: GuestGroup[];
   onUnassignGuest: (guestId: string) => void;
+  onUnassignGuests?: (guestIds: string[]) => void;
 }
 
 const TableDetailModal: React.FC<TableDetailModalProps> = ({
@@ -21,7 +23,16 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
   guests,
   guestGroups = [],
   onUnassignGuest,
+  onUnassignGuests,
 }) => {
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
+  
+  // Reset selection when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setSelectedGuestIds([]);
+    }
+  }, [visible]);
   // Helper function to get member label for a guest
   const getGuestLabel = useMemo(() => {
     return (guest: Guest): string => {
@@ -92,7 +103,27 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
       }
       open={visible}
       onCancel={onClose}
-      footer={[<Button key="close" onClick={onClose}>ปิด</Button>]}
+      footer={[
+        selectedGuestIds.length > 0 && onUnassignGuests ? (
+          <Popconfirm
+            key="bulk-unassign"
+            title="ย้ายแขกออก?"
+            description={`ย้าย ${selectedGuestIds.length} คนออกจากโต๊ะนี้?`}
+            onConfirm={() => {
+              onUnassignGuests(selectedGuestIds);
+              setSelectedGuestIds([]);
+            }}
+            okText="ย้ายออก"
+            cancelText="ยกเลิก"
+            okButtonProps={{ danger: true }}
+          >
+            <Button key="bulk-unassign" type="primary" danger icon={<UserDeleteOutlined />}>
+              ย้ายออก {selectedGuestIds.length} คน
+            </Button>
+          </Popconfirm>
+        ) : null,
+        <Button key="close" onClick={onClose}>ปิด</Button>
+      ]}
       width={600}
     >
       <List
@@ -123,6 +154,17 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                     key={guest.id}
                     style={{ paddingLeft: '2rem' }}
                     actions={[
+                      <Checkbox
+                        key="checkbox"
+                        checked={selectedGuestIds.includes(guest.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGuestIds([...selectedGuestIds, guest.id]);
+                          } else {
+                            setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
+                          }
+                        }}
+                      />,
                       <Popconfirm
                         key="unassign"
                         title="ย้ายแขกออก?"
@@ -130,8 +172,14 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                         onConfirm={() => onUnassignGuest(guest.id)}
                         okText="ย้ายออก"
                         cancelText="ยกเลิก"
+                        okButtonProps={{ danger: true }}
                       >
-                        <Button type="text" danger size="small">
+                        <Button 
+                          type="primary" 
+                          danger 
+                          size="small"
+                          icon={<UserDeleteOutlined />}
+                        >
                           ย้ายออก
                         </Button>
                       </Popconfirm>,
@@ -181,6 +229,17 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
             <List.Item
               key={guest.id}
               actions={[
+                <Checkbox
+                  key="checkbox"
+                  checked={selectedGuestIds.includes(guest.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedGuestIds([...selectedGuestIds, guest.id]);
+                    } else {
+                      setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
+                    }
+                  }}
+                />,
                 <Popconfirm
                   key="unassign"
                   title="ย้ายแขกออก?"
@@ -188,8 +247,14 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                   onConfirm={() => onUnassignGuest(guest.id)}
                   okText="ย้ายออก"
                   cancelText="ยกเลิก"
+                  okButtonProps={{ danger: true }}
                 >
-                  <Button type="text" danger size="small">
+                  <Button 
+                    type="primary" 
+                    danger 
+                    size="small"
+                    icon={<UserDeleteOutlined />}
+                  >
                     ย้ายออก
                   </Button>
                 </Popconfirm>,

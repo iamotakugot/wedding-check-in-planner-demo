@@ -40,29 +40,83 @@ export class RSVPManager {
       return;
     }
 
-    // ตรวจสอบว่า sync แล้วหรือยัง
+    // หา main guest ที่มีอยู่แล้ว
+    let mainGuest: Guest | null = null;
     if (rsvp.guestId) {
-      const existingGuest = await this.guestService.getById(rsvp.guestId);
-      if (existingGuest) {
-        return; // Sync แล้ว
-      }
+      mainGuest = await this.guestService.getById(rsvp.guestId);
+    }
+    if (!mainGuest) {
+      mainGuest = await this.guestService.getByRsvpUid(rsvp.uid);
     }
 
-    // ตรวจสอบว่ามี Guest จาก RSVP นี้อยู่แล้วหรือไม่
-    const existingGuest = await this.guestService.getByRsvpUid(rsvp.uid);
-    if (existingGuest) {
-      // Link RSVP กับ Guest ที่มีอยู่
-      await this.rsvpService.update(rsvpId, { guestId: existingGuest.id });
+    // ถ้ามี main guest แล้ว → ตรวจสอบว่า accompanying guests ถูกสร้างครบหรือไม่
+    if (mainGuest) {
+      const expectedAccompanyingCount = rsvp.accompanyingGuests?.length || 0;
+      if (expectedAccompanyingCount > 0) {
+        // หา accompanying guests ที่มีอยู่
+        const groupId = mainGuest.groupId;
+        const allGuests = await this.guestService.getAll();
+        const existingAccompanyingGuests = allGuests.filter(g => 
+          g.id !== mainGuest!.id &&
+          g.groupId === groupId &&
+          g.rsvpUid === rsvp.uid
+        );
+
+        // ถ้ายังไม่ครบ → สร้างเพิ่ม
+        if (existingAccompanyingGuests.length < expectedAccompanyingCount) {
+          const groupId = mainGuest.groupId || `GROUP_${generateId()}`;
+          const groupName = mainGuest.groupName || `${rsvp.firstName} ${rsvp.lastName}`;
+          
+          // สร้าง accompanying guests ที่ยังไม่มี
+          const existingNames = new Set(existingAccompanyingGuests.map(g => g.firstName));
+          for (let i = 0; i < rsvp.accompanyingGuests.length; i++) {
+            const accGuest = rsvp.accompanyingGuests[i];
+            // ตรวจสอบว่าถูกสร้างแล้วหรือยัง (เช็คชื่อ)
+            if (!existingNames.has(accGuest.name)) {
+              const accGuestId = generateId();
+              const accGuestData: Guest = {
+                id: accGuestId,
+                firstName: accGuest.name || `คนที่ ${i + 1}`,
+                lastName: '',
+                nickname: '',
+                age: null,
+                gender: 'other',
+                relationToCouple: accGuest.relationToMain || '',
+                side: rsvp.side as 'groom' | 'bride' | 'both',
+                zoneId: null,
+                tableId: null,
+                note: '',
+                isComing: true,
+                accompanyingGuestsCount: 0,
+                groupId: groupId,
+                groupName: groupName,
+                checkedInAt: null,
+                checkInMethod: null,
+                rsvpUid: rsvp.uid,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+              // ใช้ create แทน createFromRSVP เพราะ createFromRSVP จะ return ถ้ามี guest ที่มี rsvpUid ตรงกันแล้ว
+              await this.guestService.create(accGuestData);
+            }
+          }
+        }
+      }
+
+      // Link RSVP กับ Guest หลัก (ถ้ายังไม่ได้ link)
+      if (!rsvp.guestId) {
+        await this.rsvpService.update(rsvpId, { guestId: mainGuest.id });
+      }
       return;
     }
 
-    // สร้าง Guest entries ใหม่
+    // สร้าง Guest entries ใหม่ (ถ้ายังไม่มี main guest)
     const groupId = `GROUP_${generateId()}`;
     const groupName = `${rsvp.firstName} ${rsvp.lastName}`;
 
     // สร้าง Guest หลัก
     const mainGuestId = generateId();
-    const mainGuest: Guest = {
+    const newMainGuest: Guest = {
       id: mainGuestId,
       firstName: rsvp.firstName,
       lastName: rsvp.lastName,
@@ -85,7 +139,7 @@ export class RSVPManager {
       updatedAt: new Date().toISOString(),
     };
 
-    await this.guestService.createFromRSVP(mainGuest, rsvp.uid);
+    await this.guestService.createFromRSVP(newMainGuest, rsvp.uid);
 
     // สร้าง Guest สำหรับผู้ติดตาม
     if (rsvp.accompanyingGuests && rsvp.accompanyingGuests.length > 0) {
@@ -114,7 +168,8 @@ export class RSVPManager {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        await this.guestService.createFromRSVP(accGuestData, rsvp.uid);
+        // ใช้ create แทน createFromRSVP เพราะ createFromRSVP จะ return ถ้ามี guest ที่มี rsvpUid ตรงกันแล้ว
+        await this.guestService.create(accGuestData);
       }
     }
 

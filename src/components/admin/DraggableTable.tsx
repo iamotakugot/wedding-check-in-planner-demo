@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Card, Avatar, Button, Space, Typography } from 'antd';
+import { Card, Avatar, Button, Space, Typography, Badge } from 'antd';
 import { ExpandAltOutlined } from '@ant-design/icons';
 import { TableData, Guest } from '@/types';
 import { GRID_X_POSITIONS, findNearest, findNearestYSnap } from '@/constants/layout';
@@ -16,6 +16,8 @@ interface DraggableTableProps {
   onTableClick?: (table: TableData) => void;
   isAssignMode?: boolean;
   disabled?: boolean;
+  isSelected?: boolean;
+  selectedCount?: number;
 }
 
 const DraggableTable: React.FC<DraggableTableProps> = ({
@@ -28,6 +30,8 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
   onTableClick,
   isAssignMode = false,
   disabled = false,
+  isSelected = false,
+  selectedCount = 0,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -51,13 +55,18 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
       return;
     }
 
+    // Select table on click if not already selected
+    if (!isSelected && onTableClick) {
+      onTableClick(table);
+    }
+
     setIsDragging(true);
     const rect = e.currentTarget.getBoundingClientRect();
     setOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     e.preventDefault();
   };
 
-  // Handle table click for assignment
+  // Handle table click for assignment or selection
   const handleClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     // Don't trigger if clicking on button
@@ -65,7 +74,7 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
       return;
     }
 
-    if (isAssignMode && onTableClick) {
+    if (onTableClick) {
       onTableClick(table);
     }
   };
@@ -180,11 +189,19 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
         position: 'absolute',
         left: `${table.x}%`,
         top: `${table.y}%`,
-        cursor: isAssignMode ? 'pointer' : isDragging ? 'grabbing' : 'grab',
-        borderColor: isAssignMode ? '#52c41a' : isDragging ? zoneColor : '#f0f0f0',
-        borderWidth: isAssignMode ? 3 : isDragging ? 2 : 1,
+        cursor: isAssignMode ? 'pointer' : isDragging ? 'grabbing' : isSelected ? 'move' : 'grab',
+        borderColor: isAssignMode 
+          ? '#52c41a' 
+          : isSelected 
+          ? '#1890ff' 
+          : isDragging 
+          ? zoneColor 
+          : '#f0f0f0',
+        borderWidth: isAssignMode || isSelected ? 3 : isDragging ? 2 : 1,
         boxShadow: isAssignMode 
           ? `0 0 20px 0 #52c41a66` 
+          : isSelected
+          ? `0 0 15px 0 #1890ff66`
           : isDragging 
           ? `0 0 15px 0 ${zoneColor}66` 
           : '0 1px 2px rgba(0,0,0,0.07)',
@@ -192,7 +209,7 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
         transition: isDragging
           ? 'none'
           : 'left 0.3s, top 0.3s, box-shadow 0.3s, border-color 0.3s',
-        zIndex: isAssignMode ? 10 : isDragging ? 10 : 1,
+        zIndex: isAssignMode || isSelected ? 10 : isDragging ? 10 : 1,
         pointerEvents: 'auto',
         margin: '0.5rem', // เพิ่ม gap ระหว่างการ์ด
       }}
@@ -205,6 +222,13 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
           {seatedCount} / {capacity}
         </Text>{' '}
         <Text type="secondary">ที่นั่ง</Text>
+        {selectedCount > 0 && (
+          <Badge count={selectedCount} size="small" style={{ marginLeft: 4 }}>
+            <span style={{ fontSize: 9, color: '#52c41a', fontWeight: 'bold' }}>
+              +{selectedCount}
+            </span>
+          </Badge>
+        )}
       </div>
       <Button
         size="small"

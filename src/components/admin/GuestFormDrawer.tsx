@@ -22,21 +22,29 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
   const isEditMode = !!guestToEdit;
 
   useEffect(() => {
-    if (visible) {
-      form.setFieldsValue(
-        guestToEdit || {
+    if (!visible) {
+      return;
+    }
+
+    // Wait for form to be mounted before setting values
+    const timer = setTimeout(() => {
+      if (!form) return;
+      
+      if (guestToEdit) {
+        form.setFieldsValue(guestToEdit);
+      } else {
+        form.setFieldsValue({
           gender: 'other',
           side: 'both',
           zoneId: null,
           tableId: null,
           age: 30,
-        },
-      );
-    } else {
-      form.resetFields();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, guestToEdit]); // form is stable, no need in deps
+        });
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [visible, guestToEdit, form]);
 
   const handleFinish = (values: Omit<Guest, 'id' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString();
@@ -58,6 +66,7 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
       width={window.innerWidth > 768 ? 500 : '100%'}
       onClose={onClose}
       open={visible}
+      destroyOnClose
       styles={{ body: { paddingBottom: 80 } }}
       extra={
         <Space>
@@ -66,9 +75,11 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
       }
     >
       <Form
+        key={guestToEdit?.id || 'new'}
         form={form}
         layout="vertical"
         onFinish={handleFinish}
+        preserve={false}
         initialValues={{ age: 30, gender: 'other', side: 'both', zoneId: null, tableId: null }}
       >
         <Row gutter={16}>

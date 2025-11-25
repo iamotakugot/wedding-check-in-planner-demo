@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Button } from 'antd';
+import { Layout, Menu, Avatar, Button, Typography } from 'antd';
 import {
   DashboardOutlined,
   TeamOutlined,
@@ -18,8 +18,10 @@ import {
   SettingOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
+import { APP_VERSION } from '@/constants/version';
 
-const { Header, Content, Sider } = Layout;
+const { Header, Content, Sider, Footer } = Layout;
+const { Text } = Typography;
 
 interface AdminLayoutProps {
   onLogout: () => void;
@@ -124,9 +126,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
             <LogoutOutlined style={{ fontSize: 16 }} className="text-gray-400" />
           </div>
         </Header>
-        <Content className="m-0 bg-gray-50 overflow-auto h-[calc(100vh-64px)]">
+        <Content className="m-0 bg-gray-50 overflow-auto" style={{ minHeight: 'calc(100vh - 64px - 48px)' }}>
           {children}
         </Content>
+        <Footer className="bg-white border-t border-gray-200 py-2 px-6 text-center">
+          <Text type="secondary" className="text-xs">
+            Wedding Planner v{APP_VERSION}
+          </Text>
+        </Footer>
       </Layout>
     </Layout>
   );

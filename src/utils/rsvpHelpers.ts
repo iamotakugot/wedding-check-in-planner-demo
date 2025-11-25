@@ -148,7 +148,6 @@ export const getGuestsFromRSVP = (rsvp: RSVPData, allGuests: Guest[]): Guest[] =
     );
     relatedGuests.push(...accompanyingGuests);
   }
-
   return relatedGuests;
 };
 

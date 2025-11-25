@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Tabs, Form, Input, Button, Card, Row, Col, message, QRCode, Statistic, Spin } from 'antd';
+import { Tabs, Form, Input, Button, Card, Row, Col, App, QRCode, Statistic, Spin, Space } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { useConfig } from '@/hooks/useConfig';
 import { useRSVPs } from '@/hooks/useRSVPs';
@@ -13,9 +13,9 @@ import { defaultWeddingCardConfig, type WeddingCardConfig } from '@/constants/we
 import { calculateTotalAttendees, calculateRsvpStats } from '@/utils/rsvpHelpers';
 import { logger } from '@/utils/logger';
 
-const { TabPane } = Tabs;
 
 const SettingsPage: React.FC = () => {
+  const { message } = App.useApp();
   const { weddingCardConfig, isLoading: configLoading } = useConfig();
   const { rsvps, isLoading: rsvpsLoading } = useRSVPs();
   const [form] = Form.useForm();
@@ -23,11 +23,17 @@ const SettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (weddingCardConfig) {
-      form.setFieldsValue(weddingCardConfig);
-    } else {
-      form.setFieldsValue(defaultWeddingCardConfig);
-    }
+    if (!form) return;
+    
+    const timer = setTimeout(() => {
+      if (weddingCardConfig) {
+        form.setFieldsValue(weddingCardConfig);
+      } else {
+        form.setFieldsValue(defaultWeddingCardConfig);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [weddingCardConfig, form]);
 
   const handleSave = async (values: WeddingCardConfig) => {
@@ -69,14 +75,21 @@ const SettingsPage: React.FC = () => {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">ตั้งค่า</h1>
 
-      <Tabs defaultActiveKey="card">
-        <TabPane tab="การ์ดแต่งงาน" key="card">
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleSave}
-            initialValues={defaultWeddingCardConfig}
-          >
+      <Tabs 
+        defaultActiveKey="card"
+        items={[
+          {
+            key: 'card',
+            label: 'การ์ดแต่งงาน',
+            children: (
+              <Form
+                key={weddingCardConfig?.groom?.firstName || 'new'}
+                form={form}
+                layout="vertical"
+                onFinish={handleSave}
+                preserve={false}
+                initialValues={defaultWeddingCardConfig}
+              >
             <Row gutter={[24, 24]}>
               <Col xs={24} md={12}>
                 <Card title="ข้อมูลเจ้าบ่าว">
@@ -147,9 +160,13 @@ const SettingsPage: React.FC = () => {
               บันทึก
             </Button>
           </Form>
-        </TabPane>
-        <TabPane tab="ลิงค์เชิญ" key="link">
-          <Row gutter={[16, 16]}>
+            ),
+          },
+          {
+            key: 'link',
+            label: 'ลิงค์เชิญ',
+            children: (
+              <Row gutter={[16, 16]}>
             <Col xs={24} sm={8}>
               <Card>
                 <Statistic title="ตอบรับทั้งหมด" value={rsvpStats.totalForms} />
@@ -167,20 +184,22 @@ const SettingsPage: React.FC = () => {
             </Col>
             <Col xs={24} md={12}>
               <Card title="ลิงค์เชิญ">
-                <Input.Group compact>
-                  <Input value={inviteLink} readOnly style={{ width: 'calc(100% - 100px)' }} />
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input value={inviteLink} readOnly style={{ flex: 1 }} />
                   <Button icon={<CopyOutlined />} onClick={handleCopy}>
                     คัดลอก
                   </Button>
-                </Input.Group>
+                </Space.Compact>
                 <div className="mt-4 flex justify-center">
                   <QRCode value={inviteLink} />
                 </div>
               </Card>
             </Col>
           </Row>
-        </TabPane>
-      </Tabs>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 };

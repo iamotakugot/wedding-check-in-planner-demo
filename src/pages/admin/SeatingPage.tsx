@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Card, Button, Space, Tabs, message, Modal } from 'antd';
+import { Card, Button, Space, Tabs, App, Modal } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
@@ -13,7 +13,6 @@ import { useGuestGroups } from '@/hooks/useGuestGroups';
 import { Zone, TableData, Guest } from '@/types';
 import { ZoneService } from '@/services/firebase/ZoneService';
 import { TableService } from '@/services/firebase/TableService';
-import { GuestService } from '@/services/firebase/GuestService';
 import { SeatingManager } from '@/managers/SeatingManager';
 import DraggableTable from '@/components/admin/DraggableTable';
 import ZoneModal from '@/components/admin/ZoneModal';
@@ -28,13 +27,13 @@ import { renderMemberLabel } from '@/utils/guestHelpers';
 // Tabs component used directly
 
 const SeatingPage: React.FC = () => {
+  const { message } = App.useApp();
   const { guests, isLoading: guestsLoading } = useGuests();
   const { zones, isLoading: zonesLoading } = useZones();
   const { tables, isLoading: tablesLoading } = useTables();
   const { guestGroups } = useGuestGroups();
   const zoneService = ZoneService.getInstance();
   const tableService = TableService.getInstance();
-  const guestService = GuestService.getInstance();
 
   // Initialize selectedZoneId with first valid zone
   // Use useEffect to update when zones load
@@ -55,9 +54,11 @@ const SeatingPage: React.FC = () => {
   const [editingTable, setEditingTable] = useState<TableData | null>(null);
   const [activeTable, setActiveTable] = useState<TableData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   
   // Click-based assignment state
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [isAssignMode, setIsAssignMode] = useState(false);
   const seatingManager = new SeatingManager();
 
@@ -152,9 +153,42 @@ const SeatingPage: React.FC = () => {
     handleGuestClick(memberId);
   };
 
-  // Handle table click for assignment
+  // Handle table click for assignment or selection
   const handleTableClick = async (table: TableData) => {
+    // Bulk assignment: if multiple guests selected
+    if (selectedGuestIds.length > 0) {
+      try {
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (const guestId of selectedGuestIds) {
+          try {
+            await seatingManager.assignGuestToTable(guestId, table.id, table.zoneId);
+            successCount++;
+          } catch (error) {
+            failCount++;
+            logger.error(`Error assigning guest ${guestId}:`, error);
+          }
+        }
+        
+        if (successCount > 0) {
+          message.success(`จัดที่นั่ง ${successCount} คนสำเร็จ${failCount > 0 ? ` (${failCount} คนไม่สำเร็จ)` : ''}`);
+        } else {
+          message.error(`ไม่สามารถจัดที่นั่งได้ (${failCount} คน)`);
+        }
+        
+        setSelectedGuestIds([]);
+        setSelectedGuestId(null);
+        setIsAssignMode(false);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+        message.error(errorMessage);
+      }
+      return;
+    }
+    
     if (isAssignMode && selectedGuestId) {
+      // Single assignment mode: assign guest to table
       try {
         // จัดที่นั่งรายบุคคล
         await seatingManager.assignGuestToTable(selectedGuestId, table.id, table.zoneId);
@@ -183,12 +217,16 @@ const SeatingPage: React.FC = () => {
         const errorMessage = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
         message.error(errorMessage);
       }
+    } else {
+      // Selection mode: select table
+      setSelectedTableId(table.id === selectedTableId ? null : table.id);
     }
   };
 
   // Cancel assignment mode
   const handleCancelAssign = () => {
     setSelectedGuestId(null);
+    setSelectedGuestIds([]);
     setIsAssignMode(false);
     message.info('ยกเลิกการจัดที่นั่ง');
   };
@@ -326,10 +364,12 @@ const SeatingPage: React.FC = () => {
             <GuestSelectionSidebar
               guests={guests}
               selectedGuestId={selectedGuestId}
+              selectedGuestIds={selectedGuestIds}
               isAssignMode={isAssignMode}
               onGuestClick={handleGuestClick}
               onMemberClick={handleMemberClick}
               onCancelAssign={handleCancelAssign}
+              onGuestIdsChange={setSelectedGuestIds}
               guestGroups={guestGroups}
             />
 
@@ -382,11 +422,14 @@ const SeatingPage: React.FC = () => {
                       zoneColor={currentZone?.color || '#1890ff'}
                       onTablePositionUpdate={handleTablePositionUpdate}
                       onTableClick={handleTableClick}
-                      isAssignMode={isAssignMode}
+                      isAssignMode={isAssignMode || selectedGuestIds.length > 0}
                       disabled={isAssignMode}
+                      isSelected={selectedTableId === table.id}
+                      selectedCount={selectedGuestIds.length}
                       onOpenDetail={(t: TableData) => {
                         setActiveTable(t);
                         setIsDetailModalOpen(true);
+                        setSelectedTableId(t.id);
                       }}
                     />
                   );
@@ -424,16 +467,43 @@ const SeatingPage: React.FC = () => {
           onClose={() => {
             setIsDetailModalOpen(false);
             setActiveTable(null);
+            setSelectedTableId(null);
           }}
           table={activeTable}
           guests={guestsByTable.get(activeTable.tableId) || []}
           guestGroups={guestGroups}
           onUnassignGuest={async (guestId: string) => {
             try {
-              await guestService.update(guestId, { tableId: null, zoneId: null });
-              message.success('ยกเลิกการจัดที่นั่งเรียบร้อย');
+              // Unassign guest from table using SeatingManager
+              await seatingManager.unassignGuestFromTable(guestId);
+              message.success('ย้ายแขกออกจากโต๊ะเรียบร้อย');
             } catch (error) {
               logger.error('Error unassigning guest:', error);
+              message.error('เกิดข้อผิดพลาด');
+            }
+          }}
+          onUnassignGuests={async (guestIds: string[]) => {
+            try {
+              let successCount = 0;
+              let failCount = 0;
+              
+              for (const guestId of guestIds) {
+                try {
+                  await seatingManager.unassignGuestFromTable(guestId);
+                  successCount++;
+                } catch (error) {
+                  failCount++;
+                  logger.error(`Error unassigning guest ${guestId}:`, error);
+                }
+              }
+              
+              if (successCount > 0) {
+                message.success(`ย้าย ${successCount} คนออกจากโต๊ะเรียบร้อย${failCount > 0 ? ` (${failCount} คนไม่สำเร็จ)` : ''}`);
+              } else {
+                message.error(`ไม่สามารถย้ายออกได้ (${failCount} คน)`);
+              }
+            } catch (error) {
+              logger.error('Error unassigning guests:', error);
               message.error('เกิดข้อผิดพลาด');
             }
           }}

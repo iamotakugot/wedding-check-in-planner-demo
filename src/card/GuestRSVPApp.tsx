@@ -1913,7 +1913,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         if (isCheckingAuth) {
             return (
                 <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
-                    <Spin size="large" tip="กำลังตรวจสอบข้อมูล..." />
+                    <Spin size="large" />
+                    <div style={{ marginTop: 16, color: '#666' }}>กำลังตรวจสอบข้อมูล...</div>
                 </div>
             );
         }
@@ -1922,7 +1923,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         if (isLoggedIn && isLoadingRSVP) {
             return (
                 <div className="w-full max-w-xs mx-auto text-center animate-fade-in pt-10">
-                    <Spin size="large" tip="กำลังโหลดข้อมูล..." />
+                    <Spin size="large" />
+                    <div style={{ marginTop: 16, color: '#666' }}>กำลังโหลดข้อมูล...</div>
                 </div>
             );
         }

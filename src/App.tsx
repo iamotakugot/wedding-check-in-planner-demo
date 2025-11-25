@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { ConfigProvider, App as AntApp, Spin, message } from 'antd';
+import { ConfigProvider, App as AntApp, Spin } from 'antd';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import GuestRSVPApp from '@/card/GuestRSVPApp';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
@@ -21,6 +21,29 @@ import { useRSVPSync } from '@/hooks/useRSVPSync';
 // Services ใหม่
 import { getAdminAppState, updateAdminAppState, subscribeAdminAppState } from '@/services/firebase/appState';
 import { logger } from '@/utils/logger';
+
+// Security check component that uses App.useApp() hook
+const SecurityCheck: React.FC<{
+  isAdminPath: boolean;
+  authLoading: boolean;
+  user: any;
+  isAdmin: boolean;
+  pathname: string;
+}> = ({ isAdminPath, authLoading, user, isAdmin, pathname }) => {
+  const { message } = AntApp.useApp();
+
+  useEffect(() => {
+    if (isAdminPath && !authLoading && user && !isAdmin) {
+      const isAdminLoginPage = pathname === '/admin' || pathname === '/admin/';
+      if (!isAdminLoginPage) {
+        message.warning('คุณไม่มีสิทธิ์เข้าถึงหน้า Admin Panel');
+        window.location.href = '/';
+      }
+    }
+  }, [isAdminPath, authLoading, user, isAdmin, pathname, message]);
+
+  return null;
+};
 
 const App: React.FC = () => {
   // Check URL path
@@ -101,15 +124,7 @@ const App: React.FC = () => {
   useRSVPSync(appMode === 'admin' && isAdmin);
 
   // Security: Redirect non-admin users from admin pages
-  useEffect(() => {
-    if (isAdminPath && !authLoading && user && !isAdmin) {
-      const isAdminLoginPage = pathname === '/admin' || pathname === '/admin/';
-      if (!isAdminLoginPage) {
-        message.warning('คุณไม่มีสิทธิ์เข้าถึงหน้า Admin Panel');
-        window.location.href = '/';
-      }
-    }
-  }, [isAdminPath, authLoading, user, isAdmin, pathname]);
+  // Note: This will be handled inside AntApp component to use App.useApp() hook
 
   // Handle page change
   const handlePageChange = (key: string) => {
@@ -124,17 +139,17 @@ const App: React.FC = () => {
   const renderAdminContent = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}><DashboardPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><DashboardPage /></Suspense>;
       case 'guests':
-        return <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}><GuestsPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><GuestsPage /></Suspense>;
       case 'seating':
-        return <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}><SeatingPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><SeatingPage /></Suspense>;
       case 'rsvps':
-        return <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}><RSVPsPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><RSVPsPage /></Suspense>;
       case 'settings':
-        return <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}><SettingsPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><SettingsPage /></Suspense>;
       default:
-        return <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}><DashboardPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><DashboardPage /></Suspense>;
     }
   };
 
@@ -154,8 +169,9 @@ const App: React.FC = () => {
   // Admin mode: Show loading while checking auth
   if (authLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Spin size="large" tip="กำลังตรวจสอบสิทธิ์..." />
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Spin size="large" />
+        <div style={{ marginTop: 16, color: '#666' }}>กำลังตรวจสอบสิทธิ์...</div>
       </div>
     );
   }
@@ -172,8 +188,15 @@ const App: React.FC = () => {
         }}
       >
         <AntApp>
+          <SecurityCheck
+            isAdminPath={isAdminPath}
+            authLoading={authLoading}
+            user={user}
+            isAdmin={isAdmin}
+            pathname={pathname}
+          />
           {isAdmin ? (
-            <Suspense fallback={<Spin size="large" tip="กำลังโหลด..." />}>
+            <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}>
               <AdminLayout
                 currentView={currentView}
                 setCurrentView={handlePageChange}

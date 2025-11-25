@@ -3,36 +3,87 @@
  * Sidebar สำหรับเลือกแขกเพื่อจัดที่นั่ง (รายคน)
  */
 
-import React, { useMemo, useState } from 'react';
-import { Card, List, Button, Tag, Collapse, Avatar, Input, Space } from 'antd';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Card, List, Button, Tag, Collapse, Avatar, Input, Space, Checkbox } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { Guest, GuestGroup, GroupMember } from '@/types';
 import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
 
-const { Panel } = Collapse;
-const { Search } = Input;
+// Custom Search component to avoid Input.Search addonAfter warning
+const CustomSearch: React.FC<{
+  placeholder?: string;
+  allowClear?: boolean;
+  size?: 'small' | 'middle' | 'large';
+  style?: React.CSSProperties;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  value?: string;
+  prefix?: React.ReactNode;
+}> = ({ placeholder, allowClear, size, style, onChange, value, prefix }) => {
+  const [searchValue, setSearchValue] = useState(value || '');
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setSearchValue(newValue);
+    if (onChange) {
+      onChange(e);
+    }
+  };
+
+  const handleClear = () => {
+    setSearchValue('');
+    if (onChange) {
+      onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
+    }
+  };
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setSearchValue(value);
+    }
+  }, [value]);
+
+  return (
+    <Space.Compact style={style} size={size}>
+      <Input
+        placeholder={placeholder}
+        value={searchValue}
+        onChange={handleChange}
+        prefix={prefix}
+        allowClear={allowClear}
+        onClear={handleClear}
+        size={size}
+        style={{ flex: 1 }}
+      />
+    </Space.Compact>
+  );
+};
 
 interface GuestSelectionSidebarProps {
   guests: Guest[];
   selectedGuestId: string | null;
+  selectedGuestIds: string[];
   isAssignMode: boolean;
   onGuestClick: (guestId: string) => void;
   onMemberClick: (memberId: string) => void;
   onCancelAssign: () => void;
+  onGuestIdsChange: (guestIds: string[]) => void;
   guestGroups: GuestGroup[];
 }
 
 const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
   guests,
   selectedGuestId,
+  selectedGuestIds,
   isAssignMode,
   onGuestClick,
   onMemberClick,
   onCancelAssign,
+  onGuestIdsChange,
   guestGroups,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSide, setSelectedSide] = useState<'all' | 'groom' | 'bride'>('all');
+  const [selectedRelation, setSelectedRelation] = useState<'all' | 'friend' | 'family' | 'elder'>('all');
 
   // Helper function to get side label in Thai
   const getSideLabel = (side: string): string => {
@@ -48,7 +99,66 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
     }
   };
 
-  // Filter groups and members based on search and side filter
+  // Helper function to categorize relation
+  const categorizeRelation = (relation: string): 'friend' | 'family' | 'elder' | 'other' => {
+    const relationLower = (relation || '').toLowerCase();
+    
+    // เพื่อน
+    if (
+      relationLower.includes('เพื่อน') ||
+      relationLower.includes('friend') ||
+      relationLower.includes('เพื่อนมัธยม') ||
+      relationLower.includes('เพื่อนมหาวิทยาลัย') ||
+      relationLower.includes('เพื่อนทำงาน')
+    ) {
+      return 'friend';
+    }
+    
+    // ญาติ
+    if (
+      relationLower.includes('ญาติ') ||
+      relationLower.includes('พี่') ||
+      relationLower.includes('น้อง') ||
+      relationLower.includes('ลุง') ||
+      relationLower.includes('ป้า') ||
+      relationLower.includes('น้า') ||
+      relationLower.includes('อา') ||
+      relationLower.includes('ปู่') ||
+      relationLower.includes('ย่า') ||
+      relationLower.includes('ตา') ||
+      relationLower.includes('ยาย') ||
+      relationLower.includes('cousin') ||
+      relationLower.includes('uncle') ||
+      relationLower.includes('aunt')
+    ) {
+      return 'family';
+    }
+    
+    // ผู้ใหญ่
+    if (
+      relationLower.includes('พ่อ') ||
+      relationLower.includes('แม่') ||
+      relationLower.includes('คุณพ่อ') ||
+      relationLower.includes('คุณแม่') ||
+      relationLower.includes('พ่อแม่') ||
+      relationLower.includes('ปู่') ||
+      relationLower.includes('ย่า') ||
+      relationLower.includes('ตา') ||
+      relationLower.includes('ยาย') ||
+      relationLower.includes('ลุง') ||
+      relationLower.includes('ป้า') ||
+      relationLower.includes('น้า') ||
+      relationLower.includes('อา') ||
+      relationLower.includes('parent') ||
+      relationLower.includes('grandparent')
+    ) {
+      return 'elder';
+    }
+    
+    return 'other';
+  };
+
+  // Filter groups and members based on search, side, and relation filter
   const filteredGroups = useMemo(() => {
     const searchLower = searchTerm.toLowerCase().trim();
     
@@ -61,7 +171,16 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         }
 
         // Filter unassigned members
-        const unassignedMembers = group.members.filter(m => !m.seat);
+        let unassignedMembers = group.members.filter(m => !m.seat);
+        
+        // Filter by relation category
+        if (selectedRelation !== 'all') {
+          unassignedMembers = unassignedMembers.filter(member => {
+            const relation = member.relationToMain || '';
+            const category = categorizeRelation(relation);
+            return category === selectedRelation;
+          });
+        }
         
         // Filter by search term
         if (searchLower) {
@@ -83,7 +202,16 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         return unassignedMembers.length > 0;
       })
       .map(group => {
-        const unassignedMembers = group.members.filter(m => !m.seat);
+        let unassignedMembers = group.members.filter(m => !m.seat);
+        
+        // Apply relation filter
+        if (selectedRelation !== 'all') {
+          unassignedMembers = unassignedMembers.filter(member => {
+            const relation = member.relationToMain || '';
+            const category = categorizeRelation(relation);
+            return category === selectedRelation;
+          });
+        }
         
         // Apply search filter to members
         if (searchTerm.trim()) {
@@ -112,34 +240,41 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         };
       })
       .filter(group => group.unassignedMembers.length > 0);
-  }, [guestGroups, searchTerm, selectedSide]);
+  }, [guestGroups, searchTerm, selectedSide, selectedRelation]);
 
   const filteredIndividualGuests = useMemo(() => {
-    const unassigned = guests.filter(g => !g.tableId && !g.groupId);
+    let unassigned = guests.filter(g => !g.tableId && !g.groupId);
     
-    if (!searchTerm.trim() && selectedSide === 'all') {
-      return unassigned;
-    }
-    
-    const searchLower = searchTerm.toLowerCase().trim();
-    
-    return unassigned.filter(guest => {
-      // Filter by side
-      if (selectedSide !== 'all') {
+    // Filter by side
+    if (selectedSide !== 'all') {
+      unassigned = unassigned.filter(guest => {
         if (selectedSide === 'groom' && guest.side !== 'groom') return false;
         if (selectedSide === 'bride' && guest.side !== 'bride') return false;
-      }
-      
-      // Filter by search
-      if (searchLower) {
+        return true;
+      });
+    }
+    
+    // Filter by relation category
+    if (selectedRelation !== 'all') {
+      unassigned = unassigned.filter(guest => {
+        const relation = guest.relationToCouple || '';
+        const category = categorizeRelation(relation);
+        return category === selectedRelation;
+      });
+    }
+    
+    // Filter by search
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      unassigned = unassigned.filter(guest => {
         const guestName = formatGuestName(guest).toLowerCase();
         const relation = (guest.relationToCouple || '').toLowerCase();
         return guestName.includes(searchLower) || relation.includes(searchLower);
-      }
-      
-      return true;
-    });
-  }, [guests, searchTerm, selectedSide]);
+      });
+    }
+    
+    return unassigned;
+  }, [guests, searchTerm, selectedSide, selectedRelation]);
 
   return (
     <Card 
@@ -148,34 +283,50 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
       styles={{ body: { padding: '12px' } }}
     >
       <div className="mb-3">
-        {isAssignMode && (
-          <Button
-            type="default"
-            danger
-            size="small"
-            onClick={onCancelAssign}
-            className="w-full mb-2"
-          >
-            ยกเลิก
-          </Button>
-        )}
+        <div className="flex gap-2 mb-2">
+          {isAssignMode && (
+            <Button
+              type="default"
+              danger
+              size="small"
+              onClick={onCancelAssign}
+              style={{ flex: 1 }}
+            >
+              ยกเลิก
+            </Button>
+          )}
+          {selectedGuestIds.length > 0 && (
+            <Button
+              type="default"
+              size="small"
+              onClick={() => onGuestIdsChange([])}
+              style={{ flex: 1 }}
+            >
+              ล้างการเลือก ({selectedGuestIds.length})
+            </Button>
+          )}
+        </div>
         <div className="text-sm text-gray-500 mb-2">
-          {isAssignMode ? 'เลือกโต๊ะที่ต้องการจัดที่นั่ง' : 'คลิกสมาชิกเพื่อจัดที่นั่ง'}
+          {isAssignMode 
+            ? 'เลือกโต๊ะที่ต้องการจัดที่นั่ง' 
+            : selectedGuestIds.length > 0
+            ? `เลือกแล้ว ${selectedGuestIds.length} คน - คลิกโต๊ะเพื่อจัดที่นั่ง`
+            : 'ติ๊กเลือกหลายคน หรือคลิกสมาชิกเพื่อจัดที่นั่ง'}
         </div>
         
         {/* Search Input */}
-        <Search
+        <CustomSearch
           placeholder="ค้นหาชื่อ/ความสัมพันธ์"
           allowClear
           size="small"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ marginBottom: '8px' }}
+          style={{ marginBottom: '8px', width: '100%' }}
           prefix={<SearchOutlined />}
         />
         
         {/* Side Filter Buttons */}
-        <Space.Compact size="small" className="w-full">
+        <Space.Compact size="small" className="w-full mb-2">
           <Button
             type={selectedSide === 'all' ? 'primary' : 'default'}
             size="small"
@@ -201,6 +352,43 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
             เจ้าสาว
           </Button>
         </Space.Compact>
+        
+        {/* Relation Category Filter Buttons */}
+        <div className="text-xs text-gray-600 mb-1">หมวดหมู่:</div>
+        <Space.Compact size="small" className="w-full">
+          <Button
+            type={selectedRelation === 'all' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedRelation('all')}
+            style={{ flex: 1 }}
+          >
+            ทั้งหมด
+          </Button>
+          <Button
+            type={selectedRelation === 'friend' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedRelation('friend')}
+            style={{ flex: 1 }}
+          >
+            เพื่อน
+          </Button>
+          <Button
+            type={selectedRelation === 'family' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedRelation('family')}
+            style={{ flex: 1 }}
+          >
+            ญาติ
+          </Button>
+          <Button
+            type={selectedRelation === 'elder' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedRelation('elder')}
+            style={{ flex: 1 }}
+          >
+            ผู้ใหญ่
+          </Button>
+        </Space.Compact>
       </div>
 
       {/* กลุ่มแขก (แสดงสมาชิกรายคน) */}
@@ -209,29 +397,49 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
           accordion={false}
           size="small"
           className="mb-2"
-        >
-          {filteredGroups.map((group) => (
-            <Panel
-              key={group.groupId}
-              header={
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{group.groupName}</span>
-                  <Tag color="blue" className="ml-2">
-                    {group.unassignedMembers.length} คน
-                  </Tag>
-                </div>
-              }
-            >
+          items={filteredGroups.map((group) => ({
+            key: group.groupId,
+            label: (
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{group.groupName}</span>
+                <Tag color="blue" className="ml-2">
+                  {group.unassignedMembers.length} คน
+                </Tag>
+              </div>
+            ),
+            children: (
               <List
                 size="small"
                 dataSource={group.unassignedMembers}
                 renderItem={(member: GroupMember) => {
                   const isSelected = selectedGuestId === member.id;
+                  const isChecked = selectedGuestIds.includes(member.id);
                   
                   return (
                     <List.Item
                       className={`cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
-                      onClick={() => onMemberClick(member.id)}
+                      onClick={(e) => {
+                        // Don't trigger if clicking checkbox
+                        if ((e.target as HTMLElement).closest('.ant-checkbox')) {
+                          return;
+                        }
+                        onMemberClick(member.id);
+                      }}
+                      actions={[
+                        <Checkbox
+                          key="checkbox"
+                          checked={isChecked}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            if (e.target.checked) {
+                              onGuestIdsChange([...selectedGuestIds, member.id]);
+                            } else {
+                              onGuestIdsChange(selectedGuestIds.filter(id => id !== member.id));
+                            }
+                          }}
+                        />
+                      ]}
                     >
                       <List.Item.Meta
                         avatar={
@@ -269,9 +477,9 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                   );
                 }}
               />
-            </Panel>
-          ))}
-        </Collapse>
+            ),
+          }))}
+        />
       )}
 
       {/* รายบุคคล */}
@@ -283,11 +491,33 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
             dataSource={filteredIndividualGuests}
             renderItem={(guest) => {
               const isSelected = selectedGuestId === guest.id;
+              const isChecked = selectedGuestIds.includes(guest.id);
               
               return (
                 <List.Item
                   className={`cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
-                  onClick={() => onGuestClick(guest.id)}
+                  onClick={(e) => {
+                    // Don't trigger if clicking checkbox
+                    if ((e.target as HTMLElement).closest('.ant-checkbox')) {
+                      return;
+                    }
+                    onGuestClick(guest.id);
+                  }}
+                  actions={[
+                    <Checkbox
+                      key="checkbox"
+                      checked={isChecked}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        if (e.target.checked) {
+                          onGuestIdsChange([...selectedGuestIds, guest.id]);
+                        } else {
+                          onGuestIdsChange(selectedGuestIds.filter(id => id !== guest.id));
+                        }
+                      }}
+                    />
+                  ]}
                 >
                   <List.Item.Meta
                     avatar={
