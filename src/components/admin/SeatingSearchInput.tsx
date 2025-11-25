@@ -6,14 +6,14 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AutoComplete, Button } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
-import { Guest, GuestGroup } from '@/types';
-import { formatGuestName } from '@/utils/guestHelpers';
+import { Guest, GuestGroup, GroupMember } from '@/types';
+import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
 
 interface SeatingSearchInputProps {
   guests: Guest[];
   guestGroups: GuestGroup[];
   onSearch: (value: string) => void;
-  onSelect?: (value: string, option: any) => void;
+  onSelect?: (value: string, option: SearchOption) => void;
   placeholder?: string;
   style?: React.CSSProperties;
 }
@@ -21,8 +21,8 @@ interface SeatingSearchInputProps {
 interface SearchOption {
   value: string;
   label: string;
-  type: 'group' | 'guest' | 'relation';
-  data: GuestGroup | Guest | string;
+  type: 'member' | 'guest' | 'relation';
+  data: GroupMember | Guest | string;
 }
 
 const SeatingSearchInput: React.FC<SeatingSearchInputProps> = ({
@@ -37,7 +37,7 @@ const SeatingSearchInput: React.FC<SeatingSearchInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<any>(null);
 
-  // สร้าง search options จาก guests และ guestGroups
+  // สร้าง search options จาก guests และ guestGroups (ค้นหาสมาชิกรายคน)
   const searchOptions = useMemo(() => {
     if (!searchValue || searchValue.trim().length < 1) {
       return [];
@@ -45,57 +45,67 @@ const SeatingSearchInput: React.FC<SeatingSearchInputProps> = ({
 
     const searchTerm = searchValue.trim().toLowerCase();
     const options: SearchOption[] = [];
+    const addedMemberIds = new Set<string>();
 
-    // ค้นหาใน guestGroups (ชื่อกลุ่ม)
+    // ค้นหาในสมาชิกของกลุ่ม (รายคน)
     guestGroups.forEach(group => {
-      const groupName = group.groupName.toLowerCase();
-      if (groupName.includes(searchTerm)) {
-        options.push({
-          value: `group:${group.groupId}`,
-          label: `${group.groupName} (กลุ่ม ${group.totalCount} คน)`,
-          type: 'group',
-          data: group,
-        });
-      }
-
-      // ค้นหาในสมาชิกของกลุ่ม
       group.members.forEach(member => {
+        // Skip if already added
+        if (addedMemberIds.has(member.id)) {
+          return;
+        }
+
         const memberName = `${member.firstName} ${member.lastName}`.toLowerCase();
-        if (memberName.includes(searchTerm) && !options.find(o => o.value === `group:${group.groupId}`)) {
-          // ถ้ายังไม่มี group ใน options ให้เพิ่ม
-          if (!options.find(o => o.value === `group:${group.groupId}`)) {
-            options.push({
-              value: `group:${group.groupId}`,
-              label: `${group.groupName} (กลุ่ม ${group.totalCount} คน)`,
-              type: 'group',
-              data: group,
-            });
-          }
+        const fullMemberName = (member.fullName || `${member.firstName} ${member.lastName}`).toLowerCase();
+        const relationToMain = member.relationToMain?.toLowerCase() || '';
+        const groupName = group.groupName.toLowerCase();
+        
+        // ค้นหาตามชื่อสมาชิก, ชื่อกลุ่ม, หรือความสัมพันธ์
+        if (
+          memberName.includes(searchTerm) ||
+          fullMemberName.includes(searchTerm) ||
+          relationToMain.includes(searchTerm) ||
+          groupName.includes(searchTerm)
+        ) {
+          const memberLabel = renderMemberLabel(group, member);
+          options.push({
+            value: `member:${member.id}`,
+            label: memberLabel,
+            type: 'member',
+            data: member,
+          });
+          addedMemberIds.add(member.id);
         }
       });
     });
 
-    // ค้นหาใน guests (รายบุคคล)
+    // ค้นหาใน guests (รายบุคคล - ไม่มีกลุ่ม)
     guests.forEach(guest => {
+      // Skip if already added as a member
+      if (addedMemberIds.has(guest.id)) {
+        return;
+      }
+
+      // Skip if in a group
+      const isInGroup = guest.groupId && guestGroups.some(g => g.groupId === guest.groupId);
+      if (isInGroup) {
+        return;
+      }
+
       const guestName = formatGuestName(guest).toLowerCase();
       const relation = guest.relationToCouple?.toLowerCase() || '';
       
       if (guestName.includes(searchTerm) || relation.includes(searchTerm)) {
-        // ตรวจสอบว่าแขกนี้อยู่ในกลุ่มหรือไม่
-        const isInGroup = guest.groupId && guestGroups.some(g => g.groupId === guest.groupId);
-        
-        if (!isInGroup) {
-          options.push({
-            value: `guest:${guest.id}`,
-            label: `${formatGuestName(guest)}${guest.relationToCouple ? ` - ${guest.relationToCouple}` : ''}`,
-            type: 'guest',
-            data: guest,
-          });
-        }
+        options.push({
+          value: `guest:${guest.id}`,
+          label: `${formatGuestName(guest)}${guest.relationToCouple ? ` - ${guest.relationToCouple}` : ''}`,
+          type: 'guest',
+          data: guest,
+        });
       }
     });
 
-    // ค้นหาตามความสัมพันธ์
+    // ค้นหาตามความสัมพันธ์ (optional - สามารถลบได้ถ้าไม่ต้องการ)
     const uniqueRelations = new Set<string>();
     guests.forEach(guest => {
       if (guest.relationToCouple) {
@@ -123,7 +133,7 @@ const SeatingSearchInput: React.FC<SeatingSearchInputProps> = ({
   };
 
   // Handle select
-  const handleSelect = (value: string, option: any) => {
+  const handleSelect = (value: string, option: SearchOption) => {
     setSearchValue('');
     setIsOpen(false);
     if (onSelect) {

@@ -71,15 +71,27 @@ export interface RSVPData {
   updatedAt: string;
 }
 
+export type SeatAssignment = {
+  tableId: string;
+  tableLabel: string;
+  zoneId: string;
+  zoneLabel: string;
+};
+
 export interface GroupMember {
   id: string;
   firstName: string;
   lastName: string;
   nickname: string;
+  fullName?: string; // ชื่อเต็ม (firstName + lastName)
   relationToMain: string; // ความสัมพันธ์กับหัวหน้า (เช่น "เพื่อน", "น้อง", "พ่อ")
   checkedInAt: string | null;
-  tableId: string | null;
-  zoneId: string | null;
+  isOwner: boolean; // true = แขกตัวเอง (main guest)
+  orderIndex: number; // 0 = ตัวเอง, 1,2,3,... = แขกคนที่ 1,2,3,...
+  seat?: SeatAssignment | null; // ข้อมูลที่นั่ง (แทน tableId/zoneId เดิม)
+  // Deprecated: เก็บไว้เพื่อ backward compatibility
+  tableId?: string | null;
+  zoneId?: string | null;
 }
 
 export interface GuestGroup {
@@ -88,8 +100,6 @@ export interface GuestGroup {
   members: GroupMember[]; // สมาชิกทั้งหมดในกลุ่ม (รวมหัวหน้า)
   checkedInCount: number; // จำนวนคนที่เช็คอินแล้ว
   totalCount: number; // จำนวนคนทั้งหมดในกลุ่ม
-  tableId: string | null; // โต๊ะที่จัด (ถ้าทุกคนอยู่ในโต๊ะเดียวกัน)
-  zoneId: string | null; // โซนที่จัด (ถ้าทุกคนอยู่ในโซนเดียวกัน)
   relation: string; // ความสัมพันธ์กับคู่บ่าวสาว (จากหัวหน้า)
   side: Side; // ฝ่าย (groom/bride/both)
 }

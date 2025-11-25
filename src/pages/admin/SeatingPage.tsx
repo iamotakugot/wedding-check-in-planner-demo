@@ -23,6 +23,7 @@ import GuestSelectionSidebar from '@/components/admin/GuestSelectionSidebar';
 import SeatingSearchInput from '@/components/admin/SeatingSearchInput';
 import { debounceAsync } from '@/utils/debounce';
 import { logger } from '@/utils/logger';
+import { renderMemberLabel } from '@/utils/guestHelpers';
 
 // Tabs component used directly
 
@@ -57,7 +58,6 @@ const SeatingPage: React.FC = () => {
   
   // Click-based assignment state
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isAssignMode, setIsAssignMode] = useState(false);
   const [searchText, setSearchText] = useState('');
   const seatingManager = new SeatingManager();
@@ -87,9 +87,27 @@ const SeatingPage: React.FC = () => {
     return map;
   }, [guests, tables]);
 
-  // Get unassigned guests (no tableId) with search filter
+  // Get unassigned guests/members (no tableId) with search filter
+  // This includes both individual guests and members from groups
   const unassignedGuests = useMemo(() => {
-    let filtered = guests.filter(g => !g.tableId);
+    // Get individual guests without groupId
+    const individualGuests = guests.filter(g => !g.tableId && !g.groupId);
+    
+    // Get members from groups that don't have tableId
+    const unassignedMembers: Guest[] = [];
+    guestGroups.forEach(group => {
+      group.members.forEach(member => {
+        if (!member.tableId && !member.seat) {
+          // Find the corresponding guest object
+          const guest = guests.find(g => g.id === member.id);
+          if (guest) {
+            unassignedMembers.push(guest);
+          }
+        }
+      });
+    });
+    
+    let filtered = [...individualGuests, ...unassignedMembers];
     
     // Apply search filter
     if (searchText && searchText.trim()) {
@@ -97,12 +115,13 @@ const SeatingPage: React.FC = () => {
       filtered = filtered.filter(g => {
         const name = `${g.firstName} ${g.lastName}`.toLowerCase();
         const relation = g.relationToCouple?.toLowerCase() || '';
-        return name.includes(searchTerm) || relation.includes(searchTerm);
+        const groupName = g.groupName?.toLowerCase() || '';
+        return name.includes(searchTerm) || relation.includes(searchTerm) || groupName.includes(searchTerm);
       });
     }
     
     return filtered;
-  }, [guests, searchText]);
+  }, [guests, guestGroups, searchText]);
 
   // Table position update handler
   const handleTablePositionUpdate = useCallback(
@@ -117,43 +136,61 @@ const SeatingPage: React.FC = () => {
     []
   );
 
-  // Handle guest click for assignment (รายบุคคล)
+  // Handle guest/member click for assignment (รายบุคคล)
   const handleGuestClick = (guestId: string) => {
     setSelectedGuestId(guestId);
-    setSelectedGroupId(null);
     setIsAssignMode(true);
-    message.info('เลือกโต๊ะที่ต้องการจัดที่นั่ง');
+    
+    // Find member in groups to show proper label
+    let memberLabel = '';
+    for (const group of guestGroups) {
+      const member = group.members.find(m => m.id === guestId);
+      if (member) {
+        memberLabel = renderMemberLabel(group, member);
+        break;
+      }
+    }
+    
+    if (memberLabel) {
+      message.info(`เลือกโต๊ะสำหรับ ${memberLabel}`);
+    } else {
+      const guest = guests.find(g => g.id === guestId);
+      const guestName = guest ? `${guest.firstName} ${guest.lastName}`.trim() : 'แขก';
+      message.info(`เลือกโต๊ะสำหรับ ${guestName}`);
+    }
   };
 
-  // Handle group click for assignment (ทั้งกลุ่ม)
-  const handleGroupClick = (groupId: string) => {
-    setSelectedGroupId(groupId);
-    setSelectedGuestId(null);
-    setIsAssignMode(true);
-    const group = guestGroups.find(g => g.groupId === groupId);
-    if (group) {
-      message.info(`เลือกโต๊ะที่ต้องการจัดที่นั่งสำหรับกลุ่ม "${group.groupName}" (${group.totalCount} คน)`);
-    } else {
-      message.info('เลือกโต๊ะที่ต้องการจัดที่นั่ง');
-    }
+  // Handle member click (same as guest click for now)
+  const handleMemberClick = (memberId: string) => {
+    handleGuestClick(memberId);
   };
 
   // Handle table click for assignment
   const handleTableClick = async (table: TableData) => {
-    if (isAssignMode) {
+    if (isAssignMode && selectedGuestId) {
       try {
-        if (selectedGroupId) {
-          // จัดที่นั่งทั้งกลุ่ม
-          await seatingManager.assignGroupToTable(selectedGroupId, table.id, table.zoneId);
-          const group = guestGroups.find(g => g.groupId === selectedGroupId);
-          message.success(`จัดที่นั่งกลุ่ม "${group?.groupName || ''}" สำเร็จ (${group?.totalCount || 0} คน)`);
-        } else if (selectedGuestId) {
-          // จัดที่นั่งรายบุคคล
-          await seatingManager.assignGuestToTable(selectedGuestId, table.id, table.zoneId);
-          message.success('จัดที่นั่งสำเร็จ');
+        // จัดที่นั่งรายบุคคล
+        await seatingManager.assignGuestToTable(selectedGuestId, table.id, table.zoneId);
+        
+        // Find member in groups to show proper success message
+        let memberLabel = '';
+        for (const group of guestGroups) {
+          const member = group.members.find(m => m.id === selectedGuestId);
+          if (member) {
+            memberLabel = renderMemberLabel(group, member);
+            break;
+          }
         }
+        
+        if (memberLabel) {
+          message.success(`จัดที่นั่ง ${memberLabel} สำเร็จ`);
+        } else {
+          const guest = guests.find(g => g.id === selectedGuestId);
+          const guestName = guest ? `${guest.firstName} ${guest.lastName}`.trim() : 'แขก';
+          message.success(`จัดที่นั่ง ${guestName} สำเร็จ`);
+        }
+        
         setSelectedGuestId(null);
-        setSelectedGroupId(null);
         setIsAssignMode(false);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
@@ -165,16 +202,15 @@ const SeatingPage: React.FC = () => {
   // Cancel assignment mode
   const handleCancelAssign = () => {
     setSelectedGuestId(null);
-    setSelectedGroupId(null);
     setIsAssignMode(false);
     message.info('ยกเลิกการจัดที่นั่ง');
   };
 
   // Handle search select
   const handleSearchSelect = (value: string) => {
-    if (value.startsWith('group:')) {
-      const groupId = value.replace('group:', '');
-      handleGroupClick(groupId);
+    if (value.startsWith('member:')) {
+      const memberId = value.replace('member:', '');
+      handleMemberClick(memberId);
     } else if (value.startsWith('guest:')) {
       const guestId = value.replace('guest:', '');
       handleGuestClick(guestId);
@@ -303,10 +339,9 @@ const SeatingPage: React.FC = () => {
             <GuestSelectionSidebar
               guests={unassignedGuests}
               selectedGuestId={selectedGuestId}
-              selectedGroupId={selectedGroupId}
               isAssignMode={isAssignMode}
               onGuestClick={handleGuestClick}
-              onGroupClick={handleGroupClick}
+              onMemberClick={handleMemberClick}
               onCancelAssign={handleCancelAssign}
               guestGroups={guestGroups}
             />
@@ -403,6 +438,7 @@ const SeatingPage: React.FC = () => {
           }}
           table={activeTable}
           guests={guestsByTable.get(activeTable.tableId) || []}
+          guestGroups={guestGroups}
           onUnassignGuest={async (guestId: string) => {
             try {
               await guestService.update(guestId, { tableId: null, zoneId: null });

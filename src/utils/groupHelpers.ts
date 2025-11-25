@@ -42,8 +42,15 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
   // ใช้ชื่อหัวหน้าเป็น groupName
   const groupName = formatGuestName(mainGuest) || `${rsvp.firstName} ${rsvp.lastName}`.trim();
 
+  // แยก main guest และ accompanying guests
+  const mainGuestIndex = relatedGuests.findIndex(g => g.id === mainGuest.id);
+  const sortedGuests = [
+    mainGuest,
+    ...relatedGuests.filter((_, idx) => idx !== mainGuestIndex)
+  ];
+
   // Map Guests เป็น GroupMembers
-  const members: GroupMember[] = relatedGuests.map(guest => {
+  const members: GroupMember[] = sortedGuests.map((guest, index) => {
     // หา relationToMain จาก accompanyingGuests หรือใช้ relationToCouple
     let relationToMain = guest.relationToCouple || '';
 
@@ -65,29 +72,30 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
       relationToMain = rsvp.relation || guest.relationToCouple || '';
     }
 
+    const fullName = formatGuestName(guest);
+    const isOwner = index === 0; // คนแรกคือ owner
+    const orderIndex = index; // 0 = ตัวเอง, 1,2,3,... = แขกคนที่ 1,2,3,...
+
     return {
       id: guest.id,
       firstName: guest.firstName,
       lastName: guest.lastName,
       nickname: guest.nickname || '',
+      fullName,
       relationToMain,
       checkedInAt: guest.checkedInAt || null,
+      isOwner,
+      orderIndex,
+      // เก็บ tableId/zoneId ไว้สำหรับ backward compatibility และใช้สร้าง seat object ภายหลัง
       tableId: guest.tableId || null,
       zoneId: guest.zoneId || null,
+      // seat จะถูกสร้างใน SeatingPage เมื่อมี access ถึง tables/zones
+      seat: null,
     };
   });
 
   // คำนวณ checkedInCount
   const checkedInCount = members.filter(m => m.checkedInAt !== null).length;
-
-  // ดึงข้อมูล tableId และ zoneId
-  // ถ้าทุกคนอยู่ในโต๊ะเดียวกัน → ใช้ tableId นั้น
-  // ถ้าไม่ → null
-  const uniqueTableIds = new Set(members.map(m => m.tableId).filter(Boolean));
-  const tableId = uniqueTableIds.size === 1 ? Array.from(uniqueTableIds)[0] as string : null;
-
-  const uniqueZoneIds = new Set(members.map(m => m.zoneId).filter(Boolean));
-  const zoneId = uniqueZoneIds.size === 1 ? Array.from(uniqueZoneIds)[0] as string : null;
 
   // ใช้ rsvp.uid หรือ rsvp.id เป็น groupId
   const groupId = rsvp.uid || rsvp.id || '';
@@ -98,8 +106,6 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
     members,
     checkedInCount,
     totalCount: members.length,
-    tableId,
-    zoneId,
     relation: rsvp.relation || mainGuest.relationToCouple || '',
     side: mainGuest.side || rsvp.side || 'groom',
   };

@@ -1,20 +1,21 @@
 /**
  * Guest Selection Sidebar Component
- * Sidebar สำหรับเลือกแขกเพื่อจัดที่นั่ง
+ * Sidebar สำหรับเลือกแขกเพื่อจัดที่นั่ง (รายคน)
  */
 
 import React, { useMemo } from 'react';
-import { Card, List, Button, Tag, Divider } from 'antd';
-import { Guest, GuestGroup } from '@/types';
-import { formatGuestName } from '@/utils/guestHelpers';
+import { Card, List, Button, Tag, Collapse, Avatar } from 'antd';
+import { Guest, GuestGroup, GroupMember } from '@/types';
+import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
+
+const { Panel } = Collapse;
 
 interface GuestSelectionSidebarProps {
   guests: Guest[];
   selectedGuestId: string | null;
-  selectedGroupId: string | null;
   isAssignMode: boolean;
   onGuestClick: (guestId: string) => void;
-  onGroupClick: (groupId: string) => void;
+  onMemberClick: (memberId: string) => void;
   onCancelAssign: () => void;
   guestGroups: GuestGroup[];
 }
@@ -22,21 +23,39 @@ interface GuestSelectionSidebarProps {
 const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
   guests,
   selectedGuestId,
-  selectedGroupId,
   isAssignMode,
   onGuestClick,
-  onGroupClick,
+  onMemberClick,
   onCancelAssign,
   guestGroups,
 }) => {
-  // แยกกลุ่มและรายบุคคล
+  // หาสมาชิกที่ยังไม่ได้จัดที่นั่ง (ไม่มี tableId)
   const unassignedGroups = useMemo(() => {
-    return guestGroups.filter(g => !g.tableId);
+    return guestGroups
+      .map(group => ({
+        ...group,
+        unassignedMembers: group.members.filter(m => !m.tableId && !m.seat),
+      }))
+      .filter(group => group.unassignedMembers.length > 0);
   }, [guestGroups]);
 
   const unassignedIndividualGuests = useMemo(() => {
     return guests.filter(g => !g.tableId && !g.groupId);
   }, [guests]);
+
+  // Helper function to get side label in Thai
+  const getSideLabel = (side: string): string => {
+    switch (side) {
+      case 'groom':
+        return 'เจ้าบ่าว';
+      case 'bride':
+        return 'เจ้าสาว';
+      case 'both':
+        return 'อื่น ๆ';
+      default:
+        return 'อื่น ๆ';
+    }
+  };
 
   return (
     <Card className="w-64 flex-shrink-0" title="แขกที่ยังไม่ได้จัดที่นั่ง">
@@ -53,53 +72,56 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
           </Button>
         )}
         <div className="text-sm text-gray-500 mb-2">
-          {isAssignMode ? 'เลือกโต๊ะที่ต้องการจัดที่นั่ง' : 'คลิกแขกหรือกลุ่มเพื่อจัดที่นั่ง'}
+          {isAssignMode ? 'เลือกโต๊ะที่ต้องการจัดที่นั่ง' : 'คลิกสมาชิกเพื่อจัดที่นั่ง'}
         </div>
       </div>
 
-      {/* กลุ่มแขก */}
+      {/* กลุ่มแขก (แสดงสมาชิกรายคน) */}
       {unassignedGroups.length > 0 && (
-        <>
-          <div className="text-xs font-semibold text-gray-600 mb-2">กลุ่ม</div>
-          <List
-            size="small"
-            dataSource={unassignedGroups}
-            renderItem={(group) => {
-              const isSelected = selectedGroupId === group.groupId;
-              
-              return (
-                <List.Item
-                  className={`cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
-                  onClick={() => onGroupClick(group.groupId)}
-                >
-                  <div className="w-full">
-                    <div className="font-medium">{group.groupName}</div>
-                    <div className="text-xs text-gray-500">
-                      {group.totalCount} คน
-                      {group.checkedInCount > 0 && (
-                        <Tag color="green" className="ml-1">
-                          เช็คอิน {group.checkedInCount}/{group.totalCount}
-                        </Tag>
-                      )}
-                    </div>
-                    <Button
-                      type="link"
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onGroupClick(group.groupId);
-                      }}
-                      className="p-0 mt-1"
+        <Collapse
+          accordion={false}
+          size="small"
+          className="mb-2"
+        >
+          {unassignedGroups.map((group) => (
+            <Panel
+              key={group.groupId}
+              header={
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{group.groupName}</span>
+                  <Tag color="blue" className="ml-2">
+                    {group.unassignedMembers.length} คน
+                  </Tag>
+                </div>
+              }
+            >
+              <List
+                size="small"
+                dataSource={group.unassignedMembers}
+                renderItem={(member: GroupMember) => {
+                  const isSelected = selectedGuestId === member.id;
+                  
+                  return (
+                    <List.Item
+                      className={`cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
+                      onClick={() => onMemberClick(member.id)}
                     >
-                      จัดทั้งกลุ่ม
-                    </Button>
-                  </div>
-                </List.Item>
-              );
-            }}
-          />
-          {unassignedIndividualGuests.length > 0 && <Divider className="my-2" />}
-        </>
+                      <List.Item.Meta
+                        avatar={
+                          <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
+                            {(member.fullName || member.firstName || '?').charAt(0).toUpperCase()}
+                          </Avatar>
+                        }
+                        title={renderMemberLabel(group, member)}
+                        description={`${getSideLabel(group.side)} • ${member.relationToMain || 'ไม่ระบุ'}`}
+                      />
+                    </List.Item>
+                  );
+                }}
+              />
+            </Panel>
+          ))}
+        </Collapse>
       )}
 
       {/* รายบุคคล */}
@@ -117,12 +139,15 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                   className={`cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
                   onClick={() => onGuestClick(guest.id)}
                 >
-                  <div className="w-full">
-                    <div className="font-medium">{formatGuestName(guest)}</div>
-                    {guest.tableId && (
-                      <Tag color="green">จัดที่นั่งแล้ว</Tag>
-                    )}
-                  </div>
+                  <List.Item.Meta
+                    avatar={
+                      <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
+                        {formatGuestName(guest).charAt(0).toUpperCase() || '?'}
+                      </Avatar>
+                    }
+                    title={formatGuestName(guest)}
+                    description={guest.relationToCouple || 'ไม่ระบุ'}
+                  />
                 </List.Item>
               );
             }}

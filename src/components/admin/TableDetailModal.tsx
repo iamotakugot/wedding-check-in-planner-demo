@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography, Divider } from 'antd';
-import { TableData, Guest } from '@/types';
-import { formatGuestName } from '@/utils/guestHelpers';
+import { TableData, Guest, GuestGroup } from '@/types';
+import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
 
 const { Text } = Typography;
 
@@ -10,6 +10,7 @@ interface TableDetailModalProps {
   onClose: () => void;
   table: TableData | null;
   guests: Guest[];
+  guestGroups?: GuestGroup[];
   onUnassignGuest: (guestId: string) => void;
 }
 
@@ -18,9 +19,23 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
   onClose,
   table,
   guests,
+  guestGroups = [],
   onUnassignGuest,
 }) => {
-  if (!table) return null;
+  // Helper function to get member label for a guest
+  const getGuestLabel = useMemo(() => {
+    return (guest: Guest): string => {
+      // Try to find member in groups
+      for (const group of guestGroups) {
+        const member = group.members.find(m => m.id === guest.id);
+        if (member) {
+          return renderMemberLabel(group, member);
+        }
+      }
+      // Fallback to guest name
+      return formatGuestName(guest);
+    };
+  }, [guestGroups]);
 
   // จัดกลุ่มแขกตาม groupId
   const guestsByGroup = useMemo(() => {
@@ -39,6 +54,8 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
 
     return { groups, ungrouped };
   }, [guests]);
+
+  if (!table) return null;
 
   let itemIndex = 0;
 
@@ -113,8 +130,17 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                           </Avatar>
                         </Badge>
                       }
-                      title={`${formatGuestName(guest)}${guest.nickname ? ` (${guest.nickname})` : ''}`}
-                      description={guest.relationToCouple || 'ไม่มีข้อมูล'}
+                      title={getGuestLabel(guest)}
+                      description={(() => {
+                        // Try to get relationToMain from member, fallback to relationToCouple
+                        for (const group of guestGroups) {
+                          const member = group.members.find(m => m.id === guest.id);
+                          if (member) {
+                            return member.relationToMain || guest.relationToCouple || 'ไม่มีข้อมูล';
+                          }
+                        }
+                        return guest.relationToCouple || 'ไม่มีข้อมูล';
+                      })()}
                     />
                   </List.Item>
                 );

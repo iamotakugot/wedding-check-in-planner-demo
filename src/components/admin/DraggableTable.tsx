@@ -11,7 +11,7 @@ interface DraggableTableProps {
   seatedGuests: Guest[];
   zoneColor: string;
   onTablePositionUpdate: (id: string, newX: number, newY: number) => void;
-  onOpenDetail: (table: TableData, guests: Guest[]) => void;
+  onOpenDetail: (table: TableData) => void;
   onTableClick?: (table: TableData) => void;
   isAssignMode?: boolean;
   disabled?: boolean;
@@ -207,7 +207,7 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
         size="small"
         type="link"
         icon={<ExpandAltOutlined />}
-        onClick={() => onOpenDetail(table, seatedGuests)}
+        onClick={() => onOpenDetail(table)}
         style={{ padding: '0 4px', height: '24px', fontSize: 10 }}
       >
         ดูแขก
