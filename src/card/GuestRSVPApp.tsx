@@ -1254,7 +1254,21 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
     // ตรวจสอบ in-app browser และแสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอิน
     useEffect(() => {
-        if (isLoggedIn || !isInAppBrowser()) {
+        const isInApp = isInAppBrowser();
+        const shouldShow = !isLoggedIn && isInApp;
+        
+        // Debug logging
+        if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
+            console.log('[CardBack Banner Debug]', {
+                isLoggedIn,
+                isInAppBrowser: isInApp,
+                showBrowserBanner: shouldShow,
+                userAgent: window.navigator.userAgent,
+                referrer: document.referrer
+            });
+        }
+        
+        if (isLoggedIn || !isInApp) {
             setShowBrowserBanner(false);
             return;
         }
@@ -2068,9 +2082,20 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             <div className="w-full max-w-md mx-auto h-full flex flex-col pt-4">
 
                 {/* แบนเนอร์ช่วยเหลือ in-app browser - แสดงเฉพาะเมื่อยังไม่ล็อกอิน */}
-                {!isLoggedIn && showBrowserBanner && (
-                    <InAppBrowserBanner onDismiss={() => setShowBrowserBanner(false)} />
-                )}
+                {(() => {
+                    const shouldRender = !isLoggedIn && showBrowserBanner;
+                    if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
+                        console.log('[CardBack Banner Render]', {
+                            shouldRender,
+                            isLoggedIn,
+                            showBrowserBanner,
+                            isInAppBrowser: isInAppBrowser()
+                        });
+                    }
+                    return shouldRender ? (
+                        <InAppBrowserBanner onDismiss={() => setShowBrowserBanner(false)} />
+                    ) : null;
+                })()}
 
                 <div className="absolute inset-0 opacity-10 pointer-events-none z-0" style={{
 

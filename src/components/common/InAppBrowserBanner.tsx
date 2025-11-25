@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Alert, Button, Space, App } from 'antd';
+import { Alert, Button, Space, message } from 'antd';
 import { CopyOutlined, GlobalOutlined, CheckOutlined } from '@ant-design/icons';
 import { isInAppBrowser, detectOS, getBrowserHelpText } from '@/utils/browserDetection';
 import { copyToClipboard, openInExternalBrowser } from '@/utils/browserHelpers';
@@ -15,7 +15,6 @@ interface InAppBrowserBannerProps {
 }
 
 export const InAppBrowserBanner: React.FC<InAppBrowserBannerProps> = ({ onDismiss }) => {
-  const { message } = App.useApp();
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   

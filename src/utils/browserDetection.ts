@@ -51,38 +51,45 @@ export function isInAppBrowser(): boolean {
   if (typeof window === 'undefined') return false;
   
   const userAgent = window.navigator.userAgent;
-  const ua = userAgent.toLowerCase();
   
-  // ตรวจสอบ Messenger
-  const isMessenger = 
-    ua.includes('fban') || 
-    ua.includes('fbav') || 
-    ua.includes('messenger') ||
-    userAgent.includes('FBAN') ||
-    userAgent.includes('FBAV');
-  
-  // ตรวจสอบ LINE
-  const isLine = 
-    ua.includes('line') || 
-    userAgent.includes('Line');
-  
-  // ตรวจสอบ Instagram
-  const isInstagram = 
-    ua.includes('instagram') || 
-    userAgent.includes('Instagram');
-  
-  // ตรวจสอบ X (Twitter)
-  const isTwitter = 
-    ua.includes('twitter') || 
-    ua.includes('tweetdeck') ||
-    userAgent.includes('Twitter');
-  
-  // ตรวจสอบ iOS standalone mode (PWA)
+  // ตรวจสอบ iOS standalone mode (PWA) - ถ้าเป็น PWA ไม่นับว่าเป็น in-app browser
   const navigatorWithStandalone = window.navigator as NavigatorWithStandalone;
   const isStandalone = navigatorWithStandalone.standalone === true;
-  
-  // ถ้าเป็น standalone mode (PWA) ไม่นับว่าเป็น in-app browser
   if (isStandalone) return false;
+  
+  // ตรวจสอบ Messenger - เพิ่ม patterns ที่ละเอียดขึ้น
+  const isMessenger = 
+    /fban/i.test(userAgent) ||
+    /fbav/i.test(userAgent) ||
+    /fb_iab/i.test(userAgent) ||
+    /fb4a/i.test(userAgent) ||
+    /fbmd/i.test(userAgent) ||
+    /fbsv/i.test(userAgent) ||
+    /messenger/i.test(userAgent) ||
+    /FBAN\/Messenger/i.test(userAgent) ||
+    /Messenger\/\d+/i.test(userAgent) ||
+    /FB_IAB.*Messenger/i.test(userAgent);
+  
+  // ตรวจสอบ LINE - เพิ่มการตรวจสอบ Line/ prefix
+  const isLine = 
+    /line/i.test(userAgent) ||
+    /Line\/\d+/i.test(userAgent) ||
+    /LineAndroid/i.test(userAgent) ||
+    /LineiOS/i.test(userAgent);
+  
+  // ตรวจสอบ Instagram - เพิ่มการตรวจสอบ FB_IAB.*Instagram
+  const isInstagram = 
+    /instagram/i.test(userAgent) ||
+    /FB_IAB.*Instagram/i.test(userAgent) ||
+    /FBAN\/Instagram/i.test(userAgent);
+  
+  // ตรวจสอบ X (Twitter) - เพิ่มการตรวจสอบ TwitterAndroid, TwitteriOS
+  const isTwitter = 
+    /twitter/i.test(userAgent) ||
+    /tweetdeck/i.test(userAgent) ||
+    /TwitterAndroid/i.test(userAgent) ||
+    /TwitteriOS/i.test(userAgent) ||
+    /Twitter/i.test(userAgent);
   
   // ตรวจสอบ window features (in-app browser มักไม่มี window features บางอย่าง)
   const hasWindowFeatures = 
@@ -91,10 +98,39 @@ export function isInAppBrowser(): boolean {
     window.outerWidth !== undefined ||
     window.outerHeight !== undefined;
   
+  // ตรวจสอบ document.referrer - in-app browser มักมี referrer เป็น empty หรือไม่ใช่ external domain
+  const referrer = typeof document !== 'undefined' ? document.referrer : '';
+  const hasEmptyReferrer = referrer === '';
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const referrerIsSameOrigin = referrer.startsWith(currentOrigin);
+  
   // ถ้าไม่มี window features และอยู่ในแอปแชต อาจเป็น in-app browser
   const suspiciousFeatures = !hasWindowFeatures && (isMessenger || isLine || isInstagram || isTwitter);
   
-  return isMessenger || isLine || isInstagram || isTwitter || suspiciousFeatures;
+  // ถ้ามี referrer ที่ว่างเปล่าหรือเป็น same origin และอยู่ในแอปแชต อาจเป็น in-app browser
+  const suspiciousReferrer = (hasEmptyReferrer || referrerIsSameOrigin) && (isMessenger || isLine || isInstagram || isTwitter);
+  
+  const result = isMessenger || isLine || isInstagram || isTwitter || suspiciousFeatures || suspiciousReferrer;
+  
+  // Debug logging (สามารถ disable ได้ด้วย flag)
+  if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
+    console.log('[Browser Detection]', {
+      userAgent,
+      isMessenger,
+      isLine,
+      isInstagram,
+      isTwitter,
+      hasWindowFeatures,
+      referrer,
+      hasEmptyReferrer,
+      referrerIsSameOrigin,
+      suspiciousFeatures,
+      suspiciousReferrer,
+      result
+    });
+  }
+  
+  return result;
 }
 
 /**
