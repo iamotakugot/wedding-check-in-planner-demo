@@ -28,7 +28,8 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 /**
  * Creates a debounced function that returns a promise
  */
-export function debounceAsync<T extends (...args: unknown[]) => Promise<unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function debounceAsync<T extends (...args: any[]) => Promise<any>>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {

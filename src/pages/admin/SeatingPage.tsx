@@ -19,7 +19,7 @@ import ZoneModal from '@/components/admin/ZoneModal';
 import TableModal from '@/components/admin/TableModal';
 import TableDetailModal from '@/components/admin/TableDetailModal';
 import GuestSelectionSidebar from '@/components/admin/GuestSelectionSidebar';
-import { debounce } from '@/utils/debounce';
+import { debounceAsync } from '@/utils/debounce';
 import { logger } from '@/utils/logger';
 
 // Tabs component used directly
@@ -108,14 +108,14 @@ const SeatingPage: React.FC = () => {
 
   // Table position update handler
   const handleTablePositionUpdate = useCallback(
-    debounce(async (id: string, newX: number, newY: number) => {
+    debounceAsync(async (id: string, newX: number, newY: number) => {
       try {
         await tableService.update(id, { x: newX, y: newY });
       } catch (error) {
         logger.error('Error updating table position:', error);
         message.error('เกิดข้อผิดพลาดในการอัปเดตตำแหน่งโต๊ะ');
       }
-    }, 300) as (id: string, newX: number, newY: number) => void,
+    }, 300),
     []
   );
 
