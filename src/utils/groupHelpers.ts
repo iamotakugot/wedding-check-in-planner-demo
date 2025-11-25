@@ -43,18 +43,94 @@ export function mapRSVPToGuestGroup(
     return null;
   }
 
-  // หาหัวหน้า (main guest) - guest ที่มี rsvpUid ตรงกับ rsvp.uid และเป็นคนแรก
-  const mainGuest = relatedGuests.find(g => g.rsvpUid === rsvp.uid) || relatedGuests[0];
+  // หาหัวหน้า (main guest) - ลำดับความสำคัญ:
+  // 1. หา guest ที่ชื่อตรงกับ RSVP (rsvp.firstName + rsvp.lastName) - นี่คือ main guest จริง
+  // 2. guest ที่มี rsvpUid ตรงกับ rsvp.uid และเป็น guestId ใน RSVP
+  // 3. guest ที่มี rsvpUid ตรงกับ rsvp.uid และมี groupId (เป็น owner)
+  // 4. guest ที่มี rsvpUid ตรงกับ rsvp.uid
+  // 5. guest แรกใน relatedGuests
+  let mainGuest: Guest | undefined;
+  
+  // วิธีที่ 1: หา guest ที่ชื่อตรงกับ RSVP (นี่คือ main guest จริง)
+  const rsvpFullName = `${rsvp.firstName} ${rsvp.lastName}`.trim().toLowerCase();
+  mainGuest = relatedGuests.find(g => {
+    const guestFullName = formatGuestName(g).toLowerCase();
+    // Match ทั้งชื่อเต็ม หรือ firstName + lastName
+    return guestFullName === rsvpFullName ||
+           (g.firstName.toLowerCase() === rsvp.firstName.toLowerCase() && 
+            g.lastName.toLowerCase() === rsvp.lastName.toLowerCase());
+  });
+  
+  // วิธีที่ 2: หาผ่าน rsvp.guestId (ถ้ายังหาไม่เจอ)
+  if (!mainGuest && rsvp.guestId) {
+    mainGuest = relatedGuests.find(g => g.id === rsvp.guestId);
+  }
+  
+  // วิธีที่ 3: หา guest ที่มี rsvpUid ตรงกันและมี groupId (น่าจะเป็น owner)
+  if (!mainGuest) {
+    mainGuest = relatedGuests.find(g => 
+      g.rsvpUid === rsvp.uid && g.groupId
+    );
+  }
+  
+  // วิธีที่ 4: หา guest ที่มี rsvpUid ตรงกัน
+  if (!mainGuest) {
+    mainGuest = relatedGuests.find(g => g.rsvpUid === rsvp.uid);
+  }
+  
+  // วิธีที่ 5: ใช้ guest แรก
+  if (!mainGuest) {
+    mainGuest = relatedGuests[0];
+  }
 
-  // ใช้ชื่อหัวหน้าเป็น groupName
-  const groupName = formatGuestName(mainGuest) || `${rsvp.firstName} ${rsvp.lastName}`.trim();
+  // ใช้ชื่อจาก RSVP เป็น groupName (ไม่ใช่ชื่อ mainGuest)
+  const groupName = `${rsvp.firstName} ${rsvp.lastName}`.trim() || formatGuestName(mainGuest);
 
   // แยก main guest และ accompanying guests
-  const mainGuestIndex = relatedGuests.findIndex(g => g.id === mainGuest.id);
-  const sortedGuests = [
-    mainGuest,
-    ...relatedGuests.filter((_, idx) => idx !== mainGuestIndex)
-  ];
+  // กรอง guest ที่ซ้ำกับ main guest ออก (ชื่อเดียวกันแต่ไม่ใช่ main guest เอง)
+  const mainGuestFirstName = mainGuest.firstName.trim().toLowerCase();
+  const mainGuestLastName = mainGuest.lastName.trim().toLowerCase();
+  const mainGuestFullName = `${mainGuestFirstName} ${mainGuestLastName}`.trim();
+  
+  const otherGuests = relatedGuests.filter(g => {
+    // ไม่ใช่ main guest เอง
+    if (g.id === mainGuest.id) return false;
+    
+    // เปรียบเทียบ firstName + lastName โดยตรง (เข้มงวด)
+    const guestFirstName = g.firstName.trim().toLowerCase();
+    const guestLastName = g.lastName.trim().toLowerCase();
+    const guestFullName = `${guestFirstName} ${guestLastName}`.trim();
+    
+    // กรอง guest ที่ชื่อซ้ำกับ main guest (firstName + lastName ตรงกัน)
+    if (guestFullName === mainGuestFullName && mainGuestFullName !== '') {
+      return false; // กรองออก
+    }
+    
+    // กรอง guest ที่ชื่อตรงกับ RSVP (เพราะ main guest ควรเป็นคนเดียว)
+    if (guestFullName === rsvpFullName && rsvpFullName !== '') {
+      return false; // กรองออก
+    }
+    
+    // กรอง guest ที่ firstName ตรงกับ main guest และ lastName ตรงกัน (กรณี lastName ว่าง)
+    if (guestFirstName === mainGuestFirstName && 
+        guestLastName === mainGuestLastName &&
+        mainGuestFirstName !== '') {
+      return false; // กรองออก
+    }
+    
+    return true;
+  });
+
+  let sortedGuests = [mainGuest, ...otherGuests];
+
+  // ตรวจสอบว่า main guest อยู่ในตำแหน่งแรกจริงๆ
+  // ถ้าไม่ใช่ ให้สลับตำแหน่ง
+  if (sortedGuests[0]?.id !== mainGuest.id) {
+    const mainIndex = sortedGuests.findIndex(g => g.id === mainGuest.id);
+    if (mainIndex > 0) {
+      [sortedGuests[0], sortedGuests[mainIndex]] = [sortedGuests[mainIndex], sortedGuests[0]];
+    }
+  }
 
   // Map Guests เป็น GroupMembers
   const members: GroupMember[] = sortedGuests.map((guest, index) => {

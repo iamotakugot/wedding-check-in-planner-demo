@@ -80,6 +80,8 @@ const RSVPsPage: React.FC = () => {
     {
       title: 'ชื่อ-นามสกุล',
       key: 'name',
+      width: 200,
+      fixed: 'left' as const,
       render: (_, record) => (
         <Space>
           <Avatar
@@ -90,12 +92,14 @@ const RSVPsPage: React.FC = () => {
               backgroundColor: record.isComing === 'yes' ? '#52c41a' : '#8c8c8c' 
             }}
           />
-          <div>
-            <div className="font-medium">
+          <div className="min-w-0">
+            <div className="font-medium text-sm md:text-base truncate" title={`${record.firstName} ${record.lastName}`}>
               {record.firstName} {record.lastName}
             </div>
             {record.nickname && (
-              <span className="text-xs text-gray-500">({record.nickname})</span>
+              <span className="text-xs text-gray-500 truncate block" title={record.nickname}>
+                ({record.nickname})
+              </span>
             )}
           </div>
         </Space>
@@ -104,6 +108,7 @@ const RSVPsPage: React.FC = () => {
     {
       title: 'ฝ่าย',
       dataIndex: 'side',
+      width: 100,
       render: (side: string) => {
         switch (side) {
           case 'groom':
@@ -118,10 +123,17 @@ const RSVPsPage: React.FC = () => {
     {
       title: 'ความสัมพันธ์',
       dataIndex: 'relation',
+      width: 150,
+      render: (relation: string) => (
+        <span className="truncate block" title={relation}>
+          {relation}
+        </span>
+      ),
     },
     {
       title: 'สถานะ',
       dataIndex: 'isComing',
+      width: 120,
       render: (isComing: string) => (
         <Tag color={isComing === 'yes' ? 'green' : 'red'}>
           {isComing === 'yes' ? 'ยินดีร่วมงาน' : 'ไม่สะดวก'}
@@ -131,38 +143,72 @@ const RSVPsPage: React.FC = () => {
     {
       title: 'จำนวนคน',
       key: 'attendees',
+      width: 100,
+      align: 'center' as const,
       render: (_, record) => {
         if (record.isComing !== 'yes') return '-';
         const total = 1 + (record.accompanyingGuestsCount || 0);
-        return total;
+        return <span className="font-medium">{total}</span>;
+      },
+    },
+    {
+      title: 'เวลาแก้ไข',
+      key: 'updatedAt',
+      width: 180,
+      render: (_, record) => {
+        if (!record.updatedAt) return '-';
+        try {
+          const date = new Date(record.updatedAt);
+          const formattedDate = date.toLocaleDateString('th-TH', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          });
+          const formattedTime = date.toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+          return (
+            <span className="text-xs text-gray-600" title={date.toLocaleString('th-TH')}>
+              {formattedDate} {formattedTime}
+            </span>
+          );
+        } catch (error) {
+          return <span className="text-xs text-gray-400">-</span>;
+        }
       },
     },
     {
       title: 'จัดการ',
       key: 'actions',
+      width: 120,
+      fixed: 'right' as const,
       render: (_, record) => (
         <Button
           type="link"
           icon={<EyeOutlined />}
+          size="small"
           onClick={() => {
             setSelectedRSVP(record);
             setModalVisible(true);
           }}
         >
-          ดูรายละเอียด
+          <span className="hidden md:inline">ดูรายละเอียด</span>
+          <span className="md:hidden">ดู</span>
         </Button>
       ),
     },
   ];
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">รายการ RSVP</h1>
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800">ตอบรับ</h1>
         <CustomSearch
-          placeholder="ค้นหา RSVP"
+          placeholder="ค้นหาชื่อ-นามสกุล"
           allowClear
-          style={{ width: 300 }}
+          style={{ width: '100%', maxWidth: 300 }}
           onSearch={setSearchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -174,6 +220,8 @@ const RSVPsPage: React.FC = () => {
         rowKey="id"
         loading={isLoading}
         pagination={{ pageSize: 20 }}
+        scroll={{ x: 'max-content' }}
+        className="shadow-sm"
       />
 
       <Modal
@@ -184,7 +232,8 @@ const RSVPsPage: React.FC = () => {
           setSelectedRSVP(null);
         }}
         footer={null}
-        width={600}
+        width="90%"
+        style={{ maxWidth: 600 }}
       >
         {selectedRSVP && (
           <Descriptions column={1} bordered>

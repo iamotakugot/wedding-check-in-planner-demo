@@ -42,7 +42,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     {
       key: 'dashboard',
       icon: <DashboardOutlined />,
-      label: 'Dashboard',
+      label: 'หน้าหลัก',
     },
     {
       key: 'guests',
@@ -57,7 +57,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     {
       key: 'rsvps',
       icon: <FileTextOutlined />,
-      label: 'RSVP',
+      label: 'ตอบรับ',
     },
     {
       key: 'settings',
@@ -106,24 +106,25 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         />
       </Sider>
       <Layout>
-        <Header className="bg-white p-0 flex justify-between items-center px-6 shadow-sm z-0">
+        <Header className="bg-white p-0 flex justify-between items-center px-3 md:px-6 shadow-sm z-0">
           <div>
             <Button
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
+              className="text-base"
             />
           </div>
           <div
-            className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+            className="flex items-center gap-2 md:gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
             onClick={onLogout}
           >
-            <div className="text-right leading-tight hidden sm:block">
+            <div className="text-right leading-tight hidden md:block">
               <div className="font-bold text-gray-700 text-sm">Admin</div>
               <div className="text-xs text-gray-400">ออกจากระบบ</div>
             </div>
             <Avatar style={{ backgroundColor: '#fde3cf', color: '#f56a00' }} icon={<UserOutlined />} />
-            <LogoutOutlined style={{ fontSize: 16 }} className="text-gray-400" />
+            <LogoutOutlined style={{ fontSize: 16 }} className="text-gray-400 hidden sm:block" />
           </div>
         </Header>
         <Content className="m-0 bg-gray-50 overflow-auto" style={{ minHeight: 'calc(100vh - 64px - 48px)' }}>

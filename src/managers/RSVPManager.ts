@@ -40,32 +40,73 @@ export class RSVPManager {
       return;
     }
 
+    // หา guests ทั้งหมดที่มี rsvpUid ตรงกัน (เพื่อใช้ groupId เดียวกัน)
+    const allGuests = await this.guestService.getAll();
+    const existingGuestsWithRsvpUid = allGuests.filter(g => 
+      g.rsvpUid === rsvp.uid || g.rsvpId === rsvp.uid
+    );
+
     // หา main guest ที่มีอยู่แล้ว
     let mainGuest: Guest | null = null;
     if (rsvp.guestId) {
-      mainGuest = await this.guestService.getById(rsvp.guestId);
+      mainGuest = existingGuestsWithRsvpUid.find(g => g.id === rsvp.guestId) || null;
     }
     if (!mainGuest) {
-      mainGuest = await this.guestService.getByRsvpUid(rsvp.uid);
+      // หา main guest จาก guest ที่มี rsvpUid ตรงกัน (เลือก guest ที่มี groupId หรือ guest แรก)
+      mainGuest = existingGuestsWithRsvpUid.find(g => g.groupId) || existingGuestsWithRsvpUid[0] || null;
+    }
+
+    // ถ้ามี guests ที่มี rsvpUid ตรงกันอยู่แล้ว → ใช้ groupId เดียวกัน
+    if (existingGuestsWithRsvpUid.length > 0) {
+      // หา groupId ที่มีอยู่แล้ว (จาก guest ที่มี groupId)
+      const existingGroupId = existingGuestsWithRsvpUid.find(g => g.groupId)?.groupId;
+      
+      // ถ้ามี groupId อยู่แล้ว → อัปเดต guests ทั้งหมดให้ใช้ groupId เดียวกัน
+      if (existingGroupId) {
+        const groupName = existingGuestsWithRsvpUid.find(g => g.groupName)?.groupName || `${rsvp.firstName} ${rsvp.lastName}`;
+        
+        // อัปเดต guests ที่ยังไม่มี groupId หรือ groupId ต่างกัน
+        for (const guest of existingGuestsWithRsvpUid) {
+          if (!guest.groupId || guest.groupId !== existingGroupId) {
+            await this.guestService.update(guest.id, {
+              groupId: existingGroupId,
+              groupName: groupName,
+            });
+          }
+        }
+        
+        // ใช้ mainGuest ที่อัปเดตแล้ว
+        if (mainGuest) {
+          mainGuest = await this.guestService.getById(mainGuest.id);
+        }
+      }
     }
 
     // ถ้ามี main guest แล้ว → ตรวจสอบว่า accompanying guests ถูกสร้างครบหรือไม่
     if (mainGuest) {
       const expectedAccompanyingCount = rsvp.accompanyingGuests?.length || 0;
       if (expectedAccompanyingCount > 0) {
-        // หา accompanying guests ที่มีอยู่
+        // หา accompanying guests ที่มีอยู่ (ใช้ groupId จาก mainGuest)
         const groupId = mainGuest.groupId;
-        const allGuests = await this.guestService.getAll();
         const existingAccompanyingGuests = allGuests.filter(g => 
           g.id !== mainGuest!.id &&
           g.groupId === groupId &&
-          g.rsvpUid === rsvp.uid
+          (g.rsvpUid === rsvp.uid || g.rsvpId === rsvp.uid)
         );
 
         // ถ้ายังไม่ครบ → สร้างเพิ่ม
         if (existingAccompanyingGuests.length < expectedAccompanyingCount) {
+          // ใช้ groupId จาก mainGuest (ไม่สร้างใหม่)
           const groupId = mainGuest.groupId || `GROUP_${generateId()}`;
           const groupName = mainGuest.groupName || `${rsvp.firstName} ${rsvp.lastName}`;
+          
+          // ถ้า mainGuest ยังไม่มี groupId → สร้างและอัปเดต
+          if (!mainGuest.groupId) {
+            await this.guestService.update(mainGuest.id, {
+              groupId: groupId,
+              groupName: groupName,
+            });
+          }
           
           // สร้าง accompanying guests ที่ยังไม่มี
           const existingNames = new Set(existingAccompanyingGuests.map(g => g.firstName));

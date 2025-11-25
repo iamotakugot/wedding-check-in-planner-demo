@@ -480,7 +480,60 @@ const GuestsPage: React.FC = () => {
     // Add individual guests (not in groups or groups with 1 member)
     guests.forEach(guest => {
       if (!processedGuestIds.has(guest.id)) {
-        const group = guestGroups.find(g => g.groupId === guest.groupId);
+        // ตรวจสอบว่า guest อยู่ใน group หรือไม่ (หลายวิธี)
+        let group = null;
+        
+        // วิธีที่ 1: หาจาก groupId
+        if (guest.groupId) {
+          group = guestGroups.find(g => g.groupId === guest.groupId);
+        }
+        
+        // วิธีที่ 2: หาจาก rsvpUid (เพราะ groupId อาจเป็น rsvp.uid)
+        if (!group && guest.rsvpUid) {
+          group = guestGroups.find(g => g.groupId === guest.rsvpUid);
+        }
+        
+        // วิธีที่ 3: หาจาก rsvpId
+        if (!group && guest.rsvpId) {
+          group = guestGroups.find(g => g.groupId === guest.rsvpId);
+        }
+        
+        // วิธีที่ 4: หาจาก guest id ที่อยู่ใน members
+        if (!group) {
+          group = guestGroups.find(g => g.members.some(m => m.id === guest.id));
+        }
+        
+        // ถ้ามี group → ตรวจสอบว่า guest อยู่ใน members หรือไม่
+        if (group) {
+          const isInGroupMembers = group.members.some(m => m.id === guest.id);
+          // ถ้า guest มี groupId/rsvpUid แต่ไม่อยู่ใน members → เป็น guest ที่ซ้ำ ไม่ควรแสดง
+          if (!isInGroupMembers) {
+            processedGuestIds.add(guest.id); // Mark as processed แต่ไม่เพิ่มเข้า data
+            return; // ข้าม guest นี้
+          }
+        }
+        
+        // ตรวจสอบว่า guest มีชื่อซ้ำกับ main guest ใน group อื่นหรือไม่
+        const guestFullName = `${guest.firstName} ${guest.lastName}`.trim().toLowerCase();
+        const isDuplicateMainGuest = guestGroups.some(g => {
+          if (g.members.length === 0) return false;
+          const mainGuest = g.members[0]; // Main guest is always first
+          const mainGuestFullName = `${mainGuest.firstName} ${mainGuest.lastName}`.trim().toLowerCase();
+          // ถ้าชื่อซ้ำกับ main guest ใน group อื่น และ guest นี้ไม่อยู่ใน group นั้น
+          if (guestFullName === mainGuestFullName && mainGuestFullName !== '') {
+            const isInThisGroup = g.members.some(m => m.id === guest.id);
+            return !isInThisGroup; // ถ้าไม่อยู่ใน group นี้ → เป็น duplicate
+          }
+          return false;
+        });
+        
+        // ถ้าเป็น duplicate main guest → ไม่ควรแสดง
+        if (isDuplicateMainGuest) {
+          processedGuestIds.add(guest.id);
+          return; // ข้าม guest นี้
+        }
+        
+        // เพิ่มเฉพาะ guest ที่ไม่มี group หรือ group มี 1 member หรือ guest อยู่ใน members
         if (!group || group.totalCount <= 1) {
           data.push(guest);
           processedGuestIds.add(guest.id);
@@ -581,16 +634,21 @@ const GuestsPage: React.FC = () => {
     {
       title: 'ชื่อ-นามสกุล',
       key: 'name',
+      width: 200,
+      fixed: 'left' as const,
       render: (_, guest) => {
         const group = guestGroups.find(g => g.groupId === guest.groupId);
         const member = group?.members.find(m => m.id === guest.id);
         
         if (group && member) {
+          const memberLabel = renderMemberLabel(group, member);
           return (
-            <div>
-              <div>{renderMemberLabel(group, member)}</div>
+            <div className="min-w-0">
+              <div className="truncate" title={memberLabel}>
+                {memberLabel}
+              </div>
               {group.totalCount > 1 && (
-                <Text type="secondary" className="text-xs">
+                <Text type="secondary" className="text-xs truncate block" title={group.groupName}>
                   {group.groupName} ({group.totalCount} คน)
                 </Text>
               )}
@@ -598,12 +656,18 @@ const GuestsPage: React.FC = () => {
           );
         }
         
-        return <div>{formatGuestName(guest)}</div>;
+        const guestName = formatGuestName(guest);
+        return (
+          <div className="min-w-0 truncate" title={guestName}>
+            {guestName}
+          </div>
+        );
       },
     },
     {
       title: 'ฝ่าย',
       dataIndex: 'side',
+      width: 100,
       render: (side: Side) => {
         switch (side) {
           case 'groom': return <Tag color="blue">เจ้าบ่าว</Tag>;
@@ -616,6 +680,7 @@ const GuestsPage: React.FC = () => {
     {
       title: 'สถานะตอบรับ',
       key: 'rsvpStatus',
+      width: 120,
       render: (_, guest) => {
         return <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />;
       },
@@ -623,29 +688,67 @@ const GuestsPage: React.FC = () => {
     {
       title: 'โต๊ะ',
       key: 'table',
+      width: 150,
       render: (_, guest) => {
         const table = tables.find(t => t.id === guest.tableId);
         const zone = zones.find(z => z.id === guest.zoneId);
         if (table && zone) {
-          return `${zone.zoneName} - ${table.tableName}`;
+          const tableInfo = `${zone.zoneName} - ${table.tableName}`;
+          return (
+            <span className="truncate block" title={tableInfo}>
+              {tableInfo}
+            </span>
+          );
         }
         return '-';
       },
     },
     {
       title: 'เช็คอิน',
-      dataIndex: 'checkedInAt',
-      render: (checkedInAt: string | null) => {
-        return checkedInAt ? (
-          <Tag color="green" icon={<CheckCircleOutlined />}>เช็คอินแล้ว</Tag>
-        ) : (
-          <Tag>ยังไม่เช็คอิน</Tag>
-        );
+      key: 'checkedIn',
+      width: 180,
+      render: (_, guest) => {
+        const checkedInAt = guest.checkedInAt;
+        if (!checkedInAt) {
+          return <Tag>ยังไม่เช็คอิน</Tag>;
+        }
+        
+        try {
+          const date = new Date(checkedInAt);
+          const formattedTime = date.toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+          const formattedDate = date.toLocaleDateString('th-TH', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          });
+          return (
+            <div>
+              <Tag color="green" icon={<CheckCircleOutlined />} className="mb-1">
+                เช็คอินแล้ว
+              </Tag>
+              <div className="text-xs text-gray-600" title={date.toLocaleString('th-TH')}>
+                {formattedDate} {formattedTime}
+              </div>
+            </div>
+          );
+        } catch (error) {
+          return (
+            <Tag color="green" icon={<CheckCircleOutlined />}>
+              เช็คอินแล้ว
+            </Tag>
+          );
+        }
       },
     },
     {
       title: 'จัดการ',
       key: 'actions',
+      width: 200,
+      fixed: 'right' as const,
       render: (_, record) => {
         const guest = record as Guest;
         const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
@@ -722,11 +825,12 @@ const GuestsPage: React.FC = () => {
   ];
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">จัดการแขก</h1>
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800">จัดการแขก</h1>
         <Button
           type="primary"
+          size="large"
           onClick={() => {
             setEditingGuest(null);
             setIsDrawerVisible(true);
@@ -746,33 +850,38 @@ const GuestsPage: React.FC = () => {
             children: (
               <>
                 <div className="mb-4">
-                  <Space>
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <CustomSearch
                       placeholder="ค้นหาแขก"
                       allowClear
-                      style={{ width: 300 }}
+                      style={{ width: '100%', maxWidth: 300 }}
                       onSearch={setSearchText}
                       onChange={(e) => setSearchText(e.target.value)}
                     />
-                    <Button
-                      onClick={() => setSelectedSide('all')}
-                      type={selectedSide === 'all' ? 'primary' : 'default'}
-                    >
-                      ทั้งหมด
-                    </Button>
-                    <Button
-                      onClick={() => setSelectedSide('groom')}
-                      type={selectedSide === 'groom' ? 'primary' : 'default'}
-                    >
-                      เจ้าบ่าว
-                    </Button>
-                    <Button
-                      onClick={() => setSelectedSide('bride')}
-                      type={selectedSide === 'bride' ? 'primary' : 'default'}
-                    >
-                      เจ้าสาว
-                    </Button>
-                  </Space>
+                    <Space.Compact className="w-full sm:w-auto">
+                      <Button
+                        onClick={() => setSelectedSide('all')}
+                        type={selectedSide === 'all' ? 'primary' : 'default'}
+                        size="middle"
+                      >
+                        ทั้งหมด
+                      </Button>
+                      <Button
+                        onClick={() => setSelectedSide('groom')}
+                        type={selectedSide === 'groom' ? 'primary' : 'default'}
+                        size="middle"
+                      >
+                        เจ้าบ่าว
+                      </Button>
+                      <Button
+                        onClick={() => setSelectedSide('bride')}
+                        type={selectedSide === 'bride' ? 'primary' : 'default'}
+                        size="middle"
+                      >
+                        เจ้าสาว
+                      </Button>
+                    </Space.Compact>
+                  </div>
                 </div>
                 
                 <Table<Guest & { children?: Guest[] }>
@@ -781,10 +890,14 @@ const GuestsPage: React.FC = () => {
                   rowKey="id"
                   loading={isLoading}
                   pagination={{ pageSize: 20 }}
+                  scroll={{ x: 'max-content' }}
+                  className="shadow-sm"
                   expandable={{
                     defaultExpandAllRows: false,
                     indentSize: 20,
                     showExpandColumn: true,
+                    expandRowByClick: false,
+                    childrenColumnName: 'children',
                   }}
                 />
               </>

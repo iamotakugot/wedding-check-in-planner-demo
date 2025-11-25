@@ -278,8 +278,8 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
 
   return (
     <Card 
-      className="w-64 flex-shrink-0" 
-      title="แขกที่ยังไม่ได้จัดที่นั่ง"
+      className="w-full md:w-64 flex-shrink-0" 
+      title={<span className="text-sm md:text-base">แขกที่ยังไม่ได้จัดที่นั่ง</span>}
       styles={{ body: { padding: '12px' } }}
     >
       <div className="mb-3">
@@ -396,87 +396,108 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         <Collapse
           accordion={false}
           size="small"
+          ghost={false}
           className="mb-2"
+          style={{ 
+            backgroundColor: '#fff',
+            border: '1px solid #f0f0f0',
+            borderRadius: '6px'
+          }}
           items={filteredGroups.map((group) => ({
             key: group.groupId,
             label: (
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{group.groupName}</span>
+              <div className="flex items-center justify-between w-full pr-2">
+                <span className="font-medium text-sm md:text-base">{group.groupName}</span>
                 <Tag color="blue" className="ml-2">
                   {group.unassignedMembers.length} คน
                 </Tag>
               </div>
             ),
+            style: {
+              borderBottom: '1px solid #f0f0f0',
+            },
             children: (
-              <List
-                size="small"
-                dataSource={group.unassignedMembers}
-                renderItem={(member: GroupMember) => {
-                  const isSelected = selectedGuestId === member.id;
-                  const isChecked = selectedGuestIds.includes(member.id);
-                  
-                  return (
-                    <List.Item
-                      className={`cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
-                      onClick={(e) => {
-                        // Don't trigger if clicking checkbox
-                        if ((e.target as HTMLElement).closest('.ant-checkbox')) {
-                          return;
-                        }
-                        onMemberClick(member.id);
-                      }}
-                      actions={[
-                        <Checkbox
-                          key="checkbox"
-                          checked={isChecked}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            if (e.target.checked) {
-                              onGuestIdsChange([...selectedGuestIds, member.id]);
-                            } else {
-                              onGuestIdsChange(selectedGuestIds.filter(id => id !== member.id));
-                            }
-                          }}
+              <div style={{ padding: '8px 0' }}>
+                <List
+                  size="small"
+                  dataSource={group.unassignedMembers}
+                  renderItem={(member: GroupMember) => {
+                    const isSelected = selectedGuestId === member.id;
+                    const isChecked = selectedGuestIds.includes(member.id);
+                    
+                    return (
+                      <List.Item
+                        className={`cursor-pointer hover:bg-blue-50 transition-colors ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
+                        style={{
+                          padding: '8px 12px',
+                          marginBottom: '4px',
+                          borderRadius: '4px',
+                          border: isSelected ? '1px solid #91caff' : '1px solid transparent',
+                        }}
+                        onClick={(e) => {
+                          // Don't trigger if clicking checkbox
+                          if ((e.target as HTMLElement).closest('.ant-checkbox')) {
+                            return;
+                          }
+                          onMemberClick(member.id);
+                        }}
+                        actions={[
+                          <Checkbox
+                            key="checkbox"
+                            checked={isChecked}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (e.target.checked) {
+                                onGuestIdsChange([...selectedGuestIds, member.id]);
+                              } else {
+                                onGuestIdsChange(selectedGuestIds.filter(id => id !== member.id));
+                              }
+                            }}
+                          />
+                        ]}
+                      >
+                        <List.Item.Meta
+                          avatar={
+                            <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
+                              {(member.fullName || member.firstName || '?').charAt(0).toUpperCase()}
+                            </Avatar>
+                          }
+                          title={
+                            <span 
+                              style={{ 
+                                display: 'block',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: '13px',
+                                fontWeight: 500
+                              }}
+                              title={renderMemberLabel(group, member)}
+                            >
+                              {renderMemberLabel(group, member)}
+                            </span>
+                          }
+                          description={
+                            <span 
+                              style={{ 
+                                display: 'block',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: '12px',
+                                color: '#666'
+                              }}
+                            >
+                              {`${getSideLabel(group.side)} • ${member.relationToMain || 'ไม่ระบุ'}`}
+                            </span>
+                          }
                         />
-                      ]}
-                    >
-                      <List.Item.Meta
-                        avatar={
-                          <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
-                            {(member.fullName || member.firstName || '?').charAt(0).toUpperCase()}
-                          </Avatar>
-                        }
-                        title={
-                          <span 
-                            style={{ 
-                              display: 'block',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}
-                            title={renderMemberLabel(group, member)}
-                          >
-                            {renderMemberLabel(group, member)}
-                          </span>
-                        }
-                        description={
-                          <span 
-                            style={{ 
-                              display: 'block',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {`${getSideLabel(group.side)} • ${member.relationToMain || 'ไม่ระบุ'}`}
-                          </span>
-                        }
-                      />
-                    </List.Item>
-                  );
-                }}
-              />
+                      </List.Item>
+                    );
+                  }}
+                />
+              </div>
             ),
           }))}
         />

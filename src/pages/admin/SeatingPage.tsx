@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Card, Button, Space, Tabs, App, Modal } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Card, Button, Space, Tabs, App, Modal, Drawer } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, MenuOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
@@ -60,6 +60,7 @@ const SeatingPage: React.FC = () => {
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [isAssignMode, setIsAssignMode] = useState(false);
+  const [sidebarDrawerVisible, setSidebarDrawerVisible] = useState(false);
   const seatingManager = new SeatingManager();
 
   const currentZone = zones.find((z) => z && z.id === selectedZoneId && z.zoneName);
@@ -285,11 +286,38 @@ const SeatingPage: React.FC = () => {
           const zone = zones.find(z => z && z.id === id && z.zoneId);
           if (zone) {
             const tablesToDelete = tables.filter(t => t && t.zoneId === zone.zoneId);
+            
+            // Clear tableId/zoneId ของ guests ที่ถูก assign ไปยังโต๊ะ/โซนที่ถูกลบ
+            const { GuestService } = await import('@/services/firebase/GuestService');
+            const guestService = GuestService.getInstance();
+            
             for (const table of tablesToDelete) {
+              // หา guests ที่ถูก assign ไปยังโต๊ะนี้
+              const guestsInTable = guests.filter(g => g.tableId === table.tableId && g.zoneId === zone.zoneId);
+              
+              // Clear tableId/zoneId ของ guests เหล่านี้
+              for (const guest of guestsInTable) {
+                await guestService.update(guest.id, {
+                  tableId: null,
+                  zoneId: null,
+                });
+              }
+              
               await tableService.delete(table.id);
             }
+            
             await zoneService.delete(id);
             message.success('ลบโซนเรียบร้อย');
+            
+            // Force refresh selectedZoneId if deleted zone was selected
+            if (selectedZoneId === id) {
+              const remainingZones = zones.filter(z => z.id !== id);
+              if (remainingZones.length > 0) {
+                setSelectedZoneId(remainingZones[0].id);
+              } else {
+                setSelectedZoneId('');
+              }
+            }
           }
         } catch (error) {
           logger.error('Error deleting zone:', error);
@@ -306,10 +334,17 @@ const SeatingPage: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">จัดการที่นั่ง</h1>
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800">จัดการที่นั่ง</h1>
         <Space>
+          <Button
+            icon={<MenuOutlined />}
+            onClick={() => setSidebarDrawerVisible(true)}
+            className="md:hidden"
+          >
+            เปิดรายชื่อแขก
+          </Button>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -359,24 +394,54 @@ const SeatingPage: React.FC = () => {
             />
           </div>
 
-          <div className="flex gap-4">
-            {/* Guest Sidebar */}
-            <GuestSelectionSidebar
-              guests={guests}
-              selectedGuestId={selectedGuestId}
-              selectedGuestIds={selectedGuestIds}
-              isAssignMode={isAssignMode}
-              onGuestClick={handleGuestClick}
-              onMemberClick={handleMemberClick}
-              onCancelAssign={handleCancelAssign}
-              onGuestIdsChange={setSelectedGuestIds}
-              guestGroups={guestGroups}
-            />
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Guest Sidebar - Hidden on mobile, shown in drawer */}
+            <div className="hidden md:block">
+              <GuestSelectionSidebar
+                guests={guests}
+                selectedGuestId={selectedGuestId}
+                selectedGuestIds={selectedGuestIds}
+                isAssignMode={isAssignMode}
+                onGuestClick={handleGuestClick}
+                onMemberClick={handleMemberClick}
+                onCancelAssign={handleCancelAssign}
+                onGuestIdsChange={setSelectedGuestIds}
+                guestGroups={guestGroups}
+              />
+            </div>
+            
+            {/* Drawer for mobile */}
+            <Drawer
+              title="แขกที่ยังไม่ได้จัดที่นั่ง"
+              placement="left"
+              onClose={() => setSidebarDrawerVisible(false)}
+              open={sidebarDrawerVisible}
+              width="90%"
+              style={{ maxWidth: 400 }}
+            >
+              <GuestSelectionSidebar
+                guests={guests}
+                selectedGuestId={selectedGuestId}
+                selectedGuestIds={selectedGuestIds}
+                isAssignMode={isAssignMode}
+                onGuestClick={(id) => {
+                  handleGuestClick(id);
+                  setSidebarDrawerVisible(false);
+                }}
+                onMemberClick={(id) => {
+                  handleMemberClick(id);
+                  setSidebarDrawerVisible(false);
+                }}
+                onCancelAssign={handleCancelAssign}
+                onGuestIdsChange={setSelectedGuestIds}
+                guestGroups={guestGroups}
+              />
+            </Drawer>
 
           {/* Canvas Area */}
-          <Card className="flex-1">
+          <Card className="flex-1 shadow-sm">
             <div className="mb-4">
-              <Space>
+              <Space wrap>
                 <Button
                   icon={<EditOutlined />}
                   onClick={() => {
@@ -401,12 +466,14 @@ const SeatingPage: React.FC = () => {
               style={{
                 position: 'relative',
                 width: '100%',
-                height: '600px',
+                height: '400px',
+                minHeight: '400px',
                 border: '1px solid #e0e0e0',
                 borderRadius: '8px',
                 backgroundColor: '#fafafa',
-                overflow: 'hidden',
+                overflow: 'auto',
               }}
+              className="md:h-[600px]"
             >
               {tablesInCurrentZone
                 .filter(table => table && table.id && table.tableId)
