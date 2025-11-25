@@ -11,6 +11,7 @@ import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
 import { useRSVPs } from '@/hooks/useRSVPs';
+import { useGuestGroups } from '@/hooks/useGuestGroups';
 import { Guest, Side, RSVPData } from '@/types';
 import { GuestService } from '@/services/firebase/GuestService';
 import { CheckInManager } from '@/managers/CheckInManager';
@@ -18,6 +19,7 @@ import { calculateCheckedInCount } from '@/utils/rsvpHelpers';
 import GuestFormDrawer from '@/components/admin/GuestFormDrawer';
 import GroupCheckInModal from '@/components/admin/GroupCheckInModal';
 import RSVPStatusTag from '@/components/admin/RSVPStatusTag';
+import GroupMemberTooltip from '@/components/admin/GroupMemberTooltip';
 import { formatGuestName, getGuestRSVPStatus } from '@/utils/guestHelpers';
 import { logger } from '@/utils/logger';
 
@@ -29,6 +31,7 @@ const GuestsPage: React.FC = () => {
   const { zones } = useZones();
   const { tables } = useTables();
   const { rsvps } = useRSVPs(); // Get RSVP data for status integration
+  const { guestGroups } = useGuestGroups(); // Get GuestGroup data
   const guestService = GuestService.getInstance();
   const checkInManager = new CheckInManager();
   
@@ -56,18 +59,36 @@ const GuestsPage: React.FC = () => {
   // Check-in stats
   const totalCheckedIn = useMemo(() => calculateCheckedInCount(guests), [guests]);
 
-  // Group guests by groupId
+  // Group guests by groupId (ใช้ guestGroups เป็นหลัก, fallback ไปที่ guests ถ้าไม่มี)
   const groupedGuests = useMemo(() => {
     const groups = new Map<string, { guests: Guest[]; groupName: string }>();
+    
+    // ใช้ guestGroups เป็นหลัก
+    guestGroups.forEach(group => {
+      const groupGuests = group.members.map(member => {
+        // หา Guest object จาก member.id
+        return guests.find(g => g.id === member.id);
+      }).filter((g): g is Guest => g !== undefined);
+      
+      if (groupGuests.length > 0) {
+        groups.set(group.groupId, {
+          guests: groupGuests,
+          groupName: group.groupName,
+        });
+      }
+    });
+    
+    // Fallback: group guests ที่ไม่มีใน guestGroups (backward compatibility)
     guests.forEach(g => {
-      if (g.groupId) {
+      if (g.groupId && !groups.has(g.groupId)) {
         const existing = groups.get(g.groupId) || { guests: [], groupName: g.groupName || '' };
         existing.guests.push(g);
         groups.set(g.groupId, existing);
       }
     });
+    
     return groups;
-  }, [guests]);
+  }, [guests, guestGroups]);
 
   // RSVP Map for status lookup
   const rsvpMap = useMemo(() => {
@@ -174,7 +195,9 @@ const GuestsPage: React.FC = () => {
         // Show group name if exists
         const groupName = guest.groupName;
         const groupSize = guest.groupId ? groupedGuests.get(guest.groupId)?.guests.length || 0 : 0;
-        return (
+        const group = guestGroups.find(g => g.groupId === guest.groupId);
+        
+        const nameContent = (
           <div>
             <div>{formatGuestName(guest)}</div>
             {groupName && groupSize > 1 && (
@@ -182,6 +205,17 @@ const GuestsPage: React.FC = () => {
             )}
           </div>
         );
+        
+        // ถ้ามี group และมีสมาชิกมากกว่า 1 คน → แสดง tooltip
+        if (group && group.totalCount > 1) {
+          return (
+            <GroupMemberTooltip group={group}>
+              {nameContent}
+            </GroupMemberTooltip>
+          );
+        }
+        
+        return nameContent;
       },
     },
     {
@@ -223,6 +257,27 @@ const GuestsPage: React.FC = () => {
           <Tag color="green" icon={<CheckCircleOutlined />}>เช็คอินแล้ว</Tag>
         ) : (
           <Tag>ยังไม่เช็คอิน</Tag>
+        );
+      },
+    },
+    {
+      title: 'เช็คอินกลุ่ม',
+      key: 'groupCheckIn',
+      render: (_, guest) => {
+        if (!guest.groupId) {
+          return '-';
+        }
+        
+        // หา group จาก guestGroups
+        const group = guestGroups.find(g => g.groupId === guest.groupId);
+        if (!group || group.totalCount <= 1) {
+          return '-';
+        }
+        
+        return (
+          <Tag color={group.checkedInCount === group.totalCount ? 'green' : 'orange'}>
+            เช็คอินแล้ว {group.checkedInCount} / {group.totalCount} คน
+          </Tag>
         );
       },
     },

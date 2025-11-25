@@ -9,6 +9,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
+import { useGuestGroups } from '@/hooks/useGuestGroups';
 import { Zone, TableData, Guest } from '@/types';
 import { ZoneService } from '@/services/firebase/ZoneService';
 import { TableService } from '@/services/firebase/TableService';
@@ -19,6 +20,7 @@ import ZoneModal from '@/components/admin/ZoneModal';
 import TableModal from '@/components/admin/TableModal';
 import TableDetailModal from '@/components/admin/TableDetailModal';
 import GuestSelectionSidebar from '@/components/admin/GuestSelectionSidebar';
+import SeatingSearchInput from '@/components/admin/SeatingSearchInput';
 import { debounceAsync } from '@/utils/debounce';
 import { logger } from '@/utils/logger';
 
@@ -28,6 +30,7 @@ const SeatingPage: React.FC = () => {
   const { guests, isLoading: guestsLoading } = useGuests();
   const { zones, isLoading: zonesLoading } = useZones();
   const { tables, isLoading: tablesLoading } = useTables();
+  const { guestGroups } = useGuestGroups();
   const zoneService = ZoneService.getInstance();
   const tableService = TableService.getInstance();
   const guestService = GuestService.getInstance();
@@ -54,7 +57,9 @@ const SeatingPage: React.FC = () => {
   
   // Click-based assignment state
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isAssignMode, setIsAssignMode] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const seatingManager = new SeatingManager();
 
   const currentZone = zones.find((z) => z && z.id === selectedZoneId && z.zoneName);
@@ -82,29 +87,22 @@ const SeatingPage: React.FC = () => {
     return map;
   }, [guests, tables]);
 
-  // Group guests by groupId for sidebar display
-  const groupedGuests = useMemo(() => {
-    const groups = new Map<string, Guest[]>();
-    guests.forEach(g => {
-      if (g.groupId) {
-        const list = groups.get(g.groupId) || [];
-        list.push(g);
-        groups.set(g.groupId, list);
-      } else {
-        // Guests without group
-        const ungroupedKey = 'ungrouped';
-        const list = groups.get(ungroupedKey) || [];
-        list.push(g);
-        groups.set(ungroupedKey, list);
-      }
-    });
-    return groups;
-  }, [guests]);
-
-  // Get unassigned guests (no tableId)
+  // Get unassigned guests (no tableId) with search filter
   const unassignedGuests = useMemo(() => {
-    return guests.filter(g => !g.tableId);
-  }, [guests]);
+    let filtered = guests.filter(g => !g.tableId);
+    
+    // Apply search filter
+    if (searchText && searchText.trim()) {
+      const searchTerm = searchText.trim().toLowerCase();
+      filtered = filtered.filter(g => {
+        const name = `${g.firstName} ${g.lastName}`.toLowerCase();
+        const relation = g.relationToCouple?.toLowerCase() || '';
+        return name.includes(searchTerm) || relation.includes(searchTerm);
+      });
+    }
+    
+    return filtered;
+  }, [guests, searchText]);
 
   // Table position update handler
   const handleTablePositionUpdate = useCallback(
@@ -119,20 +117,43 @@ const SeatingPage: React.FC = () => {
     []
   );
 
-  // Handle guest click for assignment
+  // Handle guest click for assignment (รายบุคคล)
   const handleGuestClick = (guestId: string) => {
     setSelectedGuestId(guestId);
+    setSelectedGroupId(null);
     setIsAssignMode(true);
     message.info('เลือกโต๊ะที่ต้องการจัดที่นั่ง');
   };
 
+  // Handle group click for assignment (ทั้งกลุ่ม)
+  const handleGroupClick = (groupId: string) => {
+    setSelectedGroupId(groupId);
+    setSelectedGuestId(null);
+    setIsAssignMode(true);
+    const group = guestGroups.find(g => g.groupId === groupId);
+    if (group) {
+      message.info(`เลือกโต๊ะที่ต้องการจัดที่นั่งสำหรับกลุ่ม "${group.groupName}" (${group.totalCount} คน)`);
+    } else {
+      message.info('เลือกโต๊ะที่ต้องการจัดที่นั่ง');
+    }
+  };
+
   // Handle table click for assignment
   const handleTableClick = async (table: TableData) => {
-    if (selectedGuestId && isAssignMode) {
+    if (isAssignMode) {
       try {
-        await seatingManager.assignGuestToTable(selectedGuestId, table.id, table.zoneId);
-        message.success('จัดที่นั่งสำเร็จ');
+        if (selectedGroupId) {
+          // จัดที่นั่งทั้งกลุ่ม
+          await seatingManager.assignGroupToTable(selectedGroupId, table.id, table.zoneId);
+          const group = guestGroups.find(g => g.groupId === selectedGroupId);
+          message.success(`จัดที่นั่งกลุ่ม "${group?.groupName || ''}" สำเร็จ (${group?.totalCount || 0} คน)`);
+        } else if (selectedGuestId) {
+          // จัดที่นั่งรายบุคคล
+          await seatingManager.assignGuestToTable(selectedGuestId, table.id, table.zoneId);
+          message.success('จัดที่นั่งสำเร็จ');
+        }
         setSelectedGuestId(null);
+        setSelectedGroupId(null);
         setIsAssignMode(false);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
@@ -144,8 +165,20 @@ const SeatingPage: React.FC = () => {
   // Cancel assignment mode
   const handleCancelAssign = () => {
     setSelectedGuestId(null);
+    setSelectedGroupId(null);
     setIsAssignMode(false);
     message.info('ยกเลิกการจัดที่นั่ง');
+  };
+
+  // Handle search select
+  const handleSearchSelect = (value: string) => {
+    if (value.startsWith('group:')) {
+      const groupId = value.replace('group:', '');
+      handleGroupClick(groupId);
+    } else if (value.startsWith('guest:')) {
+      const guestId = value.replace('guest:', '');
+      handleGuestClick(guestId);
+    }
   };
 
   const handleZoneSubmit = async (zone: Zone) => {
@@ -252,16 +285,31 @@ const SeatingPage: React.FC = () => {
       />
 
       {currentZone && (
-        <div className="flex gap-4 mt-4">
-          {/* Guest Sidebar */}
-          <GuestSelectionSidebar
-            guests={unassignedGuests}
-            selectedGuestId={selectedGuestId}
-            isAssignMode={isAssignMode}
-            onGuestClick={handleGuestClick}
-            onCancelAssign={handleCancelAssign}
-            groupedGuests={groupedGuests}
-          />
+        <div className="mt-4">
+          {/* Search Input */}
+          <div className="mb-4">
+            <SeatingSearchInput
+              guests={guests}
+              guestGroups={guestGroups}
+              onSearch={setSearchText}
+              onSelect={handleSearchSelect}
+              placeholder="ค้นหาชื่อกลุ่ม / สมาชิก / ความสัมพันธ์"
+              style={{ maxWidth: 400 }}
+            />
+          </div>
+
+          <div className="flex gap-4">
+            {/* Guest Sidebar */}
+            <GuestSelectionSidebar
+              guests={unassignedGuests}
+              selectedGuestId={selectedGuestId}
+              selectedGroupId={selectedGroupId}
+              isAssignMode={isAssignMode}
+              onGuestClick={handleGuestClick}
+              onGroupClick={handleGroupClick}
+              onCancelAssign={handleCancelAssign}
+              guestGroups={guestGroups}
+            />
 
           {/* Canvas Area */}
           <Card className="flex-1">
@@ -295,6 +343,7 @@ const SeatingPage: React.FC = () => {
                 border: '1px solid #e0e0e0',
                 borderRadius: '8px',
                 backgroundColor: '#fafafa',
+                overflow: 'hidden',
               }}
             >
               {tablesInCurrentZone
@@ -320,6 +369,7 @@ const SeatingPage: React.FC = () => {
                 })}
             </div>
           </Card>
+          </div>
         </div>
       )}
 
@@ -369,4 +419,5 @@ const SeatingPage: React.FC = () => {
 };
 
 export default SeatingPage;
+
 

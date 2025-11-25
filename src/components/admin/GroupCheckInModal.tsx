@@ -30,9 +30,20 @@ const GroupCheckInModal: React.FC<GroupCheckInModalProps> = ({
 }) => {
   if (!group) return null;
 
+  // คำนวณจำนวนคนที่เช็คอินแล้ว
+  const checkedInCount = group.guests.filter(g => g.checkedInAt).length;
+  const totalCount = group.guests.length;
+
   return (
     <Modal
-      title={`เช็คอินกลุ่ม: ${group.groupName || ''}`}
+      title={
+        <div>
+          <div>เช็คอินกลุ่ม: {group.groupName || ''}</div>
+          <div className="text-sm font-normal text-gray-500 mt-1">
+            เช็คอินแล้ว {checkedInCount} / {totalCount} คน
+          </div>
+        </div>
+      }
       open={visible}
       onOk={onSubmit}
       onCancel={onClose}
@@ -75,7 +86,7 @@ const GroupCheckInModal: React.FC<GroupCheckInModalProps> = ({
         </Checkbox.Group>
       </div>
       <div className="mt-4 text-sm text-gray-500">
-        เลือก {selectedGuestIds.length} คน จาก {group.guests.length} คน
+        เลือก {selectedGuestIds.length} คน จาก {totalCount} คน
       </div>
     </Modal>
   );

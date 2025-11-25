@@ -71,3 +71,26 @@ export interface RSVPData {
   updatedAt: string;
 }
 
+export interface GroupMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nickname: string;
+  relationToMain: string; // ความสัมพันธ์กับหัวหน้า (เช่น "เพื่อน", "น้อง", "พ่อ")
+  checkedInAt: string | null;
+  tableId: string | null;
+  zoneId: string | null;
+}
+
+export interface GuestGroup {
+  groupId: string; // ใช้ rsvp.uid หรือ rsvp.id เป็น groupId
+  groupName: string; // ชื่อหัวหน้า (firstName + lastName)
+  members: GroupMember[]; // สมาชิกทั้งหมดในกลุ่ม (รวมหัวหน้า)
+  checkedInCount: number; // จำนวนคนที่เช็คอินแล้ว
+  totalCount: number; // จำนวนคนทั้งหมดในกลุ่ม
+  tableId: string | null; // โต๊ะที่จัด (ถ้าทุกคนอยู่ในโต๊ะเดียวกัน)
+  zoneId: string | null; // โซนที่จัด (ถ้าทุกคนอยู่ในโซนเดียวกัน)
+  relation: string; // ความสัมพันธ์กับคู่บ่าวสาว (จากหัวหน้า)
+  side: Side; // ฝ่าย (groom/bride/both)
+}
+

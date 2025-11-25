@@ -69,6 +69,39 @@ export class SeatingManager {
   }
 
   /**
+   * Assign group to table (จัดที่นั่งทั้งกลุ่ม)
+   */
+  async assignGroupToTable(groupId: string, tableId: string, zoneId: string): Promise<void> {
+    // หา guests ทั้งหมดในกลุ่ม
+    const guests = await this.guestService.getAll();
+    const groupGuests = guests.filter(g => g.groupId === groupId);
+
+    if (groupGuests.length === 0) {
+      throw new Error('ไม่พบแขกในกลุ่มนี้');
+    }
+
+    // ตรวจสอบ capacity ของโต๊ะ
+    const table = await this.tableService.getAll().then(tables => tables.find(t => t.id === tableId));
+    if (!table) {
+      throw new Error('ไม่พบ Table');
+    }
+
+    // นับจำนวนแขกที่อยู่ในโต๊ะนี้แล้ว
+    const seatedGuests = guests.filter(g => g.tableId === tableId);
+    const availableSeats = table.capacity - seatedGuests.length;
+
+    // ตรวจสอบว่ามีที่นั่งพอสำหรับทั้งกลุ่มหรือไม่
+    if (groupGuests.length > availableSeats) {
+      throw new Error(`โต๊ะมีที่นั่งว่าง ${availableSeats} ที่นั่ง แต่กลุ่มมี ${groupGuests.length} คน`);
+    }
+
+    // Assign ทุกคนในกลุ่มไปยังโต๊ะเดียวกัน
+    for (const guest of groupGuests) {
+      await this.guestService.update(guest.id, { tableId, zoneId });
+    }
+  }
+
+  /**
    * Unassign guest from table
    */
   async unassignGuestFromTable(guestId: string): Promise<void> {

@@ -29,19 +29,19 @@ export const FlipCard: React.FC<FlipCardProps> = ({ value, label, className = ''
 
   return (
     <div className={`text-center ${className}`}>
-      <div className="relative inline-block">
+      <div className="countdown-number-wrapper">
         <div className={`flip-card ${isFlipping ? 'flip' : ''}`}>
           <div className="flip-card-inner">
             <div className="flip-card-front">
-              <div className="text-base md:text-2xl font-bold">{displayValue}</div>
+              <div className="countdown-number">{displayValue}</div>
             </div>
             <div className="flip-card-back">
-              <div className="text-base md:text-2xl font-bold">{value}</div>
+              <div className="countdown-number">{value}</div>
             </div>
           </div>
         </div>
       </div>
-      <div className="text-[7px] md:text-[8px] uppercase tracking-wider mt-1">{label}</div>
+      <div className="countdown-label">{label}</div>
     </div>
   );
 };

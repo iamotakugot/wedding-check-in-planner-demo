@@ -190,6 +190,8 @@ const DraggableTable: React.FC<DraggableTableProps> = ({
           ? 'none'
           : 'left 0.3s, top 0.3s, box-shadow 0.3s, border-color 0.3s',
         zIndex: isAssignMode ? 10 : isDragging ? 10 : 1,
+        pointerEvents: 'auto',
+        margin: '0.5rem', // เพิ่ม gap ระหว่างการ์ด
       }}
       styles={{ header: { padding: '0 8px', minHeight: 30 }, body: { padding: '4px 8px', textAlign: 'center' } }}
       onMouseDown={handleMouseDown}
