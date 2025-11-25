@@ -57,6 +57,25 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
 
   if (!table) return null;
 
+  // Count members at this table (member-level counting)
+  const memberCount = useMemo(() => {
+    let count = 0;
+    for (const group of guestGroups) {
+      for (const member of group.members) {
+        if (member.seat?.tableId === table.tableId) {
+          count++;
+        }
+      }
+    }
+    // Also count individual guests not in groups
+    for (const guest of guests) {
+      if (guest.tableId === table.tableId && !guest.groupId) {
+        count++;
+      }
+    }
+    return count;
+  }, [guestGroups, guests, table.tableId]);
+
   let itemIndex = 0;
 
   return (
@@ -67,7 +86,7 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
             {table.tableName}
           </Text>
           <Tag color="blue">
-            {guests.length} / {table.capacity} คน
+            {memberCount} / {table.capacity} คน
           </Tag>
         </Space>
       }

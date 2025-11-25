@@ -3,12 +3,14 @@
  * Sidebar สำหรับเลือกแขกเพื่อจัดที่นั่ง (รายคน)
  */
 
-import React, { useMemo } from 'react';
-import { Card, List, Button, Tag, Collapse, Avatar } from 'antd';
+import React, { useMemo, useState } from 'react';
+import { Card, List, Button, Tag, Collapse, Avatar, Input, Space } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import { Guest, GuestGroup, GroupMember } from '@/types';
 import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
 
 const { Panel } = Collapse;
+const { Search } = Input;
 
 interface GuestSelectionSidebarProps {
   guests: Guest[];
@@ -29,19 +31,8 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
   onCancelAssign,
   guestGroups,
 }) => {
-  // หาสมาชิกที่ยังไม่ได้จัดที่นั่ง (ไม่มี seat)
-  const unassignedGroups = useMemo(() => {
-    return guestGroups
-      .map(group => ({
-        ...group,
-        unassignedMembers: group.members.filter(m => !m.seat),
-      }))
-      .filter(group => group.unassignedMembers.length > 0);
-  }, [guestGroups]);
-
-  const unassignedIndividualGuests = useMemo(() => {
-    return guests.filter(g => !g.tableId && !g.groupId);
-  }, [guests]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSide, setSelectedSide] = useState<'all' | 'groom' | 'bride'>('all');
 
   // Helper function to get side label in Thai
   const getSideLabel = (side: string): string => {
@@ -57,9 +48,106 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
     }
   };
 
+  // Filter groups and members based on search and side filter
+  const filteredGroups = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase().trim();
+    
+    return guestGroups
+      .filter(group => {
+        // Filter by side
+        if (selectedSide !== 'all') {
+          if (selectedSide === 'groom' && group.side !== 'groom') return false;
+          if (selectedSide === 'bride' && group.side !== 'bride') return false;
+        }
+
+        // Filter unassigned members
+        const unassignedMembers = group.members.filter(m => !m.seat);
+        
+        // Filter by search term
+        if (searchLower) {
+          const matchingMembers = unassignedMembers.filter(member => {
+            const memberName = (member.fullName || `${member.firstName} ${member.lastName}`).toLowerCase();
+            const relationToMain = (member.relationToMain || '').toLowerCase();
+            const groupName = group.groupName.toLowerCase();
+            
+            return (
+              memberName.includes(searchLower) ||
+              relationToMain.includes(searchLower) ||
+              groupName.includes(searchLower)
+            );
+          });
+          
+          return matchingMembers.length > 0;
+        }
+        
+        return unassignedMembers.length > 0;
+      })
+      .map(group => {
+        const unassignedMembers = group.members.filter(m => !m.seat);
+        
+        // Apply search filter to members
+        if (searchTerm.trim()) {
+          const searchLower = searchTerm.toLowerCase().trim();
+          const filteredMembers = unassignedMembers.filter(member => {
+            const memberName = (member.fullName || `${member.firstName} ${member.lastName}`).toLowerCase();
+            const relationToMain = (member.relationToMain || '').toLowerCase();
+            const groupName = group.groupName.toLowerCase();
+            
+            return (
+              memberName.includes(searchLower) ||
+              relationToMain.includes(searchLower) ||
+              groupName.includes(searchLower)
+            );
+          });
+          
+          return {
+            ...group,
+            unassignedMembers: filteredMembers,
+          };
+        }
+        
+        return {
+          ...group,
+          unassignedMembers,
+        };
+      })
+      .filter(group => group.unassignedMembers.length > 0);
+  }, [guestGroups, searchTerm, selectedSide]);
+
+  const filteredIndividualGuests = useMemo(() => {
+    const unassigned = guests.filter(g => !g.tableId && !g.groupId);
+    
+    if (!searchTerm.trim() && selectedSide === 'all') {
+      return unassigned;
+    }
+    
+    const searchLower = searchTerm.toLowerCase().trim();
+    
+    return unassigned.filter(guest => {
+      // Filter by side
+      if (selectedSide !== 'all') {
+        if (selectedSide === 'groom' && guest.side !== 'groom') return false;
+        if (selectedSide === 'bride' && guest.side !== 'bride') return false;
+      }
+      
+      // Filter by search
+      if (searchLower) {
+        const guestName = formatGuestName(guest).toLowerCase();
+        const relation = (guest.relationToCouple || '').toLowerCase();
+        return guestName.includes(searchLower) || relation.includes(searchLower);
+      }
+      
+      return true;
+    });
+  }, [guests, searchTerm, selectedSide]);
+
   return (
-    <Card className="w-64 flex-shrink-0" title="แขกที่ยังไม่ได้จัดที่นั่ง">
-      <div className="mb-2">
+    <Card 
+      className="w-64 flex-shrink-0" 
+      title="แขกที่ยังไม่ได้จัดที่นั่ง"
+      styles={{ body: { padding: '12px' } }}
+    >
+      <div className="mb-3">
         {isAssignMode && (
           <Button
             type="default"
@@ -74,16 +162,55 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         <div className="text-sm text-gray-500 mb-2">
           {isAssignMode ? 'เลือกโต๊ะที่ต้องการจัดที่นั่ง' : 'คลิกสมาชิกเพื่อจัดที่นั่ง'}
         </div>
+        
+        {/* Search Input */}
+        <Search
+          placeholder="ค้นหาชื่อ/ความสัมพันธ์"
+          allowClear
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ marginBottom: '8px' }}
+          prefix={<SearchOutlined />}
+        />
+        
+        {/* Side Filter Buttons */}
+        <Space.Compact size="small" className="w-full">
+          <Button
+            type={selectedSide === 'all' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedSide('all')}
+            style={{ flex: 1 }}
+          >
+            ทั้งหมด
+          </Button>
+          <Button
+            type={selectedSide === 'groom' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedSide('groom')}
+            style={{ flex: 1 }}
+          >
+            เจ้าบ่าว
+          </Button>
+          <Button
+            type={selectedSide === 'bride' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setSelectedSide('bride')}
+            style={{ flex: 1 }}
+          >
+            เจ้าสาว
+          </Button>
+        </Space.Compact>
       </div>
 
       {/* กลุ่มแขก (แสดงสมาชิกรายคน) */}
-      {unassignedGroups.length > 0 && (
+      {filteredGroups.length > 0 && (
         <Collapse
           accordion={false}
           size="small"
           className="mb-2"
         >
-          {unassignedGroups.map((group) => (
+          {filteredGroups.map((group) => (
             <Panel
               key={group.groupId}
               header={
@@ -112,8 +239,31 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                             {(member.fullName || member.firstName || '?').charAt(0).toUpperCase()}
                           </Avatar>
                         }
-                        title={renderMemberLabel(group, member)}
-                        description={`${getSideLabel(group.side)} • ${member.relationToMain || 'ไม่ระบุ'}`}
+                        title={
+                          <span 
+                            style={{ 
+                              display: 'block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={renderMemberLabel(group, member)}
+                          >
+                            {renderMemberLabel(group, member)}
+                          </span>
+                        }
+                        description={
+                          <span 
+                            style={{ 
+                              display: 'block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {`${getSideLabel(group.side)} • ${member.relationToMain || 'ไม่ระบุ'}`}
+                          </span>
+                        }
                       />
                     </List.Item>
                   );
@@ -125,12 +275,12 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
       )}
 
       {/* รายบุคคล */}
-      {unassignedIndividualGuests.length > 0 && (
+      {filteredIndividualGuests.length > 0 && (
         <>
           <div className="text-xs font-semibold text-gray-600 mb-2">รายบุคคล</div>
           <List
             size="small"
-            dataSource={unassignedIndividualGuests}
+            dataSource={filteredIndividualGuests}
             renderItem={(guest) => {
               const isSelected = selectedGuestId === guest.id;
               
@@ -145,8 +295,31 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                         {formatGuestName(guest).charAt(0).toUpperCase() || '?'}
                       </Avatar>
                     }
-                    title={formatGuestName(guest)}
-                    description={guest.relationToCouple || 'ไม่ระบุ'}
+                    title={
+                      <span 
+                        style={{ 
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title={formatGuestName(guest)}
+                      >
+                        {formatGuestName(guest)}
+                      </span>
+                    }
+                    description={
+                      <span 
+                        style={{ 
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {guest.relationToCouple || 'ไม่ระบุ'}
+                      </span>
+                    }
                   />
                 </List.Item>
               );
@@ -155,9 +328,11 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         </>
       )}
 
-      {unassignedGroups.length === 0 && unassignedIndividualGuests.length === 0 && (
+      {filteredGroups.length === 0 && filteredIndividualGuests.length === 0 && (
         <div className="text-sm text-gray-400 text-center py-4">
-          ไม่มีแขกที่ยังไม่ได้จัดที่นั่ง
+          {searchTerm.trim() || selectedSide !== 'all' 
+            ? 'ไม่พบผลการค้นหา' 
+            : 'ไม่มีแขกที่ยังไม่ได้จัดที่นั่ง'}
         </div>
       )}
     </Card>
