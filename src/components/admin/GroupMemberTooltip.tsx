@@ -34,7 +34,7 @@ const GroupMemberTooltip: React.FC<GroupMemberTooltipProps> = ({ group, children
                 {isCheckedIn && (
                   <Tag color="green">เช็คอินแล้ว</Tag>
                 )}
-                {member.tableId && (
+                {member.seat && (
                   <Tag color="blue">โต๊ะ</Tag>
                 )}
               </Space>

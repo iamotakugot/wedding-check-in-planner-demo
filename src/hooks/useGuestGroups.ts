@@ -45,7 +45,7 @@ export const useGuestGroups = (isEnabled: boolean = true) => {
       members: g.members.map(m => ({
         name: `${m.firstName} ${m.lastName}`,
         checkedIn: m.checkedInAt !== null,
-        tableId: m.tableId,
+        hasSeat: m.seat !== null && m.seat !== undefined,
       })),
     })));
   }, [mappedGroups, rsvpsLoading, guestsLoading, isEnabled]);

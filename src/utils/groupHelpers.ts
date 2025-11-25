@@ -86,9 +86,6 @@ export function mapRSVPToGuestGroup(rsvp: RSVPData, guests: Guest[]): GuestGroup
       checkedInAt: guest.checkedInAt || null,
       isOwner,
       orderIndex,
-      // เก็บ tableId/zoneId ไว้สำหรับ backward compatibility และใช้สร้าง seat object ภายหลัง
-      tableId: guest.tableId || null,
-      zoneId: guest.zoneId || null,
       // seat จะถูกสร้างใน SeatingPage เมื่อมี access ถึง tables/zones
       seat: null,
     };

@@ -88,10 +88,7 @@ export interface GroupMember {
   checkedInAt: string | null;
   isOwner: boolean; // true = แขกตัวเอง (main guest)
   orderIndex: number; // 0 = ตัวเอง, 1,2,3,... = แขกคนที่ 1,2,3,...
-  seat?: SeatAssignment | null; // ข้อมูลที่นั่ง (แทน tableId/zoneId เดิม)
-  // Deprecated: เก็บไว้เพื่อ backward compatibility
-  tableId?: string | null;
-  zoneId?: string | null;
+  seat?: SeatAssignment | null; // ข้อมูลที่นั่ง
 }
 
 export interface GuestGroup {

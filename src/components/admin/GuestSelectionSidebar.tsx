@@ -29,12 +29,12 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
   onCancelAssign,
   guestGroups,
 }) => {
-  // หาสมาชิกที่ยังไม่ได้จัดที่นั่ง (ไม่มี tableId)
+  // หาสมาชิกที่ยังไม่ได้จัดที่นั่ง (ไม่มี seat)
   const unassignedGroups = useMemo(() => {
     return guestGroups
       .map(group => ({
         ...group,
-        unassignedMembers: group.members.filter(m => !m.tableId && !m.seat),
+        unassignedMembers: group.members.filter(m => !m.seat),
       }))
       .filter(group => group.unassignedMembers.length > 0);
   }, [guestGroups]);

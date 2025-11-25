@@ -93,11 +93,11 @@ const SeatingPage: React.FC = () => {
     // Get individual guests without groupId
     const individualGuests = guests.filter(g => !g.tableId && !g.groupId);
     
-    // Get members from groups that don't have tableId
+    // Get members from groups that don't have seat assignment
     const unassignedMembers: Guest[] = [];
     guestGroups.forEach(group => {
       group.members.forEach(member => {
-        if (!member.tableId && !member.seat) {
+        if (!member.seat) {
           // Find the corresponding guest object
           const guest = guests.find(g => g.id === member.id);
           if (guest) {
