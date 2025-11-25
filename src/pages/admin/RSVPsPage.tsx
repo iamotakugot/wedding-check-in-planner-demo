@@ -32,8 +32,11 @@ const RSVPsPage: React.FC = () => {
         <Space>
           <Avatar
             size="small"
-            icon={<UserOutlined />}
-            style={{ backgroundColor: record.isComing === 'yes' ? '#52c41a' : '#8c8c8c' }}
+            src={record.photoURL || undefined}
+            icon={!record.photoURL && <UserOutlined />}
+            style={{ 
+              backgroundColor: record.isComing === 'yes' ? '#52c41a' : '#8c8c8c' 
+            }}
           />
           <div>
             <div className="font-medium">

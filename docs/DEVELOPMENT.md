@@ -69,6 +69,21 @@
 - [ ] SessionStorage error ไม่แสดง error message (log warning เท่านั้น)
 - [ ] Auth state sync ถูกต้องหลัง redirect
 
+### Authentication & Profile Display
+
+#### Facebook Profile Photo
+- [ ] Facebook provider ให้ `photoURL` ผ่าน `public_profile` permission โดยอัตโนมัติ
+- [ ] UI ใช้ `auth.currentUser.photoURL` เป็นหลัก
+- [ ] ถ้า `photoURL` หลักไม่มี ให้ตรวจสอบ `providerData` สำหรับ Facebook provider
+- [ ] Fallback logic: `user.photoURL` → `user.providerData.find(p => p.providerId === 'facebook.com')?.photoURL` → `undefined` (แสดง icon)
+- [ ] Avatar แสดงรูปโปรไฟล์ Facebook บนหน้า RSVP registration
+- [ ] Avatar แสดงรูปโปรไฟล์ใน Admin RSVPs page
+- [ ] Debug logging แสดง providerData และ photoURL หลัง login
+
+#### Profile Data Storage
+- [ ] RSVP data เก็บ `photoURL` จาก `getAvatarUrl(userInfo)` (ไม่ใช่ `userInfo?.photoURL` โดยตรง)
+- [ ] `getAvatarUrl` function ตรวจสอบ providerData ถ้า photoURL หลักไม่มี
+
 ## Pre-Deploy Checklist
 
 1. **Type Checking**: `npm run typecheck`

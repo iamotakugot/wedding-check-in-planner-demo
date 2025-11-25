@@ -867,6 +867,15 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     setIsLoggedIn(true);
                     setCurrentUser(user.uid);
                     setUserInfo(user);
+                    
+                    // Debug: ตรวจสอบ providerData และ photoURL
+                    logger.log('🔍 Facebook Auth Data:', {
+                        providerData: user.providerData,
+                        photoURL: user.photoURL,
+                        facebookProvider: user.providerData?.find(p => p.providerId === 'facebook.com'),
+                        facebookPhotoURL: user.providerData?.find(p => p.providerId === 'facebook.com')?.photoURL
+                    });
+                    
                     setIsCheckingAuth(false);
                     message.success('เข้าสู่ระบบสำเร็จ');
                     
@@ -960,6 +969,15 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     setIsLoggedIn(true);
                     setCurrentUser(currentUid);
                     setUserInfo(user);
+                    
+                    // Debug: ตรวจสอบ providerData และ photoURL
+                    logger.log('🔍 Facebook Auth Data:', {
+                        providerData: user.providerData,
+                        photoURL: user.photoURL,
+                        facebookProvider: user.providerData?.find(p => p.providerId === 'facebook.com'),
+                        facebookPhotoURL: user.providerData?.find(p => p.providerId === 'facebook.com')?.photoURL
+                    });
+                    
                     setIsCheckingAuth(false);
                     setLoading(false); // ปลดล็อกปุ่มในกรณี popup สำเร็จ
                 }
@@ -973,6 +991,14 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 setIsLoggedIn(true);
                 setCurrentUser(user.uid);
                 setUserInfo(user);
+                
+                // Debug: ตรวจสอบ providerData และ photoURL
+                logger.log('🔍 Facebook Auth Data:', {
+                    providerData: user.providerData,
+                    photoURL: user.photoURL,
+                    facebookProvider: user.providerData?.find(p => p.providerId === 'facebook.com'),
+                    facebookPhotoURL: user.providerData?.find(p => p.providerId === 'facebook.com')?.photoURL
+                });
                 
                 // สร้าง session ใหม่ (กรณี persistent login)
                 const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -1337,12 +1363,24 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     };
 
     // ฟังก์ชันสำหรับดึง URL ของ avatar จาก user
-    const getAvatarUrl = (user: User) => {
-        if (!user.photoURL) return undefined;
-        // ใช้ URL ตรงๆ จาก Firebase Auth (Firebase จะจัดการ Facebook photo URL ให้แล้ว)
-        // ไม่ต้องเพิ่ม parameter เพราะอาจทำให้เกิด Permission denied
-        // Facebook photo URL จาก Firebase Auth จะใช้งานได้โดยตรง
-        return user.photoURL;
+    const getAvatarUrl = (user: User | null | undefined) => {
+        if (!user) return undefined;
+        
+        // ตรวจสอบ photoURL หลักก่อน
+        if (user.photoURL) {
+            return user.photoURL;
+        }
+        
+        // ถ้าไม่มี ให้ตรวจสอบ providerData สำหรับ Facebook provider
+        const facebookProvider = user.providerData?.find(
+            p => p.providerId === 'facebook.com'
+        );
+        if (facebookProvider?.photoURL) {
+            return facebookProvider.photoURL;
+        }
+        
+        // Fallback: undefined (จะแสดง icon แทน)
+        return undefined;
     };
 
     // ฟังก์ชันสำหรับจัดการเมื่อ submit form (บันทึกหรืออัปเดต RSVP)
@@ -1414,7 +1452,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 firstName: firstName,
                 lastName: lastName,
                 fullName: fullName, // เก็บ fullName เพิ่มด้วย
-                photoURL: userInfo?.photoURL || null, // เก็บภาพ profile จาก Facebook/Google
+                photoURL: getAvatarUrl(userInfo) || null, // เก็บภาพ profile จาก Facebook/Google (ตรวจสอบ providerData ถ้า photoURL หลักไม่มี)
                 nickname: values.nickname || '',
                 side: values.side || 'groom',
                 relation: values.relation || '',
