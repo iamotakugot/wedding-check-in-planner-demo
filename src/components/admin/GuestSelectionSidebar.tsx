@@ -3,60 +3,11 @@
  * Sidebar สำหรับเลือกแขกเพื่อจัดที่นั่ง (รายคน)
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { Card, List, Button, Tag, Collapse, Avatar, Input, Space, Checkbox } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import React, { useMemo, useState } from 'react';
+import { Card, List, Button, Tag, Collapse, Avatar, Cascader, Space, Checkbox } from 'antd';
 import { Guest, GuestGroup, GroupMember } from '@/types';
 import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
-
-// Custom Search component to avoid Input.Search addonAfter warning
-const CustomSearch: React.FC<{
-  placeholder?: string;
-  allowClear?: boolean;
-  size?: 'small' | 'middle' | 'large';
-  style?: React.CSSProperties;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  value?: string;
-  prefix?: React.ReactNode;
-}> = ({ placeholder, allowClear, size, style, onChange, value, prefix }) => {
-  const [searchValue, setSearchValue] = useState(value || '');
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setSearchValue(newValue);
-    if (onChange) {
-      onChange(e);
-    }
-  };
-
-  const handleClear = () => {
-    setSearchValue('');
-    if (onChange) {
-      onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
-    }
-  };
-
-  useEffect(() => {
-    if (value !== undefined) {
-      setSearchValue(value);
-    }
-  }, [value]);
-
-  return (
-    <Space.Compact style={style} size={size}>
-      <Input
-        placeholder={placeholder}
-        value={searchValue}
-        onChange={handleChange}
-        prefix={prefix}
-        allowClear={allowClear}
-        onClear={handleClear}
-        size={size}
-        style={{ flex: 1 }}
-      />
-    </Space.Compact>
-  );
-};
+import { RSVP_RELATION_OPTIONS, RSVP_GUEST_RELATION_OPTIONS } from '@/data/formOptions';
 
 interface GuestSelectionSidebarProps {
   guests: Guest[];
@@ -81,9 +32,137 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
   onGuestIdsChange,
   guestGroups,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRelations, setSelectedRelations] = useState<string[][]>([]);
   const [selectedSide, setSelectedSide] = useState<'all' | 'groom' | 'bride'>('all');
-  const [selectedRelation, setSelectedRelation] = useState<'all' | 'friend' | 'family' | 'elder'>('all');
+
+  // สร้าง Cascader options จาก formOptions
+  const relationCascaderOptions = useMemo(() => {
+    const options: any[] = [];
+    
+    // หมวดหมู่: เพื่อน
+    const friendOptions = RSVP_RELATION_OPTIONS
+      .filter(opt => opt.value.includes('เพื่อน'))
+      .map(opt => ({
+        value: opt.value,
+        label: opt.value,
+        isLeaf: true,
+      }));
+    
+    if (friendOptions.length > 0) {
+      options.push({
+        value: 'เพื่อน',
+        label: 'เพื่อน',
+        children: friendOptions,
+      });
+    }
+    
+    // หมวดหมู่: ญาติ
+    const familyOptions = RSVP_RELATION_OPTIONS
+      .filter(opt => opt.value.includes('ญาติ'))
+      .map(opt => ({
+        value: opt.value,
+        label: opt.value,
+        isLeaf: true,
+      }));
+    
+    if (familyOptions.length > 0) {
+      options.push({
+        value: 'ญาติ',
+        label: 'ญาติ',
+        children: familyOptions,
+      });
+    }
+    
+    // หมวดหมู่: ผู้ใหญ่ (พ่อ/แม่, ครู/อาจารย์, ผู้บังคับบัญชา)
+    const elderOptions = [
+      ...RSVP_RELATION_OPTIONS.filter(opt => 
+        opt.value.includes('พ่อ') || 
+        opt.value.includes('แม่') || 
+        opt.value.includes('ครู') || 
+        opt.value.includes('อาจารย์') ||
+        opt.value.includes('ผู้บังคับบัญชา')
+      ).map(opt => ({
+        value: opt.value,
+        label: opt.value,
+        isLeaf: true,
+      })),
+      ...RSVP_GUEST_RELATION_OPTIONS.filter(opt => 
+        opt.value === 'พ่อ/แม่'
+      ).map(opt => ({
+        value: opt.value,
+        label: opt.label,
+        isLeaf: true,
+      })),
+    ];
+    
+    if (elderOptions.length > 0) {
+      options.push({
+        value: 'ผู้ใหญ่',
+        label: 'ผู้ใหญ่',
+        children: elderOptions,
+      });
+    }
+    
+    // หมวดหมู่: ครอบครัว (พี่/น้อง, ลูก/หลาน)
+    const familyMemberOptions = RSVP_GUEST_RELATION_OPTIONS
+      .filter(opt => opt.value === 'พี่/น้อง' || opt.value === 'ลูก/หลาน')
+      .map(opt => ({
+        value: opt.value,
+        label: opt.label,
+        isLeaf: true,
+      }));
+    
+    if (familyMemberOptions.length > 0) {
+      options.push({
+        value: 'ครอบครัว',
+        label: 'ครอบครัว',
+        children: familyMemberOptions,
+      });
+    }
+    
+    // ความสัมพันธ์อื่นๆ (ไม่จัดหมวดหมู่)
+    const otherOptions = RSVP_RELATION_OPTIONS
+      .filter(opt => 
+        !opt.value.includes('เพื่อน') && 
+        !opt.value.includes('ญาติ') &&
+        !opt.value.includes('พ่อ') &&
+        !opt.value.includes('แม่') &&
+        !opt.value.includes('ครู') &&
+        !opt.value.includes('อาจารย์') &&
+        !opt.value.includes('ผู้บังคับบัญชา')
+      )
+      .map(opt => ({
+        value: opt.value,
+        label: opt.value,
+        isLeaf: true,
+      }));
+    
+    if (otherOptions.length > 0) {
+      options.push({
+        value: 'อื่นๆ',
+        label: 'อื่นๆ',
+        children: otherOptions,
+      });
+    }
+    
+    return options;
+  }, []);
+
+  // แปลง selectedRelations เป็น array ของ relation strings
+  const selectedRelationStrings = useMemo(() => {
+    const relations: string[] = [];
+    selectedRelations.forEach(path => {
+      // path จะเป็น array เช่น ['เพื่อน', 'เพื่อนมหาลัย'] หรือ ['ผู้ใหญ่', 'พ่อ/แม่']
+      if (path.length > 1) {
+        // ใช้ค่าสุดท้าย (ความสัมพันธ์จริง)
+        relations.push(path[path.length - 1]);
+      } else if (path.length === 1) {
+        // ถ้าเลือกแค่หมวดหมู่ ให้ใช้ค่าหมวดหมู่
+        relations.push(path[0]);
+      }
+    });
+    return relations;
+  }, [selectedRelations]);
 
   // Helper function to get side label in Thai
   const getSideLabel = (side: string): string => {
@@ -99,69 +178,9 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
     }
   };
 
-  // Helper function to categorize relation
-  const categorizeRelation = (relation: string): 'friend' | 'family' | 'elder' | 'other' => {
-    const relationLower = (relation || '').toLowerCase();
-    
-    // เพื่อน
-    if (
-      relationLower.includes('เพื่อน') ||
-      relationLower.includes('friend') ||
-      relationLower.includes('เพื่อนมัธยม') ||
-      relationLower.includes('เพื่อนมหาวิทยาลัย') ||
-      relationLower.includes('เพื่อนทำงาน')
-    ) {
-      return 'friend';
-    }
-    
-    // ญาติ
-    if (
-      relationLower.includes('ญาติ') ||
-      relationLower.includes('พี่') ||
-      relationLower.includes('น้อง') ||
-      relationLower.includes('ลุง') ||
-      relationLower.includes('ป้า') ||
-      relationLower.includes('น้า') ||
-      relationLower.includes('อา') ||
-      relationLower.includes('ปู่') ||
-      relationLower.includes('ย่า') ||
-      relationLower.includes('ตา') ||
-      relationLower.includes('ยาย') ||
-      relationLower.includes('cousin') ||
-      relationLower.includes('uncle') ||
-      relationLower.includes('aunt')
-    ) {
-      return 'family';
-    }
-    
-    // ผู้ใหญ่
-    if (
-      relationLower.includes('พ่อ') ||
-      relationLower.includes('แม่') ||
-      relationLower.includes('คุณพ่อ') ||
-      relationLower.includes('คุณแม่') ||
-      relationLower.includes('พ่อแม่') ||
-      relationLower.includes('ปู่') ||
-      relationLower.includes('ย่า') ||
-      relationLower.includes('ตา') ||
-      relationLower.includes('ยาย') ||
-      relationLower.includes('ลุง') ||
-      relationLower.includes('ป้า') ||
-      relationLower.includes('น้า') ||
-      relationLower.includes('อา') ||
-      relationLower.includes('parent') ||
-      relationLower.includes('grandparent')
-    ) {
-      return 'elder';
-    }
-    
-    return 'other';
-  };
 
-  // Filter groups and members based on search, side, and relation filter
+  // Filter groups and members based on selected relations and side filter
   const filteredGroups = useMemo(() => {
-    const searchLower = searchTerm.toLowerCase().trim();
-    
     return guestGroups
       .filter(group => {
         // Filter by side
@@ -173,30 +192,18 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         // Filter unassigned members
         let unassignedMembers = group.members.filter(m => !m.seat);
         
-        // Filter by relation category
-        if (selectedRelation !== 'all') {
+        // Filter by selected relations
+        if (selectedRelationStrings.length > 0) {
           unassignedMembers = unassignedMembers.filter(member => {
-            const relation = member.relationToMain || '';
-            const category = categorizeRelation(relation);
-            return category === selectedRelation;
+            const memberRelation = (member.relationToMain || '').toLowerCase();
+            return selectedRelationStrings.some(selectedRelation => {
+              const selectedLower = selectedRelation.toLowerCase();
+              // Match exact หรือ partial
+              return memberRelation === selectedLower || 
+                     memberRelation.includes(selectedLower) || 
+                     selectedLower.includes(memberRelation);
+            });
           });
-        }
-        
-        // Filter by search term
-        if (searchLower) {
-          const matchingMembers = unassignedMembers.filter(member => {
-            const memberName = (member.fullName || `${member.firstName} ${member.lastName}`).toLowerCase();
-            const relationToMain = (member.relationToMain || '').toLowerCase();
-            const groupName = group.groupName.toLowerCase();
-            
-            return (
-              memberName.includes(searchLower) ||
-              relationToMain.includes(searchLower) ||
-              groupName.includes(searchLower)
-            );
-          });
-          
-          return matchingMembers.length > 0;
         }
         
         return unassignedMembers.length > 0;
@@ -205,33 +212,16 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         let unassignedMembers = group.members.filter(m => !m.seat);
         
         // Apply relation filter
-        if (selectedRelation !== 'all') {
+        if (selectedRelationStrings.length > 0) {
           unassignedMembers = unassignedMembers.filter(member => {
-            const relation = member.relationToMain || '';
-            const category = categorizeRelation(relation);
-            return category === selectedRelation;
+            const memberRelation = (member.relationToMain || '').toLowerCase();
+            return selectedRelationStrings.some(selectedRelation => {
+              const selectedLower = selectedRelation.toLowerCase();
+              return memberRelation === selectedLower || 
+                     memberRelation.includes(selectedLower) || 
+                     selectedLower.includes(memberRelation);
+            });
           });
-        }
-        
-        // Apply search filter to members
-        if (searchTerm.trim()) {
-          const searchLower = searchTerm.toLowerCase().trim();
-          const filteredMembers = unassignedMembers.filter(member => {
-            const memberName = (member.fullName || `${member.firstName} ${member.lastName}`).toLowerCase();
-            const relationToMain = (member.relationToMain || '').toLowerCase();
-            const groupName = group.groupName.toLowerCase();
-            
-            return (
-              memberName.includes(searchLower) ||
-              relationToMain.includes(searchLower) ||
-              groupName.includes(searchLower)
-            );
-          });
-          
-          return {
-            ...group,
-            unassignedMembers: filteredMembers,
-          };
         }
         
         return {
@@ -240,41 +230,31 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
         };
       })
       .filter(group => group.unassignedMembers.length > 0);
-  }, [guestGroups, searchTerm, selectedSide, selectedRelation]);
+  }, [guestGroups, selectedSide, selectedRelationStrings]);
 
   const filteredIndividualGuests = useMemo(() => {
     let unassigned = guests.filter(g => !g.tableId && !g.groupId);
     
     // Filter by side
     if (selectedSide !== 'all') {
-      unassigned = unassigned.filter(guest => {
-        if (selectedSide === 'groom' && guest.side !== 'groom') return false;
-        if (selectedSide === 'bride' && guest.side !== 'bride') return false;
-        return true;
-      });
+      unassigned = unassigned.filter(guest => guest.side === selectedSide);
     }
     
-    // Filter by relation category
-    if (selectedRelation !== 'all') {
+    // Filter by selected relations
+    if (selectedRelationStrings.length > 0) {
       unassigned = unassigned.filter(guest => {
-        const relation = guest.relationToCouple || '';
-        const category = categorizeRelation(relation);
-        return category === selectedRelation;
-      });
-    }
-    
-    // Filter by search
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase().trim();
-      unassigned = unassigned.filter(guest => {
-        const guestName = formatGuestName(guest).toLowerCase();
-        const relation = (guest.relationToCouple || '').toLowerCase();
-        return guestName.includes(searchLower) || relation.includes(searchLower);
+        const guestRelation = (guest.relationToCouple || '').toLowerCase();
+        return selectedRelationStrings.some(selectedRelation => {
+          const selectedLower = selectedRelation.toLowerCase();
+          return guestRelation === selectedLower || 
+                 guestRelation.includes(selectedLower) || 
+                 selectedLower.includes(guestRelation);
+        });
       });
     }
     
     return unassigned;
-  }, [guests, searchTerm, selectedSide, selectedRelation]);
+  }, [guests, selectedSide, selectedRelationStrings]);
 
   return (
     <Card 
@@ -314,15 +294,28 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
             : 'ติ๊กเลือกหลายคน หรือคลิกสมาชิกเพื่อจัดที่นั่ง'}
         </div>
         
-        {/* Search Input */}
-        <CustomSearch
-          placeholder="ค้นหาชื่อ/ความสัมพันธ์"
-          allowClear
-          size="small"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ marginBottom: '8px', width: '100%' }}
-          prefix={<SearchOutlined />}
+        {/* Cascader for filtering by relation */}
+        <Cascader
+          multiple
+          value={selectedRelations}
+          options={relationCascaderOptions}
+          onChange={(value) => setSelectedRelations(value as string[][])}
+          placeholder="กรองตามความสัมพันธ์"
+          style={{ width: '100%', marginBottom: '8px' }}
+          maxTagCount={3}
+          showSearch={{
+            filter: (inputValue, path) => {
+              return path.some(option => 
+                option.label.toLowerCase().includes(inputValue.toLowerCase())
+              );
+            },
+          }}
+          displayRender={(labels) => {
+            if (labels.length === 0) {
+              return 'กรองตามความสัมพันธ์';
+            }
+            return labels.join(', ');
+          }}
         />
         
         {/* Side Filter Buttons */}
@@ -350,43 +343,6 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
             style={{ flex: 1 }}
           >
             เจ้าสาว
-          </Button>
-        </Space.Compact>
-        
-        {/* Relation Category Filter Buttons */}
-        <div className="text-xs text-gray-600 mb-1">หมวดหมู่:</div>
-        <Space.Compact size="small" className="w-full">
-          <Button
-            type={selectedRelation === 'all' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => setSelectedRelation('all')}
-            style={{ flex: 1 }}
-          >
-            ทั้งหมด
-          </Button>
-          <Button
-            type={selectedRelation === 'friend' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => setSelectedRelation('friend')}
-            style={{ flex: 1 }}
-          >
-            เพื่อน
-          </Button>
-          <Button
-            type={selectedRelation === 'family' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => setSelectedRelation('family')}
-            style={{ flex: 1 }}
-          >
-            ญาติ
-          </Button>
-          <Button
-            type={selectedRelation === 'elder' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => setSelectedRelation('elder')}
-            style={{ flex: 1 }}
-          >
-            ผู้ใหญ่
           </Button>
         </Space.Compact>
       </div>
@@ -581,7 +537,7 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
 
       {filteredGroups.length === 0 && filteredIndividualGuests.length === 0 && (
         <div className="text-sm text-gray-400 text-center py-4">
-          {searchTerm.trim() || selectedSide !== 'all' 
+          {selectedRelationStrings.length > 0 || selectedSide !== 'all' 
             ? 'ไม่พบผลการค้นหา' 
             : 'ไม่มีแขกที่ยังไม่ได้จัดที่นั่ง'}
         </div>

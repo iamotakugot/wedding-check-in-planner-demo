@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Card, Button, Space, Tabs, App, Modal, Drawer } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, MenuOutlined } from '@ant-design/icons';
+import { Card, Button, Tabs, App, Modal, Drawer, Input } from 'antd';
+import { PlusOutlined, MenuOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
@@ -19,7 +19,6 @@ import ZoneModal from '@/components/admin/ZoneModal';
 import TableModal from '@/components/admin/TableModal';
 import TableDetailModal from '@/components/admin/TableDetailModal';
 import GuestSelectionSidebar from '@/components/admin/GuestSelectionSidebar';
-import SeatingSearchInput from '@/components/admin/SeatingSearchInput';
 import { debounceAsync } from '@/utils/debounce';
 import { logger } from '@/utils/logger';
 import { renderMemberLabel } from '@/utils/guestHelpers';
@@ -61,6 +60,8 @@ const SeatingPage: React.FC = () => {
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [isAssignMode, setIsAssignMode] = useState(false);
   const [sidebarDrawerVisible, setSidebarDrawerVisible] = useState(false);
+  const [editingZoneKey, setEditingZoneKey] = useState<string | null>(null);
+  const [editingZoneName, setEditingZoneName] = useState<string>('');
   const seatingManager = new SeatingManager();
 
   const currentZone = zones.find((z) => z && z.id === selectedZoneId && z.zoneName);
@@ -164,7 +165,7 @@ const SeatingPage: React.FC = () => {
         
         for (const guestId of selectedGuestIds) {
           try {
-            await seatingManager.assignGuestToTable(guestId, table.id, table.zoneId);
+            await seatingManager.assignGuestToTable(guestId, table.tableId, table.zoneId);
             successCount++;
           } catch (error) {
             failCount++;
@@ -192,7 +193,7 @@ const SeatingPage: React.FC = () => {
       // Single assignment mode: assign guest to table
       try {
         // จัดที่นั่งรายบุคคล
-        await seatingManager.assignGuestToTable(selectedGuestId, table.id, table.zoneId);
+        await seatingManager.assignGuestToTable(selectedGuestId, table.tableId, table.zoneId);
         
         // Find member in groups to show proper success message
         let memberLabel = '';
@@ -232,16 +233,6 @@ const SeatingPage: React.FC = () => {
     message.info('ยกเลิกการจัดที่นั่ง');
   };
 
-  // Handle search select
-  const handleSearchSelect = (value: string) => {
-    if (value.startsWith('member:')) {
-      const memberId = value.replace('member:', '');
-      handleMemberClick(memberId);
-    } else if (value.startsWith('guest:')) {
-      const guestId = value.replace('guest:', '');
-      handleGuestClick(guestId);
-    }
-  };
 
   const handleZoneSubmit = async (zone: Zone) => {
     try {
@@ -277,13 +268,15 @@ const SeatingPage: React.FC = () => {
     }
   };
 
-  const handleDeleteZone = async (id: string) => {
+
+  // Handle delete zone by key (used by editable tabs)
+  const handleDeleteZoneByKey = async (zoneId: string) => {
     Modal.confirm({
       title: 'ยืนยันการลบ',
       content: 'คุณต้องการลบโซนนี้หรือไม่? (จะลบโต๊ะทั้งหมดในโซนนี้ด้วย)',
       onOk: async () => {
         try {
-          const zone = zones.find(z => z && z.id === id && z.zoneId);
+          const zone = zones.find(z => z && z.id === zoneId && z.zoneId);
           if (zone) {
             const tablesToDelete = tables.filter(t => t && t.zoneId === zone.zoneId);
             
@@ -306,12 +299,12 @@ const SeatingPage: React.FC = () => {
               await tableService.delete(table.id);
             }
             
-            await zoneService.delete(id);
+            await zoneService.delete(zoneId);
             message.success('ลบโซนเรียบร้อย');
             
             // Force refresh selectedZoneId if deleted zone was selected
-            if (selectedZoneId === id) {
-              const remainingZones = zones.filter(z => z.id !== id);
+            if (selectedZoneId === zoneId) {
+              const remainingZones = zones.filter(z => z.id !== zoneId);
               if (remainingZones.length > 0) {
                 setSelectedZoneId(remainingZones[0].id);
               } else {
@@ -337,62 +330,133 @@ const SeatingPage: React.FC = () => {
     <div className="p-4 md:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
         <h1 className="text-xl md:text-2xl font-bold text-gray-800">จัดการที่นั่ง</h1>
-        <Space>
-          <Button
-            icon={<MenuOutlined />}
-            onClick={() => setSidebarDrawerVisible(true)}
-            className="md:hidden"
-          >
-            เปิดรายชื่อแขก
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingZone(null);
-              setIsZoneModalVisible(true);
-            }}
-          >
-            เพิ่มโซน
-          </Button>
-          {currentZone && (
-            <Button
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditingTable(null);
-                setIsTableModalVisible(true);
-              }}
-            >
-              เพิ่มโต๊ะ
-            </Button>
-          )}
-        </Space>
+        <Button
+          icon={<MenuOutlined />}
+          onClick={() => setSidebarDrawerVisible(true)}
+          className="md:hidden"
+        >
+          เปิดรายชื่อแขก
+        </Button>
       </div>
 
       <Tabs
+        type="editable-card"
         activeKey={selectedZoneId || undefined}
         onChange={setSelectedZoneId}
+        onEdit={(targetKey, action) => {
+          if (action === 'add') {
+            // เพิ่มโซนใหม่
+            setEditingZone(null);
+            setIsZoneModalVisible(true);
+          } else if (action === 'remove' && typeof targetKey === 'string') {
+            // ลบโซน
+            const zoneToDelete = zones.find(z => z && z.id === targetKey);
+            if (zoneToDelete) {
+              handleDeleteZoneByKey(targetKey);
+            }
+          }
+        }}
         items={zones
           .filter((zone): zone is Zone => !!(zone && zone.id && zone.zoneName))
           .map(zone => ({
             key: zone.id,
-            label: zone.zoneName || 'ไม่มีชื่อ',
+            closable: zones.length > 1, // ไม่ให้ลบถ้ามีโซนเดียว
+            label: editingZoneKey === zone.id ? (
+              <Input
+                value={editingZoneName}
+                onChange={(e) => setEditingZoneName(e.target.value)}
+                onBlur={async () => {
+                  if (editingZoneName.trim() && editingZoneName !== zone.zoneName) {
+                    try {
+                      await zoneService.update(zone.id, {
+                        ...zone,
+                        zoneName: editingZoneName.trim(),
+                      });
+                      message.success('แก้ไขชื่อโซนเรียบร้อย');
+                    } catch (error) {
+                      logger.error('Error updating zone name:', error);
+                      message.error('เกิดข้อผิดพลาด');
+                      setEditingZoneName(zone.zoneName || '');
+                    }
+                  } else {
+                    setEditingZoneName(zone.zoneName || '');
+                  }
+                  setEditingZoneKey(null);
+                }}
+                onPressEnter={async (e) => {
+                  e.currentTarget.blur();
+                }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ width: 150, minWidth: 100 }}
+                autoFocus
+                size="small"
+              />
+            ) : (
+              <span
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditingZoneKey(zone.id);
+                  setEditingZoneName(zone.zoneName || '');
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  Modal.confirm({
+                    title: 'ยืนยันการลบ',
+                    content: 'คุณต้องการลบโซนนี้หรือไม่? (จะลบโต๊ะทั้งหมดในโซนนี้ด้วย)',
+                    onOk: async () => {
+                      try {
+                        const tablesToDelete = tables.filter(t => t && t.zoneId === zone.zoneId);
+                        
+                        // Clear tableId/zoneId ของ guests ที่ถูก assign ไปยังโต๊ะ/โซนที่ถูกลบ
+                        const { GuestService } = await import('@/services/firebase/GuestService');
+                        const guestService = GuestService.getInstance();
+                        
+                        for (const table of tablesToDelete) {
+                          // หา guests ที่ถูก assign ไปยังโต๊ะนี้
+                          const guestsInTable = guests.filter(g => g.tableId === table.tableId && g.zoneId === zone.zoneId);
+                          
+                          // Clear tableId/zoneId ของ guests เหล่านี้
+                          for (const guest of guestsInTable) {
+                            await guestService.update(guest.id, {
+                              tableId: null,
+                              zoneId: null,
+                            });
+                          }
+                          
+                          await tableService.delete(table.id);
+                        }
+                        
+                        await zoneService.delete(zone.id);
+                        message.success('ลบโซนเรียบร้อย');
+                        
+                        // Force refresh selectedZoneId if deleted zone was selected
+                        if (selectedZoneId === zone.id) {
+                          const remainingZones = zones.filter(z => z.id !== zone.id);
+                          if (remainingZones.length > 0) {
+                            setSelectedZoneId(remainingZones[0].id);
+                          } else {
+                            setSelectedZoneId('');
+                          }
+                        }
+                      } catch (error) {
+                        logger.error('Error deleting zone:', error);
+                        message.error('เกิดข้อผิดพลาด');
+                      }
+                    },
+                  });
+                }}
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+                title="ดับเบิ้ลคลิกเพื่อแก้ไขชื่อโซน | คลิกขวาเพื่อลบโซน"
+              >
+                {zone.zoneName || 'ไม่มีชื่อ'}
+              </span>
+            ),
           }))}
       />
 
       {currentZone && (
         <div className="mt-4">
-          {/* Search Input */}
-          <div className="mb-4">
-            <SeatingSearchInput
-              guests={guests}
-              guestGroups={guestGroups}
-              onSearch={() => {}} // Search handled internally by SeatingSearchInput
-              onSelect={handleSearchSelect}
-              placeholder="ค้นหาชื่อกลุ่ม / สมาชิก / ความสัมพันธ์"
-              style={{ maxWidth: 400 }}
-            />
-          </div>
 
           <div className="flex flex-col md:flex-row gap-4">
             {/* Guest Sidebar - Hidden on mobile, shown in drawer */}
@@ -439,28 +503,29 @@ const SeatingPage: React.FC = () => {
             </Drawer>
 
           {/* Canvas Area */}
-          <Card className="flex-1 shadow-sm">
-            <div className="mb-4">
-              <Space wrap>
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={() => {
-                    setEditingZone(currentZone);
-                    setIsZoneModalVisible(true);
-                  }}
-                >
-                  แก้ไขโซน
-                </Button>
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDeleteZone(currentZone.id)}
-                >
-                  ลบโซน
-                </Button>
-              </Space>
-            </div>
-
+          <Card 
+            className="flex-1 shadow-sm"
+            title={
+              <div className="flex items-center justify-between">
+                <span className="text-base md:text-lg font-semibold">
+                  {currentZone?.zoneName || 'ไม่มีชื่อโซน'}
+                </span>
+                {currentZone && (
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => {
+                      setEditingTable(null);
+                      setIsTableModalVisible(true);
+                    }}
+                    size="small"
+                  >
+                    เพิ่มโต๊ะ
+                  </Button>
+                )}
+              </div>
+            }
+          >
             <div
               id="layout-canvas"
               style={{

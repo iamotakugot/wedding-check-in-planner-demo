@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography, Divider, Checkbox } from 'antd';
-import { UserDeleteOutlined } from '@ant-design/icons';
+import { Modal, List, Avatar, Tag, Button, Space, Badge, Popconfirm, Typography, Divider, Checkbox, Card } from 'antd';
+import { DeleteOutlined, CloseOutlined } from '@ant-design/icons';
 import { TableData, Guest, GuestGroup } from '@/types';
 import { formatGuestName, renderMemberLabel } from '@/utils/guestHelpers';
 
@@ -115,20 +115,73 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
             }}
             okText="ย้ายออก"
             cancelText="ยกเลิก"
-            okButtonProps={{ danger: true }}
+            okButtonProps={{ danger: true, type: 'primary' }}
           >
-            <Button key="bulk-unassign" type="primary" danger icon={<UserDeleteOutlined />}>
+            <Button key="bulk-unassign" type="primary" danger icon={<DeleteOutlined />}>
               ย้ายออก {selectedGuestIds.length} คน
             </Button>
           </Popconfirm>
         ) : null,
         <Button key="close" onClick={onClose}>ปิด</Button>
       ]}
-      width={600}
+      width={700}
+      styles={{
+        body: {
+          padding: '20px 24px',
+        },
+      }}
     >
+      {guests.length > 0 && onUnassignGuests && (
+        <Card
+          size="small"
+          style={{
+            marginBottom: 16,
+            backgroundColor: '#fff7e6',
+            border: '1px solid #ffd591',
+          }}
+          styles={{ body: { padding: '12px 16px' } }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space>
+              <Text type="secondary" style={{ fontSize: 14 }}>
+                แขกทั้งหมด <Text strong>{guests.length}</Text> คน
+              </Text>
+            </Space>
+            <Popconfirm
+              title="ย้ายแขกออกทั้งหมด?"
+              description={
+                <div>
+                  <Text>ย้ายแขกทั้งหมด <Text strong>{guests.length} คน</Text> ออกจากโต๊ะนี้?</Text>
+                </div>
+              }
+              onConfirm={() => {
+                const allGuestIds = guests.map(g => g.id);
+                onUnassignGuests(allGuestIds);
+                setSelectedGuestIds([]);
+              }}
+              okText="ย้ายออกทั้งหมด"
+              cancelText="ยกเลิก"
+              okButtonProps={{ danger: true, type: 'primary' }}
+            >
+              <Button 
+                type="primary" 
+                danger 
+                icon={<DeleteOutlined />}
+                size="middle"
+              >
+                ย้ายออกทั้งหมด
+              </Button>
+            </Popconfirm>
+          </div>
+        </Card>
+      )}
       <List
         itemLayout="horizontal"
         locale={{ emptyText: 'ยังไม่มีแขกในโต๊ะนี้' }}
+        style={{
+          maxHeight: '400px',
+          overflowY: 'auto',
+        }}
       >
         {/* แสดงกลุ่ม */}
         {Array.from(guestsByGroup.groups.entries()).map(([groupId, groupGuests], groupIndex) => {
@@ -152,7 +205,12 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                 return (
                   <List.Item
                     key={guest.id}
-                    style={{ paddingLeft: '2rem' }}
+                    style={{ 
+                      paddingLeft: '2rem',
+                      paddingTop: '12px',
+                      paddingBottom: '12px',
+                      borderBottom: '1px solid #f0f0f0',
+                    }}
                     actions={[
                       <Checkbox
                         key="checkbox"
@@ -172,13 +230,17 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                         onConfirm={() => onUnassignGuest(guest.id)}
                         okText="ย้ายออก"
                         cancelText="ยกเลิก"
-                        okButtonProps={{ danger: true }}
+                        okButtonProps={{ danger: true, type: 'primary' }}
                       >
                         <Button 
-                          type="primary" 
+                          type="text" 
                           danger 
                           size="small"
-                          icon={<UserDeleteOutlined />}
+                          icon={<CloseOutlined />}
+                          style={{ 
+                            padding: '4px 8px',
+                            height: 'auto',
+                          }}
                         >
                           ย้ายออก
                         </Button>
@@ -228,6 +290,11 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
           return (
             <List.Item
               key={guest.id}
+              style={{ 
+                paddingTop: '12px',
+                paddingBottom: '12px',
+                borderBottom: '1px solid #f0f0f0',
+              }}
               actions={[
                 <Checkbox
                   key="checkbox"
@@ -247,13 +314,17 @@ const TableDetailModal: React.FC<TableDetailModalProps> = ({
                   onConfirm={() => onUnassignGuest(guest.id)}
                   okText="ย้ายออก"
                   cancelText="ยกเลิก"
-                  okButtonProps={{ danger: true }}
+                  okButtonProps={{ danger: true, type: 'primary' }}
                 >
                   <Button 
-                    type="primary" 
+                    type="text" 
                     danger 
                     size="small"
-                    icon={<UserDeleteOutlined />}
+                    icon={<CloseOutlined />}
+                    style={{ 
+                      padding: '4px 8px',
+                      height: 'auto',
+                    }}
                   >
                     ย้ายออก
                   </Button>

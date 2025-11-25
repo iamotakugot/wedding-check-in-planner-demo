@@ -38,12 +38,20 @@ export const useGuestGroups = (isEnabled: boolean = true) => {
     }
 
     // เปรียบเทียบด้วย JSON string (deep comparison)
+    // รวม seat information เพื่อให้ detect การเปลี่ยนแปลงของ tableId/zoneId
     const currentGroupsString = JSON.stringify(mappedGroups.map(g => ({
       groupId: g.groupId,
       totalCount: g.totalCount,
       checkedInCount: g.checkedInCount,
       membersCount: g.members.length,
       memberIds: g.members.map(m => m.id).sort(),
+      memberSeats: g.members.map(m => ({
+        id: m.id,
+        seat: m.seat ? {
+          tableId: m.seat.tableId,
+          zoneId: m.seat.zoneId,
+        } : null,
+      })).sort((a, b) => a.id.localeCompare(b.id)),
     })));
 
     // ถ้าข้อมูลไม่เปลี่ยน → ไม่ต้อง update

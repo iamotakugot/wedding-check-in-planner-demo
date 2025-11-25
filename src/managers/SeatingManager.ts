@@ -34,7 +34,8 @@ export class SeatingManager {
    */
   async validateSeatingAssignment(guestId: string, tableId: string): Promise<{ valid: boolean; error?: string }> {
     const guest = await this.guestService.getById(guestId);
-    const table = await this.tableService.getAll().then(tables => tables.find(t => t.id === tableId));
+    // tableId is now table.tableId (unique identifier), not table.id
+    const table = await this.tableService.getAll().then(tables => tables.find(t => t.tableId === tableId));
 
     if (!guest) {
       return { valid: false, error: 'ไม่พบ Guest' };
