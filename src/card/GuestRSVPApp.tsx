@@ -68,6 +68,10 @@ import { defaultWeddingCardConfig, getOrderedNames, type WeddingCardConfig } fro
 // นำเข้า utility functions
 import { generateId } from '@/utils/id';
 import { logger } from '@/utils/logger';
+// นำเข้า hooks และ components
+import { useConfig } from '@/hooks/useConfig';
+import { useCountdown } from '@/hooks/useCountdown';
+import { FlipCard } from '@/components/common/FlipCard';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -218,7 +222,37 @@ const GlobalStyleLoader = () => (
 
       .flip-back { transform: rotateY(180deg); background-color: #fff; }
 
-      
+      /* Countdown Flip Card Animation */
+      .flip-card {
+        perspective: 1000px;
+        width: 100%;
+        height: 100%;
+      }
+
+      .flip-card-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.6s;
+        transform-style: preserve-3d;
+      }
+
+      .flip-card.flip .flip-card-inner {
+        transform: rotateY(180deg);
+      }
+
+      .flip-card-front,
+      .flip-card-back {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+      }
+
+      .flip-card-back {
+        transform: rotateY(180deg);
+      }
 
       .side-inactive { pointer-events: none; opacity: 0; transition-delay: 0.4s; }
 
@@ -426,63 +460,29 @@ const PLAYLIST = [
 
 // Component สำหรับแสดง countdown timer ไปยังวันงานแต่งงาน
 const CountdownTimer: React.FC = () => {
-    // ฟังก์ชันคำนวณเวลาที่เหลือจนถึงวันงาน
-    const calculateTimeLeft = () => {
-        // ใช้ slash format เพื่อความเข้ากันได้กับ browser ต่างๆ (โดยเฉพาะ iOS/Safari)
-        const targetDate = new Date('2026/01/31 08:09:00').getTime();
-        const now = new Date().getTime();
-        const distance = targetDate - now;
-
-        // ถ้าเวลาผ่านไปแล้ว ให้ return 0 ทั้งหมด
-        if (distance < 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
-
-        // คำนวณวัน, ชั่วโมง, นาที, วินาทีที่เหลือ
-        return {
-            days: Math.floor(distance / (1000 * 60 * 60 * 24)),
-            hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-            minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
-            seconds: Math.floor((distance % (1000 * 60)) / 1000)
-        };
-    };
-
-
-
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-
-
-
-    useEffect(() => {
-
-        const interval = setInterval(() => {
-
-            setTimeLeft(calculateTimeLeft());
-
-        }, 1000);
-
-        return () => clearInterval(interval);
-
-    }, []);
-
-
+    const { config } = useConfig(true);
+    
+    // Fallback to hardcoded date if config not available
+    const weddingDate = config?.weddingDate || '2026/01/31 08:09:00';
+    const { days, hours, mins, secs } = useCountdown(weddingDate);
 
     return (
-
         <div className="flex justify-center gap-2 md:gap-3 mt-0 md:mt-3 font-cinzel text-[#5c3a58] opacity-80">
-
-            <div className="text-center"><div className="text-base md:text-2xl font-bold">{timeLeft.days}</div><div className="text-[7px] md:text-[8px] uppercase tracking-wider">Days</div></div>
-
-            <div className="text-center"><div className="text-base md:text-2xl font-bold font-sans">:</div></div>
-
-            <div className="text-center"><div className="text-base md:text-2xl font-bold">{timeLeft.hours}</div><div className="text-[7px] md:text-[8px] uppercase tracking-wider">Hours</div></div>
-
-            <div className="text-center"><div className="text-base md:text-2xl font-bold font-sans">:</div></div>
-
-            <div className="text-center"><div className="text-base md:text-2xl font-bold">{timeLeft.minutes}</div><div className="text-[7px] md:text-[8px] uppercase tracking-wider">Mins</div></div>
-
+            <FlipCard value={days} label="Days" />
+            <div className="text-center">
+                <div className="text-base md:text-2xl font-bold font-sans">:</div>
+            </div>
+            <FlipCard value={hours} label="Hours" />
+            <div className="text-center">
+                <div className="text-base md:text-2xl font-bold font-sans">:</div>
+            </div>
+            <FlipCard value={mins} label="Mins" />
+            <div className="text-center">
+                <div className="text-base md:text-2xl font-bold font-sans">:</div>
+            </div>
+            <FlipCard value={secs} label="Secs" />
         </div>
-
     );
-
 };
 
 
