@@ -72,6 +72,8 @@ import { logger } from '@/utils/logger';
 import { useConfig } from '@/hooks/useConfig';
 import { useCountdown } from '@/hooks/useCountdown';
 import { FlipCard } from '@/components/common/FlipCard';
+import { InAppBrowserBanner } from '@/components/common/InAppBrowserBanner';
+import { isInAppBrowser } from '@/utils/browserDetection';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -223,6 +225,28 @@ const GlobalStyleLoader = () => (
       .flip-back { transform: rotateY(180deg); background-color: #fff; }
 
       /* Countdown Flip Card Animation */
+      .countdown-number-wrapper {
+        position: relative;
+        width: 3.2rem;
+        height: 2.4rem;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      @media (min-width: 600px) {
+        .countdown-number-wrapper {
+          width: 3.5rem;
+          height: 2.6rem;
+        }
+      }
+
+      @media (min-width: 768px) {
+        .countdown-number-wrapper {
+          width: 4rem;
+          height: 3rem;
+        }
+      }
+
       .flip-card {
         perspective: 1000px;
         width: 100%;
@@ -244,14 +268,91 @@ const GlobalStyleLoader = () => (
       .flip-card-front,
       .flip-card-back {
         position: absolute;
-        width: 100%;
-        height: 100%;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         backface-visibility: hidden;
         -webkit-backface-visibility: hidden;
       }
 
       .flip-card-back {
         transform: rotateY(180deg);
+      }
+
+      .countdown-number {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        font-size: 1.6rem;
+        text-align: center;
+        line-height: 1;
+      }
+
+      @media (min-width: 600px) {
+        .countdown-number {
+          font-size: 1.8rem;
+        }
+      }
+
+      @media (min-width: 768px) {
+        .countdown-number {
+          font-size: 2rem;
+        }
+      }
+
+      .countdown-label {
+        font-size: 7px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: 0.25rem;
+      }
+
+      @media (min-width: 768px) {
+        .countdown-label {
+          font-size: 8px;
+        }
+      }
+
+      .countdown {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 0.5rem;
+        flex-wrap: nowrap;
+        width: 100%;
+        max-width: 100%;
+      }
+
+      @media (min-width: 600px) {
+        .countdown {
+          gap: 0.6rem;
+        }
+      }
+
+      @media (min-width: 768px) {
+        .countdown {
+          gap: 0.75rem;
+        }
+      }
+
+      .countdown-separator {
+        align-self: center;
+        padding-bottom: 0.3rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      @media (min-width: 600px) {
+        .countdown-separator {
+          font-size: 1rem;
+        }
+      }
+
+      @media (min-width: 768px) {
+        .countdown-separator {
+          font-size: 1.5rem;
+        }
       }
 
       .side-inactive { pointer-events: none; opacity: 0; transition-delay: 0.4s; }
@@ -467,19 +568,13 @@ const CountdownTimer: React.FC = () => {
     const { days, hours, mins, secs } = useCountdown(weddingDate);
 
     return (
-        <div className="flex justify-center gap-2 md:gap-3 mt-0 md:mt-3 font-cinzel text-[#5c3a58] opacity-80">
+        <div className="countdown justify-center mt-0 md:mt-3 font-cinzel text-[#5c3a58] opacity-80">
             <FlipCard value={days} label="Days" />
-            <div className="text-center">
-                <div className="text-base md:text-2xl font-bold font-sans">:</div>
-            </div>
+            <div className="countdown-separator font-sans">:</div>
             <FlipCard value={hours} label="Hours" />
-            <div className="text-center">
-                <div className="text-base md:text-2xl font-bold font-sans">:</div>
-            </div>
+            <div className="countdown-separator font-sans">:</div>
             <FlipCard value={mins} label="Mins" />
-            <div className="text-center">
-                <div className="text-base md:text-2xl font-bold font-sans">:</div>
-            </div>
+            <div className="countdown-separator font-sans">:</div>
             <FlipCard value={secs} label="Secs" />
         </div>
     );
@@ -832,6 +927,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
     // เพิ่ม ref เพื่อป้องกันการ logout ซ้ำ
     const isLoggingOutRef = useRef(false);
     const sessionLogoutTriggeredRef = useRef(false);
+    // State สำหรับควบคุมการแสดงแบนเนอร์ช่วยเหลือ in-app browser
+    const [showBrowserBanner, setShowBrowserBanner] = useState(true);
     
 
     // Check persistent login on mount
@@ -1155,6 +1252,16 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
+
+    // ตรวจสอบ in-app browser และแสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอิน
+    useEffect(() => {
+        if (isLoggedIn || !isInAppBrowser()) {
+            setShowBrowserBanner(false);
+            return;
+        }
+        // แสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอินและเป็น in-app browser
+        setShowBrowserBanner(true);
+    }, [isLoggedIn]);
 
     // Handle open in browser
     // ใช้ deep link สำหรับ mobile หรือ fallback สำหรับ desktop
@@ -2046,6 +2153,11 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         return (
 
             <div className="w-full max-w-md mx-auto h-full flex flex-col pt-4">
+
+                {/* แบนเนอร์ช่วยเหลือ in-app browser - แสดงเฉพาะเมื่อยังไม่ล็อกอิน */}
+                {!isLoggedIn && showBrowserBanner && (
+                    <InAppBrowserBanner onDismiss={() => setShowBrowserBanner(false)} />
+                )}
 
                 <div className="absolute inset-0 opacity-10 pointer-events-none z-0" style={{
 
