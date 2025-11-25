@@ -436,18 +436,18 @@ const GuestsPage: React.FC = () => {
           </div>
 
           {selectedCheckInIds.length > 0 && (
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg flex justify-between items-center">
-              <Text strong>เลือก {selectedCheckInIds.length} คน</Text>
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg flex flex-col sm:flex-row justify-between items-center gap-2">
+              <Text strong className="text-base">เลือก {selectedCheckInIds.length} คน</Text>
               <Space>
                 <Button onClick={() => setSelectedCheckInIds([])}>ยกเลิก</Button>
-                <Button type="primary" onClick={handleBulkCheckIn}>
+                <Button type="primary" onClick={handleBulkCheckIn} size="large">
                   เช็คอินที่เลือก ({selectedCheckInIds.length} คน)
                 </Button>
               </Space>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredCheckInMembers.map(({ guest, group, member }) => {
               const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
               const canCheckIn = rsvpStatus !== 'no';
