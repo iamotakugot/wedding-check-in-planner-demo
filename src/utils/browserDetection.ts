@@ -120,7 +120,7 @@ export function isInAppBrowser(): boolean {
   const result = isMessenger || isLine || isInstagram || isTwitter || suspiciousFeatures || suspiciousReferrer;
   
   // Debug logging (สามารถ disable ได้ด้วย flag)
-  if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
+  if (typeof window !== 'undefined' && (window as unknown as { __DEBUG_BROWSER_DETECTION__?: boolean }).__DEBUG_BROWSER_DETECTION__) {
     console.log('[Browser Detection]', {
       userAgent,
       isMessenger,

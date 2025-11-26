@@ -98,6 +98,16 @@ const isIOSWebView = (): boolean => {
   return /iPhone|iPad|iPod/i.test(userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
 };
 
+const isIOSSafari = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
+  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|OPiOS|mercury/i.test(userAgent);
+  const isStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+  // iOS Safari (ไม่ใช่ WebView, ไม่ใช่ Chrome/Firefox/Opera, ไม่ใช่ PWA)
+  return isIOS && isSafari && !isStandalone;
+};
+
 const isGeneralWebView = (): boolean => {
   if (typeof window === 'undefined') return false;
   const nav = window.navigator as unknown as { standalone?: boolean; ReactNativeWebView?: unknown };
@@ -236,10 +246,13 @@ export class AuthService {
   async signInWithGoogle(): Promise<void> {
     const webViewInfo = this.getWebViewInfo();
     const { isInWebView, isFacebookWebView, sessionStorageAvailable } = webViewInfo;
-    const shouldUseRedirect = isFacebookWebView || (isInWebView && !sessionStorageAvailable);
+    const isIOS = isIOSSafari();
+    // ใช้ redirect บน iOS Safari, Facebook WebView, หรือ WebView ที่ไม่มี sessionStorage
+    const shouldUseRedirect = isIOS || isFacebookWebView || (isInWebView && !sessionStorageAvailable);
 
     try {
       if (shouldUseRedirect) {
+        logger.log('[AuthService] Using redirect flow for Google login', { isIOS, isFacebookWebView, isInWebView });
         await signInWithRedirect(auth, this.googleProvider);
         return;
       }
@@ -251,6 +264,7 @@ export class AuthService {
         error.code === 'auth/cancelled-popup-request' ||
         error.code === 'auth/operation-not-supported-in-this-environment'
       )) {
+        logger.log('[AuthService] Popup failed, falling back to redirect', { errorCode: error.code });
         await signInWithRedirect(auth, this.googleProvider);
         return;
       }
@@ -261,11 +275,13 @@ export class AuthService {
   async signInWithFacebook(): Promise<void> {
     const webViewInfo = this.getWebViewInfo();
     const { isInWebView, isFacebookWebView, sessionStorageAvailable } = webViewInfo;
+    const isIOS = isIOSSafari();
     
     // ไม่ block login แล้ว - ให้ banner เตือนแทน
     // ผู้ใช้สามารถลอง login ได้ แต่ banner จะเตือนว่าอาจไม่สำเร็จ
     
-    const shouldUseRedirect = isFacebookWebView || (isInWebView && !sessionStorageAvailable);
+    // ใช้ redirect บน iOS Safari, Facebook WebView, หรือ WebView ที่ไม่มี sessionStorage
+    const shouldUseRedirect = isIOS || isFacebookWebView || (isInWebView && !sessionStorageAvailable);
 
     try {
       if (shouldUseRedirect) {
@@ -273,6 +289,7 @@ export class AuthService {
         if (!sessionStorageAvailable) {
           logger.warn('[AuthService] SessionStorage ไม่ available - redirect อาจไม่สำเร็จ');
         }
+        logger.log('[AuthService] Using redirect flow for Facebook login', { isIOS, isFacebookWebView, isInWebView });
         await signInWithRedirect(auth, this.facebookProvider);
         return;
       }
@@ -289,6 +306,7 @@ export class AuthService {
         if (!sessionStorageAvailable) {
           logger.warn('[AuthService] Popup ไม่ทำงาน และ sessionStorage ไม่ available - redirect อาจไม่สำเร็จ');
         }
+        logger.log('[AuthService] Popup failed, falling back to redirect', { errorCode: error.code });
         await signInWithRedirect(auth, this.facebookProvider);
         return;
       }
