@@ -244,32 +244,10 @@ export class AuthService {
   }
 
   async signInWithGoogle(): Promise<void> {
-    const webViewInfo = this.getWebViewInfo();
-    const { isInWebView, isFacebookWebView, sessionStorageAvailable } = webViewInfo;
-    const isIOS = isIOSSafari();
-    // ใช้ redirect บน iOS Safari, Facebook WebView, หรือ WebView ที่ไม่มี sessionStorage
-    const shouldUseRedirect = isIOS || isFacebookWebView || (isInWebView && !sessionStorageAvailable);
-
-    try {
-      if (shouldUseRedirect) {
-        logger.log('[AuthService] Using redirect flow for Google login', { isIOS, isFacebookWebView, isInWebView });
-        await signInWithRedirect(auth, this.googleProvider);
-        return;
-      }
-      await signInWithPopup(auth, this.googleProvider);
-    } catch (error: unknown) {
-      if (isFirebaseError(error) && (
-        error.code === 'auth/popup-blocked' ||
-        error.code === 'auth/popup-closed-by-user' ||
-        error.code === 'auth/cancelled-popup-request' ||
-        error.code === 'auth/operation-not-supported-in-this-environment'
-      )) {
-        logger.log('[AuthService] Popup failed, falling back to redirect', { errorCode: error.code });
-        await signInWithRedirect(auth, this.googleProvider);
-        return;
-      }
-      throw error;
-    }
+    // 🔧 Fix: ใช้ redirect เสมอเพื่อหลีกเลี่ยงปัญหา COOP policy
+    // Redirect flow ทำงานได้ดีกว่าบนทุก platform และไม่มีปัญหา COOP
+    logger.log('[AuthService] Using redirect flow for Google login (always use redirect)');
+    await signInWithRedirect(auth, this.googleProvider);
   }
 
   async signInWithFacebook(): Promise<void> {
