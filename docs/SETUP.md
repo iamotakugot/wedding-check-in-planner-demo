@@ -16,7 +16,7 @@ npm install
 
 1. สร้าง Firebase Project ใน [Firebase Console](https://console.firebase.google.com/)
 2. เปิดใช้งาน Realtime Database
-3. เปิดใช้งาน Authentication (Email/Password, Google, Facebook)
+3. เปิดใช้งาน Authentication (Email/Password, Google)
 4. อัปเดต `src/firebase/config.ts` ด้วย Firebase config ของคุณ
 5. Deploy Firebase Rules (รวม .indexOn rules สำหรับ performance):
 

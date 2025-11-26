@@ -19,7 +19,6 @@ import {
 // นำเข้า icons จาก Ant Design
 import {
   UsergroupAddOutlined,
-  FacebookFilled,
   GoogleCircleFilled,
   HeartFilled,
   EnvironmentOutlined,
@@ -901,7 +900,10 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 
 
 // Card Back Component - Component สำหรับแสดงด้านหลังของการ์ดเชิญ (ฟอร์ม RSVP)
-const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
+const CardBack: React.FC<{ 
+    onFlip: () => void;
+    onLoginSuccess?: () => void;
+}> = ({ onFlip, onLoginSuccess }) => {
     // State สำหรับสถานะการ login
     const [isLoggedIn, setIsLoggedIn] = useState(false); 
     // State สำหรับข้อมูล RSVP ที่ส่งแล้ว
@@ -965,23 +967,37 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     setUserInfo(user);
                     
                     // Debug: ตรวจสอบ providerData และ photoURL
-                    logger.log('🔍 Facebook Auth Data:', {
+                    logger.log('🔍 Google Auth Data:', {
                         providerData: user.providerData,
                         photoURL: user.photoURL,
-                        facebookProvider: user.providerData?.find(p => p.providerId === 'facebook.com'),
-                        facebookPhotoURL: user.providerData?.find(p => p.providerId === 'facebook.com')?.photoURL
+                        googleProvider: user.providerData?.find(p => p.providerId === 'google.com'),
+                        googlePhotoURL: user.providerData?.find(p => p.providerId === 'google.com')?.photoURL
                     });
                     
                     setIsCheckingAuth(false);
                     message.success('เข้าสู่ระบบสำเร็จ');
                     
-                    // สร้าง session ใหม่หลังจาก redirect login (เฉพาะหน้า guest)
+                    // 🔧 Fix: หลังจาก redirect login สำเร็จ ให้ flip ไปหน้า login form
+                    if (onLoginSuccess) {
+                        onLoginSuccess();
+                    }
+                    
+                    // Update Firebase state เพื่อบันทึกว่า flip แล้ว
                     const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
                     const isAdminPath = currentPathname.startsWith('/admin');
                     
                     if (!isAdminPath) {
+                        // สร้าง session ใหม่หลังจาก redirect login
                         registerSession(user, false).catch((sessionError) => {
                             logger.error('Error registering session:', sessionError);
+                        });
+                        
+                        // Update app state เพื่อบันทึกว่า flip แล้ว
+                        updateUserAppState(user.uid, { 
+                            isFlipped: true,
+                            hasStarted: true 
+                        }).catch((stateError) => {
+                            logger.error('Error updating app state:', stateError);
                         });
                     }
                 } else {
@@ -1147,7 +1163,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             // Subscribe เพื่อรับการเปลี่ยนแปลง RSVP แบบ real-time
             const unsubscribe = onValue(rsvpRef, (snapshot) => {
                 if (!snapshot.exists()) {
-                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
+                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Google
                     if (userInfo) {
                         form.setFieldsValue({
                             fullName: userInfo.displayName || '',
@@ -1192,7 +1208,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                         accompanyingGuests: userRSVP.accompanyingGuests || [],
                     });
                 } else if (userInfo) {
-                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Facebook/Google
+                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Google
                     form.setFieldsValue({
                         fullName: userInfo.displayName || '',
                     });
@@ -1283,8 +1299,8 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
         }
     }, [isLoggedIn]);
 
-    // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google หรือ Facebook
-    const handleLogin = async (provider: 'google' | 'facebook') => {
+    // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google
+    const handleLogin = async (provider: 'google') => {
         // Prevent multiple clicks - ป้องกันการคลิกซ้ำ
         if (loading) return;
 
@@ -1306,11 +1322,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             
             // ถ้า popup สำเร็จ ฟังก์ชันจะ resolve และไม่ redirect
             // ถ้า fallback เป็น redirect หน้าเพจจะเปลี่ยนทันที
-            if (provider === 'google') {
-                await AuthService.getInstance().signInWithGoogle();
-            } else if (provider === 'facebook') {
-                await AuthService.getInstance().signInWithFacebook();
-            }
+            await AuthService.getInstance().signInWithGoogle();
 
             // หลังจาก login สำเร็จ ให้ดึง user จาก Firebase Auth โดยตรง
             // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
@@ -1355,7 +1367,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 message.error('โดเมนนี้ไม่ได้รับอนุญาตใน Firebase Auth. กรุณาเพิ่มโดเมนใน Authorized domains');
                 setLoading(false);
             } else if (error.code === 'auth/operation-not-allowed') {
-                message.error('ยังไม่ได้เปิดใช้งานผู้ให้บริการเข้าสู่ระบบ โปรดเปิด Facebook/Google ใน Firebase Console');
+                message.error('ยังไม่ได้เปิดใช้งานผู้ให้บริการเข้าสู่ระบบ โปรดเปิด Google ใน Firebase Console');
                 setLoading(false);
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 message.error('อีเมลนี้ถูกเชื่อมกับผู้ให้บริการอื่นอยู่แล้ว กรุณาเข้าสู่ระบบด้วยผู้ให้บริการเดิม');
@@ -1447,12 +1459,12 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
             return user.photoURL;
         }
         
-        // ถ้าไม่มี ให้ตรวจสอบ providerData สำหรับ Facebook provider
-        const facebookProvider = user.providerData?.find(
-            p => p.providerId === 'facebook.com'
+        // ถ้าไม่มี ให้ตรวจสอบ providerData สำหรับ Google provider
+        const googleProvider = user.providerData?.find(
+            p => p.providerId === 'google.com'
         );
-        if (facebookProvider?.photoURL) {
-            return facebookProvider.photoURL;
+        if (googleProvider?.photoURL) {
+            return googleProvider.photoURL;
         }
         
         // Fallback: undefined (จะแสดง icon แทน)
@@ -1528,7 +1540,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                 firstName: firstName,
                 lastName: lastName,
                 fullName: fullName, // เก็บ fullName เพิ่มด้วย
-                photoURL: getAvatarUrl(userInfo) || null, // เก็บภาพ profile จาก Facebook/Google (ตรวจสอบ providerData ถ้า photoURL หลักไม่มี)
+                photoURL: getAvatarUrl(userInfo) || null, // เก็บภาพ profile จาก Google (ตรวจสอบ providerData ถ้า photoURL หลักไม่มี)
                 nickname: values.nickname || '',
                 side: values.side || 'groom',
                 relation: values.relation || '',
@@ -1972,18 +1984,6 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                     <Text type="secondary" className="block mb-6 text-xs">กรุณายืนยันตัวตนเพื่อลงทะเบียน</Text>
 
                     <div className="space-y-3">
-                        <Button 
-                            block 
-                            size="large" 
-                            icon={<FacebookFilled />} 
-                            className="h-12 bg-[#1877f2] text-white border-none rounded-xl shadow-sm hover:opacity-90 font-medium" 
-                            onClick={() => handleLogin('facebook')} 
-                            loading={loading} 
-                            disabled={loading}
-                        >
-                            เข้าสู่ระบบด้วย Facebook
-                        </Button>
-
                         <Button block size="large" icon={<GoogleCircleFilled />} className="h-12 bg-white text-gray-600 border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 font-medium" onClick={() => handleLogin('google')} loading={loading} disabled={loading}>เข้าสู่ระบบด้วย Google</Button>
 
                     </div>
@@ -2336,7 +2336,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
 
                                                 </div>
 
-                                                {/* แสดงภาพและชื่อจาก Facebook/Google */}
+                                                {/* แสดงภาพและชื่อจาก Google */}
                                                 {userInfo && (
                                                     <div className="flex items-center gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
                                                         <Avatar 
@@ -2347,7 +2347,7 @@ const CardBack: React.FC<{ onFlip: () => void }> = ({ onFlip }) => {
                                                         />
                                                         <div className="flex-1">
                                                             <div className="text-xs text-gray-500 mb-1">
-                                                                ข้อมูลจาก {userInfo.providerData?.[0]?.providerId === 'facebook.com' ? 'Facebook' : userInfo.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'บัญชี'}
+                                                                ข้อมูลจาก {userInfo.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'บัญชี'}
                                                             </div>
                                                             <Form.Item name="fullName" className="mb-0">
                                                                 <Input 
@@ -2809,6 +2809,23 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         }, 100);
     };
 
+    // Callback สำหรับเมื่อ login สำเร็จ (redirect flow)
+    const handleLoginSuccess = useCallback(() => {
+        setIsFlipped(true);
+        setShowIntro(false);
+        
+        // Update Firebase state
+        const user = AuthService.getInstance().getCurrentUser();
+        if (user) {
+            updateUserAppState(user.uid, { 
+                isFlipped: true,
+                hasStarted: true 
+            }).catch((stateError) => {
+                logger.error('Error updating app state after login:', stateError);
+            });
+        }
+    }, []);
+
     // 🔧 Fix: ฟังก์ชันสำหรับกลับไปหน้าแรกของการ์ดเมื่อกดกากบาท
     const handleFlipBack = () => {
         setIsFlipped(false);
@@ -3027,7 +3044,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
 
                     </div>
 
-                    <div className={`flip-back ${!isFlipped ? 'side-inactive' : 'side-active'}`}><CardBack onFlip={handleFlipBack} /></div>
+                    <div className={`flip-back ${!isFlipped ? 'side-inactive' : 'side-active'}`}><CardBack onFlip={handleFlipBack} onLoginSuccess={handleLoginSuccess} /></div>
 
                 </div>
 

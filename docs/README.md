@@ -30,7 +30,8 @@
 - ✅ **Click-based Seating Assignment**: จัดที่นั่งแบบคลิก (เลือกแขก → คลิกโต๊ะ)
 - ✅ **RSVP Status Integration**: ผูกสถานะตอบรับ (`isComing`) กับสิทธิ์เช็คอิน
 - ✅ **UI Text Updates**: เปลี่ยนข้อความ "RSVP" เป็น "ตอบรับร่วมงาน"
-- ✅ **Facebook Login Fix**: แก้ไขปัญหา Facebook Login ใน Messenger WebView
+- ✅ **Google Login Only**: ใช้ Google Login เท่านั้น (ลบ Facebook Login)
+- ✅ **iOS Safari Redirect Fix**: แก้ไขปัญหา redirect login บน iOS Safari ให้ทำงานได้ถูกต้อง
 - ✅ **Configuration Update**: แก้ไขนามสกุล "Pisapeng" → "Phitpheng"
 - ✅ **Tree Data Table with Row Numbers**: ตารางแขกแสดงแบบ expandable rows พร้อมลำดับ (กลุ่มละ 1, 1.1, 1.2, ...)
 - ✅ **Timestamp Columns**: เพิ่มคอลัมน์เวลาแก้ไขในหน้า RSVPs และเวลาเช็คอินในหน้า Guests

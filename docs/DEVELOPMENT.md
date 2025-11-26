@@ -9,7 +9,7 @@
 
 ## Testing Guidelines
 - Manual testing สำหรับ critical flows
-- Test mobile compatibility (Facebook Messenger browser)
+- Test mobile compatibility (Messenger, LINE, Instagram in-app browsers)
 - Test realtime sync (Card ↔ Admin)
 - Test error scenarios
 
@@ -35,9 +35,9 @@
 ### Auth Testing
 
 #### Normal Browser (Chrome/Safari)
-- [ ] Facebook login ทำงานปกติ (ใช้ popup)
-- [ ] Google login ทำงานปกติ (ใช้ popup)
+- [ ] Google login ทำงานปกติ (ใช้ popup หรือ redirect ตาม browser)
 - [ ] Redirect result ถูก handle ถูกต้องหลัง redirect
+- [ ] หลังจาก redirect login สำเร็จ → flip ไปหน้า login form อัตโนมัติ
 - [ ] Auth state persist หลัง refresh
 - [ ] Logout ทำงานถูกต้อง
 
@@ -45,23 +45,22 @@
 - [ ] เปิดลิงค์จาก Messenger → ไม่มี modal บังการ์ดหน้าแรก
 - [ ] Flip ไปหน้า "ลงทะเบียน" → เห็น inline banner เตือน
 - [ ] Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-- [ ] ปุ่ม Facebook login ยังทำงานได้ (ไม่ถูก block)
 - [ ] ปุ่ม "คัดลอกลิงก์" ทำงานถูกต้อง (แสดง toast เมื่อสำเร็จ)
 - [ ] ปุ่ม "เปิดในเบราว์เซอร์" ทำงานถูกต้อง (เปิด external browser)
-- [ ] Google login ยังทำงานได้ (ไม่ถูก block)
+- [ ] Google login ยังทำงานได้ (ใช้ redirect flow)
 - [ ] ผู้ใช้สามารถกลับมาดูการ์ดและสลับไปมาระหว่างการ์ด ↔ ฟอร์มได้ตามปกติ
 
 #### Instagram WebView
 - [ ] เปิดลิงค์จาก Instagram → ไม่มี modal บังการ์ดหน้าแรก
 - [ ] Flip ไปหน้า "ลงทะเบียน" → เห็น inline banner เตือน
 - [ ] Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-- [ ] Facebook login ยังทำงานได้ (ไม่ถูก block แต่ banner เตือน)
+- [ ] Google login ยังทำงานได้ (ใช้ redirect flow)
 
 #### Facebook App WebView
 - [ ] เปิดลิงค์จาก Facebook App → ไม่มี modal บังการ์ดหน้าแรก
 - [ ] Flip ไปหน้า "ลงทะเบียน" → เห็น inline banner เตือน
 - [ ] Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-- [ ] Facebook login ยังทำงานได้ (ไม่ถูก block แต่ banner เตือน)
+- [ ] Google login ยังทำงานได้ (ใช้ redirect flow)
 
 #### Redirect Flow
 - [ ] Redirect result ถูก handle ถูกต้องใน normal browser
@@ -71,12 +70,12 @@
 
 ### Authentication & Profile Display
 
-#### Facebook Profile Photo
-- [ ] Facebook provider ให้ `photoURL` ผ่าน `public_profile` permission โดยอัตโนมัติ
+#### Google Profile Photo
+- [ ] Google provider ให้ `photoURL` โดยอัตโนมัติ
 - [ ] UI ใช้ `auth.currentUser.photoURL` เป็นหลัก
-- [ ] ถ้า `photoURL` หลักไม่มี ให้ตรวจสอบ `providerData` สำหรับ Facebook provider
-- [ ] Fallback logic: `user.photoURL` → `user.providerData.find(p => p.providerId === 'facebook.com')?.photoURL` → `undefined` (แสดง icon)
-- [ ] Avatar แสดงรูปโปรไฟล์ Facebook บนหน้า RSVP registration
+- [ ] ถ้า `photoURL` หลักไม่มี ให้ตรวจสอบ `providerData` สำหรับ Google provider
+- [ ] Fallback logic: `user.photoURL` → `user.providerData.find(p => p.providerId === 'google.com')?.photoURL` → `undefined` (แสดง icon)
+- [ ] Avatar แสดงรูปโปรไฟล์ Google บนหน้า RSVP registration
 - [ ] Avatar แสดงรูปโปรไฟล์ใน Admin RSVPs page
 - [ ] Debug logging แสดง providerData และ photoURL หลัง login
 
