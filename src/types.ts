@@ -58,7 +58,8 @@ export interface RSVPData {
   firstName: string;
   lastName: string;
   fullName?: string; // Denormalized: ชื่อ-นามสกุลรวมกัน
-  photoURL?: string | null; // URL ภาพจาก Facebook/Google
+  phoneNumber?: string; // เบอร์โทร (denormalized จาก GuestProfile)
+  photoURL?: string | null; // Profile picture URL (optional)
   nickname: string;
   isComing: 'yes' | 'no';
   side: 'groom' | 'bride';
@@ -99,5 +100,31 @@ export interface GuestGroup {
   totalCount: number; // จำนวนคนทั้งหมดในกลุ่ม
   relation: string; // ความสัมพันธ์กับคู่บ่าวสาว (จากหัวหน้า)
   side: Side; // ฝ่าย (groom/bride/both)
+}
+
+/**
+ * Guest Profile
+ * ข้อมูลโปรไฟล์ของแขกที่ล็อกอินด้วย OTP
+ */
+export interface GuestProfile {
+  uid: string;              // Firebase Auth UID (primary key)
+  phoneNumber: string;      // เบอร์โทร (+66XXXXXXXXX)
+  displayName?: string;     // ชื่อที่แสดง (optional)
+  role: 'guest';            // ชนิดผู้ใช้ (guest เท่านั้น)
+  weddingId?: string;       // ID งานแต่ง (ถ้ามีหลายงาน)
+  createdAt: string;        // ISO timestamp
+  updatedAt: string;        // ISO timestamp
+}
+
+/**
+ * Audit Log
+ * บันทึกเหตุการณ์สำคัญในระบบ
+ */
+export interface AuditLog {
+  logId: string;            // Auto-generated key
+  uid: string;              // Firebase Auth UID
+  action: string;           // 'login_with_phone', 'rsvp_created', 'rsvp_updated', etc.
+  metadata?: Record<string, any>;  // ข้อมูลเพิ่มเติม
+  createdAt: string;        // ISO timestamp
 }
 

@@ -264,17 +264,17 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
     >
       <div className="mb-3">
         <div className="flex gap-2 mb-2">
-          {isAssignMode && (
-            <Button
-              type="default"
-              danger
-              size="small"
-              onClick={onCancelAssign}
+        {isAssignMode && (
+          <Button
+            type="default"
+            danger
+            size="small"
+            onClick={onCancelAssign}
               style={{ flex: 1 }}
-            >
-              ยกเลิก
-            </Button>
-          )}
+          >
+            ยกเลิก
+          </Button>
+        )}
           {selectedGuestIds.length > 0 && (
             <Button
               type="default"
@@ -364,25 +364,25 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
             label: (
               <div className="flex items-center justify-between w-full pr-2">
                 <span className="font-medium text-sm md:text-base">{group.groupName}</span>
-                <Tag color="blue" className="ml-2">
-                  {group.unassignedMembers.length} คน
-                </Tag>
-              </div>
+                  <Tag color="blue" className="ml-2">
+                    {group.unassignedMembers.length} คน
+                  </Tag>
+                </div>
             ),
             style: {
               borderBottom: '1px solid #f0f0f0',
             },
             children: (
               <div style={{ padding: '8px 0' }}>
-                <List
-                  size="small"
-                  dataSource={group.unassignedMembers}
-                  renderItem={(member: GroupMember) => {
-                    const isSelected = selectedGuestId === member.id;
+              <List
+                size="small"
+                dataSource={group.unassignedMembers}
+                renderItem={(member: GroupMember) => {
+                  const isSelected = selectedGuestId === member.id;
                     const isChecked = selectedGuestIds.includes(member.id);
-                    
-                    return (
-                      <List.Item
+                  
+                  return (
+                    <List.Item
                         className={`cursor-pointer hover:bg-blue-50 transition-colors ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
                         style={{
                           padding: '8px 12px',
@@ -412,13 +412,13 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                             }}
                           />
                         ]}
-                      >
-                        <List.Item.Meta
-                          avatar={
-                            <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
-                              {(member.fullName || member.firstName || '?').charAt(0).toUpperCase()}
-                            </Avatar>
-                          }
+                    >
+                      <List.Item.Meta
+                        avatar={
+                          <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
+                            {(member.fullName || member.firstName || '?').charAt(0).toUpperCase()}
+                          </Avatar>
+                        }
                           title={
                             <span 
                               style={{ 
@@ -429,7 +429,7 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                                 fontSize: '13px',
                                 fontWeight: 500
                               }}
-                              title={renderMemberLabel(group, member)}
+                        title={renderMemberLabel(group, member)}
                             >
                               {renderMemberLabel(group, member)}
                             </span>
@@ -448,11 +448,11 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                               {`${getSideLabel(group.side)} • ${member.relationToMain || 'ไม่ระบุ'}`}
                             </span>
                           }
-                        />
-                      </List.Item>
-                    );
-                  }}
-                />
+                      />
+                    </List.Item>
+                  );
+                }}
+              />
               </div>
             ),
           }))}
@@ -510,7 +510,7 @@ const GuestSelectionSidebar: React.FC<GuestSelectionSidebarProps> = ({
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
                         }}
-                        title={formatGuestName(guest)}
+                    title={formatGuestName(guest)}
                       >
                         {formatGuestName(guest)}
                       </span>

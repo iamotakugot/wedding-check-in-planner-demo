@@ -65,14 +65,14 @@ export const useGuestGroups = (isEnabled: boolean = true) => {
 
     // Debug log (only when changed)
     if (process.env.NODE_ENV === 'development') {
-      console.log('[useGuestGroups] จำนวนกลุ่มทั้งหมด:', mappedGroups.length);
+    console.log('[useGuestGroups] จำนวนกลุ่มทั้งหมด:', mappedGroups.length);
       if (mappedGroups.length > 0) {
-        console.log('[useGuestGroups] รายละเอียดกลุ่ม:', mappedGroups.map(g => ({
-          groupId: g.groupId,
-          groupName: g.groupName,
-          totalCount: g.totalCount,
-          checkedInCount: g.checkedInCount,
-        })));
+    console.log('[useGuestGroups] รายละเอียดกลุ่ม:', mappedGroups.map(g => ({
+      groupId: g.groupId,
+      groupName: g.groupName,
+      totalCount: g.totalCount,
+      checkedInCount: g.checkedInCount,
+    })));
       }
     }
   }, [mappedGroups, rsvpsLoading, guestsLoading, tablesLoading, zonesLoading, isEnabled]);

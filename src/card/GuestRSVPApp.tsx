@@ -19,7 +19,6 @@ import {
 // นำเข้า icons จาก Ant Design
 import {
   UsergroupAddOutlined,
-  GoogleCircleFilled,
   HeartFilled,
   EnvironmentOutlined,
   PauseCircleOutlined,
@@ -70,8 +69,6 @@ import { logger } from '@/utils/logger';
 import { useConfig } from '@/hooks/useConfig';
 import { useCountdown } from '@/hooks/useCountdown';
 import { FlipCard } from '@/components/common/FlipCard';
-import { InAppBrowserBanner } from '@/components/common/InAppBrowserBanner';
-import { isInAppBrowser, isMobileDevice } from '@/utils/browserDetection';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -902,8 +899,7 @@ const CardFront: React.FC<MusicControlsProps> = ({ onFlip, isPlaying, onToggleMu
 // Card Back Component - Component สำหรับแสดงด้านหลังของการ์ดเชิญ (ฟอร์ม RSVP)
 const CardBack: React.FC<{ 
     onFlip: () => void;
-    onLoginSuccess?: () => void;
-}> = ({ onFlip, onLoginSuccess }) => {
+}> = ({ onFlip }) => {
     // State สำหรับสถานะการ login
     const [isLoggedIn, setIsLoggedIn] = useState(false); 
     // State สำหรับข้อมูล RSVP ที่ส่งแล้ว
@@ -928,8 +924,6 @@ const CardBack: React.FC<{
     // เพิ่ม ref เพื่อป้องกันการ logout ซ้ำ
     const isLoggingOutRef = useRef(false);
     const sessionLogoutTriggeredRef = useRef(false);
-    // State สำหรับควบคุมการแสดงแบนเนอร์ช่วยเหลือ in-app browser
-    const [showBrowserBanner, setShowBrowserBanner] = useState(true);
     
 
     // Check persistent login on mount
@@ -950,91 +944,7 @@ const CardBack: React.FC<{
             }
         }, 10000); // 10 seconds timeout
 
-        // 1. เช็ค redirect result ก่อน (ถ้ามี redirect result จะได้ผลลัพธ์ทันที)
-        AuthService.getInstance().checkRedirectResult()
-            .then((user) => {
-                if (!isMounted) return;
-                
-                // Clear timeout เมื่อได้ผลลัพธ์แล้ว
-                clearTimeout(authTimeout);
-                
-                if (user) {
-                    // User successfully signed in via redirect
-                    redirectResultHandled = true;
-                    logger.log('✅ Redirect login successful, user:', user.uid);
-                    setIsLoggedIn(true);
-                    setCurrentUser(user.uid);
-                    setUserInfo(user);
-                    
-                    // Debug: ตรวจสอบ providerData และ photoURL
-                    logger.log('🔍 Google Auth Data:', {
-                        providerData: user.providerData,
-                        photoURL: user.photoURL,
-                        googleProvider: user.providerData?.find(p => p.providerId === 'google.com'),
-                        googlePhotoURL: user.providerData?.find(p => p.providerId === 'google.com')?.photoURL
-                    });
-                    
-                    setIsCheckingAuth(false);
-                    message.success('เข้าสู่ระบบสำเร็จ');
-                    
-                    // 🔧 Fix: หลังจาก redirect login สำเร็จ ให้ flip ไปหน้า login form
-                    if (onLoginSuccess) {
-                        onLoginSuccess();
-                    }
-                    
-                    // Update Firebase state เพื่อบันทึกว่า flip แล้ว
-                    const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
-                    const isAdminPath = currentPathname.startsWith('/admin');
-                    
-                    if (!isAdminPath) {
-                        // สร้าง session ใหม่หลังจาก redirect login
-                        registerSession(user, false).catch((sessionError) => {
-                            logger.error('Error registering session:', sessionError);
-                        });
-                        
-                        // Update app state เพื่อบันทึกว่า flip แล้ว
-                        updateUserAppState(user.uid, { 
-                            isFlipped: true,
-                            hasStarted: true 
-                        }).catch((stateError) => {
-                            logger.error('Error updating app state:', stateError);
-                        });
-                    }
-                } else {
-                    // No redirect result, continue with auth state check
-                    logger.log('No redirect result, checking auth state...');
-                    
-                    // ไม่ต้องแสดง modal แล้ว - ใช้ inline banner แทน
-                }
-            })
-            .catch((err) => {
-                if (!isMounted) return;
-                
-                // 🔧 IMPORTANT: Clear timeout และ loading state เสมอแม้จะ error
-                clearTimeout(authTimeout);
-                setIsCheckingAuth(false);
-                
-                // Handle specific errors
-                if (err.code === 'auth/account-exists-with-different-credential') {
-                    message.error('อีเมลนี้ถูกใช้งานด้วยวิธีอื่นแล้ว กรุณาใช้วิธีเข้าสู่ระบบอื่น');
-                } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-                    // 🔧 สำหรับ Messenger WebView: sessionStorage error ไม่ควรแสดง error message
-                    if (err.message?.includes('sessionStorage') || 
-                        err.message?.includes('initial state') ||
-                        err.message?.includes('missing initial state')) {
-                        logger.warn('SessionStorage error in webview - continuing with auth state check');
-                        // ไม่แสดง error message เพื่อไม่ให้ผู้ใช้สับสน
-                    } else {
-                        logger.error('Redirect login error:', err);
-                        // แสดง error เฉพาะเมื่อไม่ใช่ sessionStorage error
-                        message.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ กรุณาลองใหม่');
-                    }
-                }
-                // Continue with auth state check even if redirect check fails
-                // onAuthStateChanged จะจัดการต่อ
-            });
-
-        // 2. Subscribe to auth state changes (สำหรับ persistent login และ logout)
+        // Subscribe to auth state changes (สำหรับ persistent login และ logout)
         // ไม่ใช้ setTimeout เพื่อให้ state อัปเดตทันที
         let isInitialAuthCheck = true; // เพิ่ม flag เพื่อเช็คว่าเป็น initial check หรือไม่
         
@@ -1268,133 +1178,7 @@ const CardBack: React.FC<{
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
 
-    // ตรวจสอบ mobile device หรือ in-app browser และแสดงแบนเนอร์เฉพาะเมื่อยังไม่ล็อกอิน
-    useEffect(() => {
-        const isMobile = isMobileDevice();
-        const isInApp = isInAppBrowser();
-        const shouldShow = !isLoggedIn && (isMobile || isInApp);
-        
-        // Debug logging
-        if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
-            console.log('[CardBack Banner Debug]', {
-                isLoggedIn,
-                isMobile,
-                isInAppBrowser: isInApp,
-                showBrowserBanner: shouldShow,
-                userAgent: window.navigator.userAgent,
-                referrer: document.referrer
-            });
-        }
-        
-        if (isLoggedIn) {
-            setShowBrowserBanner(false);
-            return;
-        }
-        
-        // แสดงแบนเนอร์เมื่อยังไม่ล็อกอินและเป็น mobile device หรือ in-app browser
-        if (isMobile || isInApp) {
-            setShowBrowserBanner(true);
-        } else {
-            setShowBrowserBanner(false);
-        }
-    }, [isLoggedIn]);
 
-    // ฟังก์ชันสำหรับเข้าสู่ระบบด้วย Google
-    const handleLogin = async (provider: 'google') => {
-        // Prevent multiple clicks - ป้องกันการคลิกซ้ำ
-        if (loading) return;
-
-        // ไม่ block login แต่ให้ banner เตือนแทน
-
-        // 🔧 DevOps Fix: ตรวจสอบว่าไม่ใช่หน้า admin ก่อนทำงาน session management
-        const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
-        const isAdminPath = currentPathname.startsWith('/admin');
-        
-        if (isAdminPath) {
-            // ถ้าอยู่ในหน้า admin ไม่ต้องทำงาน session management
-            logger.log('⏭️ [Login] ข้าม session management - อยู่ในหน้า admin');
-            setLoading(false);
-            return;
-        }
-
-        try {
-            setLoading(true);
-            
-            // ถ้า popup สำเร็จ ฟังก์ชันจะ resolve และไม่ redirect
-            // ถ้า fallback เป็น redirect หน้าเพจจะเปลี่ยนทันที
-            await AuthService.getInstance().signInWithGoogle();
-
-            // หลังจาก login สำเร็จ ให้ดึง user จาก Firebase Auth โดยตรง
-            // เพื่อให้แน่ใจว่า currentUser ถูก set ทันที (ไม่ต้องรอ onAuthStateChange)
-            const firebaseUser = AuthService.getInstance().getCurrentUser();
-            if (firebaseUser) {
-                logger.log('✅ Login successful, setting user state:', firebaseUser.uid);
-                setCurrentUser(firebaseUser.uid);
-                setUserInfo(firebaseUser);
-                setIsLoggedIn(true);
-                
-                // สร้าง session ใหม่
-                const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
-                const isAdminPath = currentPathname.startsWith('/admin');
-                
-                if (!isAdminPath) {
-                    registerSession(firebaseUser, false).catch((sessionError) => {
-                        logger.error('Error registering session:', sessionError);
-                    });
-                }
-            }
-
-            // กรณี popup สำเร็จ → ปลดล็อกปุ่ม submit ได้เลย
-            // กรณี redirect → จะถูกเพิกเฉยเพราะหน้าเพจจะย้ายออก
-            setLoading(false);
-        } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-            logger.error(`Error initiating ${provider} login:`, error);
-            
-            // Handle specific errors - จัดการ error เฉพาะ
-            if (error.code === 'auth/popup-blocked') {
-                message.error({
-                    content: 'ป๊อปอัปถูกบล็อก กรุณาอนุญาตป๊อปอัปสำหรับเว็บไซต์นี้ หรือเปิดในเบราว์เซอร์ภายนอก',
-                    duration: 5,
-                });
-                setLoading(false);
-            } else if (error.code === 'auth/popup-closed-by-user') {
-                message.warning('ยกเลิกการเข้าสู่ระบบ');
-                setLoading(false);
-            } else if (error.code === 'auth/network-request-failed') {
-                message.error('เกิดข้อผิดพลาดเกี่ยวกับเครือข่าย กรุณาลองใหม่');
-                setLoading(false);
-            } else if (error.code === 'auth/unauthorized-domain') {
-                message.error('โดเมนนี้ไม่ได้รับอนุญาตใน Firebase Auth. กรุณาเพิ่มโดเมนใน Authorized domains');
-                setLoading(false);
-            } else if (error.code === 'auth/operation-not-allowed') {
-                message.error('ยังไม่ได้เปิดใช้งานผู้ให้บริการเข้าสู่ระบบ โปรดเปิด Google ใน Firebase Console');
-                setLoading(false);
-            } else if (error.code === 'auth/account-exists-with-different-credential') {
-                message.error('อีเมลนี้ถูกเชื่อมกับผู้ให้บริการอื่นอยู่แล้ว กรุณาเข้าสู่ระบบด้วยผู้ให้บริการเดิม');
-                setLoading(false);
-            } else if (error.code === 'auth/operation-not-supported-in-this-environment') {
-                // สำหรับ WebView ที่ไม่รองรับ popup → แสดง message แนะนำ
-                message.warning('เบราว์เซอร์นี้อาจไม่รองรับการเข้าสู่ระบบ กรุณาเปิดในเบราว์เซอร์ภายนอก (Chrome/Safari)');
-                setLoading(false);
-            } else if (error.message?.startsWith('POPUP_BLOCKED|')) {
-                // ถ้า popup ถูกบล็อก → แสดง message แนะนำ
-                message.warning('ป๊อปอัปถูกบล็อก กรุณาเปิดในเบราว์เซอร์ภายนอก (Chrome/Safari)');
-                setLoading(false);
-            } else if (error.message?.includes('เปิดในเบราว์เซอร์') || 
-                       error.message?.includes('sessionStorage') ||
-                       error.message?.includes('initial state') ||
-                       error.message?.includes('missing initial state')) {
-                // สำหรับ WebView ที่ sessionStorage ไม่ทำงาน → แสดง message แนะนำ
-                message.warning('เบราว์เซอร์นี้อาจไม่รองรับการเข้าสู่ระบบ กรุณาเปิดในเบราว์เซอร์ภายนอก (Chrome/Safari)');
-                setLoading(false);
-            } else {
-                // ไม่ทราบสาเหตุ → แสดงข้อความผิดพลาดและเคลียร์ loading
-                const msg = typeof error?.message === 'string' ? error.message : 'ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่';
-                message.error(msg);
-                setLoading(false);
-            }
-        }
-    };
 
 
 
@@ -1966,27 +1750,14 @@ const CardBack: React.FC<{
         // และต้องผ่านการเช็ค auth state แล้ว (isCheckingAuth === false)
         if (!isLoggedIn || !currentUser) {
             // ตรวจสอบว่าเป็น mobile device หรือ in-app browser
-            const isMobile = isMobileDevice();
-            const isInApp = isInAppBrowser();
-            const shouldShowBanner = isMobile || isInApp;
-            
             return (
-
-                <div className={`w-full max-w-xs mx-auto text-center animate-fade-in relative ${shouldShowBanner && showBrowserBanner ? 'pt-32 md:pt-40' : 'pt-10'}`}>
+                <div className="w-full max-w-xs mx-auto text-center animate-fade-in relative pt-10">
                     
-                    {/* แบนเนอร์ช่วยเหลือสำหรับ mobile/in-app browser - แสดงในหน้า login */}
-                    {shouldShowBanner && showBrowserBanner && (
-                        <InAppBrowserBanner onDismiss={() => setShowBrowserBanner(false)} />
-                    )}
+                    <Title level={3} className="font-cinzel text-[#5c3a58] mb-2">กรุณาเข้าสู่ระบบ</Title>
 
-                    <Title level={3} className="font-cinzel text-[#5c3a58] mb-2">Welcome</Title>
-
-                    <Text type="secondary" className="block mb-6 text-xs">กรุณายืนยันตัวตนเพื่อลงทะเบียน</Text>
-
-                    <div className="space-y-3">
-                        <Button block size="large" icon={<GoogleCircleFilled />} className="h-12 bg-white text-gray-600 border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 font-medium" onClick={() => handleLogin('google')} loading={loading} disabled={loading}>เข้าสู่ระบบด้วย Google</Button>
-
-                    </div>
+                    <Text type="secondary" className="block mb-6 text-xs">
+                        คุณยังไม่ได้เข้าสู่ระบบ กรุณาไปที่หน้าแรกเพื่อเข้าสู่ระบบ
+                    </Text>
 
                 </div>
 
@@ -2098,29 +1869,9 @@ const CardBack: React.FC<{
 
             <div className="w-full max-w-md mx-auto h-full flex flex-col pt-4">
 
-                {/* แบนเนอร์ช่วยเหลือ in-app browser - แสดงเฉพาะเมื่อยังไม่ล็อกอิน */}
-                {(() => {
-                    const shouldRender = !isLoggedIn && showBrowserBanner;
-                    if (typeof window !== 'undefined' && (window as any).__DEBUG_BROWSER_DETECTION__) {
-                        console.log('[CardBack Banner Render]', {
-                            shouldRender,
-                            isLoggedIn,
-                            showBrowserBanner,
-                            isInAppBrowser: isInAppBrowser()
-                        });
-                    }
-                    return shouldRender ? (
-                        <InAppBrowserBanner onDismiss={() => setShowBrowserBanner(false)} />
-                    ) : null;
-                })()}
-
                 <div className="absolute inset-0 opacity-10 pointer-events-none z-0" style={{
-
                     backgroundImage: `url("https://www.transparenttextures.com/patterns/cream-paper.png")`,
-
                 }}></div>
-
-
 
                 <div className="text-center mb-6 relative z-10">
                     {userInfo && (
@@ -2809,22 +2560,8 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
         }, 100);
     };
 
-    // Callback สำหรับเมื่อ login สำเร็จ (redirect flow)
-    const handleLoginSuccess = useCallback(() => {
-        setIsFlipped(true);
-        setShowIntro(false);
-        
-        // Update Firebase state
-        const user = AuthService.getInstance().getCurrentUser();
-        if (user) {
-            updateUserAppState(user.uid, { 
-                isFlipped: true,
-                hasStarted: true 
-            }).catch((stateError) => {
-                logger.error('Error updating app state after login:', stateError);
-            });
-        }
-    }, []);
+    // Note: OTP login is now handled in App.tsx, not in CardBack component
+    // This callback is no longer needed as authentication happens before rendering GuestRSVPApp
 
     // 🔧 Fix: ฟังก์ชันสำหรับกลับไปหน้าแรกของการ์ดเมื่อกดกากบาท
     const handleFlipBack = () => {
@@ -3044,7 +2781,7 @@ const GuestRSVPApp: React.FC<{ onExitGuestMode: () => void }> = ({ onExitGuestMo
 
                     </div>
 
-                    <div className={`flip-back ${!isFlipped ? 'side-inactive' : 'side-active'}`}><CardBack onFlip={handleFlipBack} onLoginSuccess={handleLoginSuccess} /></div>
+                    <div className={`flip-back ${!isFlipped ? 'side-inactive' : 'side-active'}`}><CardBack onFlip={handleFlipBack} /></div>
 
                 </div>
 

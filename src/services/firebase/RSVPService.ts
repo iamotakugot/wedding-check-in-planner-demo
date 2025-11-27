@@ -7,6 +7,7 @@ import { ref, get, set, push, update, onValue, DataSnapshot } from 'firebase/dat
 import { database } from '@/firebase/config';
 import { RSVPData } from '@/types';
 import { AuthService } from './AuthService';
+import { AuditLogService } from './AuditLogService';
 import { logger } from '@/utils/logger';
 
 interface FirebaseError {
@@ -81,6 +82,22 @@ export class RSVPService {
       }
 
       await set(newRef, rsvpData);
+      
+      // Log audit event
+      try {
+        const auditService = AuditLogService.getInstance();
+        await auditService.create('rsvp_created', {
+          rsvpId: newRef.key,
+          uid: user.uid,
+          isComing: rsvp.isComing,
+          side: rsvp.side,
+          fullName: fullName,
+        });
+      } catch (auditError) {
+        // Don't fail RSVP creation if audit log fails
+        logger.warn('Failed to create audit log for RSVP creation:', auditError);
+      }
+      
       return newRef.key;
     } catch (error) {
       if (isFirebaseError(error) && error.code === 'PERMISSION_DENIED') {
@@ -127,6 +144,20 @@ export class RSVPService {
     }
 
     await update(ref(database, `rsvps/${id}`), updatesWithTimestamp);
+    
+    // Log audit event
+    try {
+      const auditService = AuditLogService.getInstance();
+      await auditService.create('rsvp_updated', {
+        rsvpId: id,
+        uid: user.uid,
+        updates: Object.keys(updates),
+        isComing: updates.isComing || undefined,
+      });
+    } catch (auditError) {
+      // Don't fail RSVP update if audit log fails
+      logger.warn('Failed to create audit log for RSVP update:', auditError);
+    }
   }
 
   async getById(id: string): Promise<RSVPData | null> {

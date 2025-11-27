@@ -8,11 +8,9 @@ import {
   signOut, 
   onAuthStateChanged, 
   User,
-  getRedirectResult,
-  signInWithRedirect,
-  signInWithPopup,
-  GoogleAuthProvider,
-  FacebookAuthProvider
+  signInWithPhoneNumber,
+  ConfirmationResult,
+  RecaptchaVerifier
 } from 'firebase/auth';
 import { auth } from '@/firebase/config';
 import { logger } from '@/utils/logger';
@@ -30,120 +28,58 @@ function isFirebaseError(error: unknown): error is FirebaseError {
   );
 }
 
-const isFacebookWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  const facebookWebViewPatterns = [
-    /FBAN/i, /FBAV/i, /FB_IAB/i, /FB4A/i, /Messenger/i, /FBMD/i, /FBSV/i,
-  ];
-  return facebookWebViewPatterns.some(pattern => pattern.test(userAgent));
-};
-
-const isInFacebookMessengerWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  const messengerPatterns = [
-    /FBAN\/Messenger/i,
-    /Messenger\/\d+/i,
-    /FB_IAB.*Messenger/i,
-  ];
-  return messengerPatterns.some(pattern => pattern.test(userAgent));
-};
-
-const isInInstagramWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  const instagramPatterns = [
-    /Instagram/i,
-    /FB_IAB.*Instagram/i,
-    /FBAN\/Instagram/i,
-  ];
-  return instagramPatterns.some(pattern => pattern.test(userAgent));
-};
-
-const isInFacebookAppWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  // Facebook App WebView (ไม่ใช่ Messenger)
-  const facebookAppPatterns = [
-    /FBAN\/FB/i,
-    /FB_IAB.*FB/i,
-    /FB4A/i,
-  ];
-  // ตรวจสอบว่าเป็น Facebook App แต่ไม่ใช่ Messenger
-  const isFacebookApp = facebookAppPatterns.some(pattern => pattern.test(userAgent));
-  const isMessenger = isInFacebookMessengerWebView();
-  return isFacebookApp && !isMessenger;
-};
-
-const isInInAppBrowser = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  const inAppPatterns = [
-    /FBAN/i, /FBAV/i, /FB_IAB/i, /FB4A/i,
-    /Messenger/i, /Instagram/i, /Line/i,
-  ];
-  return inAppPatterns.some(pattern => pattern.test(userAgent));
-};
-
-const isAndroidWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  return /wv/i.test(userAgent) && /Android/i.test(userAgent);
-};
-
-const isIOSWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  return /iPhone|iPad|iPod/i.test(userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
-};
-
-const isIOSSafari = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent || '';
-  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
-  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|OPiOS|mercury/i.test(userAgent);
-  const isStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-  // iOS Safari (ไม่ใช่ WebView, ไม่ใช่ Chrome/Firefox/Opera, ไม่ใช่ PWA)
-  return isIOS && isSafari && !isStandalone;
-};
-
-const isGeneralWebView = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const nav = window.navigator as unknown as { standalone?: boolean; ReactNativeWebView?: unknown };
-  return !!(nav.standalone || nav.ReactNativeWebView);
-};
-
-const isSessionStorageAvailable = (): boolean => {
-  try {
-    const test = '__sessionStorage_test__';
-    sessionStorage.setItem(test, test);
-    sessionStorage.removeItem(test);
-    return true;
-  } catch {
-    return false;
+/**
+ * Format phone number to E.164 format (+66XXXXXXXXX)
+ * Supports: 0812345678, +66812345678, 66812345678
+ * @param phoneNumber - Phone number in any format
+ * @returns Formatted phone number in E.164 format
+ */
+const formatPhoneNumber = (phoneNumber: string): string => {
+  // Remove all non-digit characters except +
+  let cleaned = phoneNumber.replace(/[^\d+]/g, '');
+  
+  // Remove + if exists
+  cleaned = cleaned.replace(/\+/g, '');
+  
+  // Must have 9-10 digits for Thai numbers
+  if (cleaned.length < 9 || cleaned.length > 10) {
+    throw new Error('เบอร์โทรศัพท์ต้องมี 9-10 หลัก');
   }
+  
+  // Handle different formats
+  if (cleaned.length === 10) {
+    // 10 digits: 0812345678 -> 66812345678
+    if (cleaned.startsWith('0')) {
+      cleaned = '66' + cleaned.substring(1);
+    } else if (!cleaned.startsWith('66')) {
+      throw new Error('เบอร์โทรศัพท์ 10 หลักต้องขึ้นต้นด้วย 0');
+    }
+  } else if (cleaned.length === 9) {
+    // 9 digits: 812345678 -> 66812345678
+    if (cleaned.startsWith('66')) {
+      // Already has country code, but only 9 digits total - invalid
+      throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง');
+    }
+    // Add country code
+    cleaned = '66' + cleaned;
+  }
+  
+  // Final validation: should be 11 digits (66 + 9 digits)
+  if (cleaned.length !== 11 || !cleaned.startsWith('66')) {
+    throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง');
+  }
+  
+  // Add + prefix for E.164 format
+  return '+' + cleaned;
 };
 
 export class AuthService {
   private static instance: AuthService;
   private subscriptions: Map<string, () => void> = new Map();
-  private googleProvider: GoogleAuthProvider;
-  private facebookProvider: FacebookAuthProvider;
+  private recaptchaVerifier: RecaptchaVerifier | null = null;
+  private confirmationResult: ConfirmationResult | null = null;
 
-  private constructor() {
-    this.googleProvider = new GoogleAuthProvider();
-    this.facebookProvider = new FacebookAuthProvider();
-    
-    this.googleProvider.addScope('profile');
-    this.googleProvider.addScope('email');
-    this.facebookProvider.addScope('email');
-    this.facebookProvider.addScope('public_profile');
-    this.facebookProvider.setCustomParameters({
-      display: 'popup',
-      auth_type: 'rerequest',
-    });
-  }
+  private constructor() {}
 
   static getInstance(): AuthService {
     if (!AuthService.instance) {
@@ -152,78 +88,149 @@ export class AuthService {
     return AuthService.instance;
   }
 
-  getWebViewInfo() {
-    const isInWebView = isFacebookWebView() || isAndroidWebView() || isIOSWebView() || isGeneralWebView();
-    const isFacebook = isFacebookWebView();
-    const isMessenger = isInFacebookMessengerWebView();
-    const isInstagram = isInInstagramWebView();
-    const isFacebookApp = isInFacebookAppWebView();
-    const sessionStorageAvailable = isSessionStorageAvailable();
-    const platform = typeof window !== 'undefined' ? window.navigator.platform : 'unknown';
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(platform);
-    
-    return {
-      isInWebView,
-      isFacebookWebView: isFacebook,
-      isMessengerWebView: isMessenger,
-      isInstagramWebView: isInstagram,
-      isFacebookAppWebView: isFacebookApp,
-      sessionStorageAvailable,
-      platform,
-      isMobile,
-      localStorageAvailable: typeof Storage !== 'undefined',
-    };
+  /**
+   * Setup reCAPTCHA verifier for phone authentication
+   * @param containerId - DOM element ID for reCAPTCHA widget (optional, uses invisible reCAPTCHA if not provided)
+   * @returns RecaptchaVerifier instance
+   */
+  setupRecaptchaVerifier(containerId?: string): RecaptchaVerifier {
+    // Clean up existing verifier if any
+    if (this.recaptchaVerifier) {
+      try {
+        this.recaptchaVerifier.clear();
+      } catch (error) {
+        logger.warn('[AuthService] Error clearing existing recaptcha verifier:', error);
+      }
+    }
+
+    // Create new verifier
+    // Use invisible reCAPTCHA if containerId is not provided
+    const recaptchaContainerId = containerId || 'recaptcha-container';
+    this.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
+      size: 'invisible',
+      callback: () => {
+        logger.log('[AuthService] reCAPTCHA verified successfully');
+      },
+      'expired-callback': () => {
+        logger.warn('[AuthService] reCAPTCHA expired');
+      },
+    });
+
+    return this.recaptchaVerifier;
   }
 
   /**
-   * ตรวจสอบว่าควร block Facebook login หรือไม่
-   * Block ใน Messenger, Instagram, Facebook App WebView เพราะ redirect flow ไม่ทำงาน
+   * Send OTP to phone number
+   * @param phoneNumber - Phone number in any format (will be formatted to E.164)
+   * @returns ConfirmationResult
    */
-  shouldBlockFacebookLogin(): boolean {
-    const webViewInfo = this.getWebViewInfo();
-    // Block Facebook login ใน Messenger, Instagram, Facebook App WebView
-    // เพราะ redirect flow ไม่ทำงาน (sessionStorage/cookies ไม่ persist)
-    return (
-      (webViewInfo.isFacebookWebView && isInFacebookMessengerWebView()) ||
-      isInInstagramWebView() ||
-      isInFacebookAppWebView()
-    );
+  async signInWithPhoneNumber(phoneNumber: string): Promise<ConfirmationResult> {
+    try {
+      // Format phone number to E.164 format
+      const formattedPhone = formatPhoneNumber(phoneNumber);
+      logger.log('[AuthService] Requesting OTP for phone:', formattedPhone);
+
+      // Setup reCAPTCHA verifier if not already set
+      if (!this.recaptchaVerifier) {
+        this.setupRecaptchaVerifier();
+      }
+
+      // Send OTP
+      const confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, this.recaptchaVerifier!);
+      this.confirmationResult = confirmationResult;
+      
+      logger.log('[AuthService] OTP sent successfully');
+      return confirmationResult;
+    } catch (error: unknown) {
+      logger.error('[AuthService] Error sending OTP:', error);
+      
+      // Re-throw validation errors from formatPhoneNumber
+      if (error instanceof Error && error.message.includes('เบอร์โทรศัพท์')) {
+        throw error;
+      }
+      
+      if (isFirebaseError(error)) {
+        // Handle specific Firebase errors
+        if (error.code === 'auth/invalid-phone-number') {
+          throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาตรวจสอบรูปแบบเบอร์โทรศัพท์');
+        } else if (error.code === 'auth/too-many-requests') {
+          throw new Error('มีการขอรหัส OTP มากเกินไป กรุณารอสักครู่ (1-2 นาที) แล้วลองใหม่');
+        } else if (error.code === 'auth/quota-exceeded') {
+          throw new Error('เกินโควต้าสำหรับวันนี้ กรุณาลองใหม่ในวันถัดไป');
+        } else if (error.code === 'auth/captcha-check-failed') {
+          throw new Error('ไม่สามารถตรวจสอบ reCAPTCHA ได้ กรุณารีเฟรชหน้าแล้วลองใหม่');
+        } else if (error.code === 'auth/network-request-failed') {
+          throw new Error('เกิดข้อผิดพลาดเกี่ยวกับเครือข่าย กรุณาตรวจสอบการเชื่อมต่อและลองใหม่');
+        }
+      }
+      
+      // Log unexpected errors with metadata
+      logger.error('[AuthService] Unexpected error sending OTP:', {
+        error,
+        phoneNumber: phoneNumber.substring(0, 3) + '****', // Mask phone number in logs
+      });
+      
+      throw error;
+    }
   }
 
   /**
-   * ตรวจสอบว่าอยู่ใน Instagram WebView หรือไม่
+   * Verify OTP code
+   * @param otp - 6-digit OTP code
+   * @returns User object
    */
-  isInInstagramWebView(): boolean {
-    return isInInstagramWebView();
+  async verifyOTP(otp: string): Promise<User> {
+    try {
+      if (!this.confirmationResult) {
+        throw new Error('ไม่มีข้อมูลการยืนยัน OTP กรุณาขอรหัส OTP ใหม่');
+      }
+
+      logger.log('[AuthService] Verifying OTP...');
+      const userCredential = await this.confirmationResult.confirm(otp);
+      
+      // Clear confirmation result after successful verification
+      this.confirmationResult = null;
+      
+      logger.log('[AuthService] OTP verified successfully, user:', userCredential.user.uid);
+      return userCredential.user;
+    } catch (error: unknown) {
+      logger.error('[AuthService] Error verifying OTP:', error);
+      
+      if (isFirebaseError(error)) {
+        if (error.code === 'auth/invalid-verification-code') {
+          throw new Error('รหัส OTP ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง');
+        } else if (error.code === 'auth/code-expired') {
+          throw new Error('รหัส OTP หมดอายุแล้ว (ใช้เวลาได้ 10 นาที) กรุณาขอรหัสใหม่');
+        } else if (error.code === 'auth/session-expired') {
+          throw new Error('เซสชันหมดอายุ กรุณาขอรหัส OTP ใหม่');
+        } else if (error.code === 'auth/network-request-failed') {
+          throw new Error('เกิดข้อผิดพลาดเกี่ยวกับเครือข่าย กรุณาตรวจสอบการเชื่อมต่อและลองใหม่');
+        }
+      }
+      
+      // Log unexpected errors
+      logger.error('[AuthService] Unexpected error verifying OTP:', error);
+      
+      throw error;
+    }
   }
 
   /**
-   * ตรวจสอบว่าอยู่ใน Facebook App WebView หรือไม่ (ไม่ใช่ Messenger)
+   * Reset OTP flow (clear confirmation result and verifier)
    */
-  isInFacebookAppWebView(): boolean {
-    return isInFacebookAppWebView();
-  }
-
-  /**
-   * ตรวจสอบว่าอยู่ใน in-app browser หรือไม่
-   */
-  isInInAppBrowser(): boolean {
-    return isInInAppBrowser();
-  }
-
-  /**
-   * ตรวจสอบว่าอยู่ใน Messenger WebView หรือไม่
-   */
-  isInFacebookMessengerWebView(): boolean {
-    return isInFacebookMessengerWebView();
-  }
-
-  /**
-   * Get URL สำหรับเปิดใน external browser
-   */
-  getOpenInBrowserUrl(): string {
-    if (typeof window === 'undefined') return '';
-    return window.location.href;
+  resetOTPFlow(): void {
+    if (this.confirmationResult) {
+      this.confirmationResult = null;
+    }
+    if (this.recaptchaVerifier) {
+      try {
+        this.recaptchaVerifier.clear();
+      } catch (error) {
+        logger.warn('[AuthService] Error clearing recaptcha verifier:', error);
+      }
+      this.recaptchaVerifier = null;
+    }
+    logger.log('[AuthService] OTP flow reset');
   }
 
   async loginWithEmail(email: string, password: string): Promise<User> {
@@ -243,102 +250,6 @@ export class AuthService {
     return onAuthStateChanged(auth, callback);
   }
 
-  async signInWithGoogle(): Promise<void> {
-    // 🔧 Fix: ใช้ redirect เสมอเพื่อหลีกเลี่ยงปัญหา COOP policy
-    // Redirect flow ทำงานได้ดีกว่าบนทุก platform และไม่มีปัญหา COOP
-    logger.log('[AuthService] Using redirect flow for Google login (always use redirect)');
-    await signInWithRedirect(auth, this.googleProvider);
-  }
-
-  async signInWithFacebook(): Promise<void> {
-    const webViewInfo = this.getWebViewInfo();
-    const { isInWebView, isFacebookWebView, sessionStorageAvailable } = webViewInfo;
-    const isIOS = isIOSSafari();
-    
-    // ไม่ block login แล้ว - ให้ banner เตือนแทน
-    // ผู้ใช้สามารถลอง login ได้ แต่ banner จะเตือนว่าอาจไม่สำเร็จ
-    
-    // ใช้ redirect บน iOS Safari, Facebook WebView, หรือ WebView ที่ไม่มี sessionStorage
-    const shouldUseRedirect = isIOS || isFacebookWebView || (isInWebView && !sessionStorageAvailable);
-
-    try {
-      if (shouldUseRedirect) {
-        // ตรวจสอบ sessionStorage availability ก่อน redirect
-        if (!sessionStorageAvailable) {
-          logger.warn('[AuthService] SessionStorage ไม่ available - redirect อาจไม่สำเร็จ');
-        }
-        logger.log('[AuthService] Using redirect flow for Facebook login', { isIOS, isFacebookWebView, isInWebView });
-        await signInWithRedirect(auth, this.facebookProvider);
-        return;
-      }
-      await signInWithPopup(auth, this.facebookProvider);
-    } catch (error: unknown) {
-      if (isFirebaseError(error) && (
-        error.code === 'auth/popup-blocked' ||
-        error.code === 'auth/popup-closed-by-user' ||
-        error.code === 'auth/cancelled-popup-request' ||
-        error.code === 'auth/operation-not-supported-in-this-environment'
-      )) {
-        // Fallback: ใช้ redirect เมื่อ popup ไม่ทำงาน
-        // แต่ถ้า sessionStorage ไม่ available → redirect อาจไม่สำเร็จ
-        if (!sessionStorageAvailable) {
-          logger.warn('[AuthService] Popup ไม่ทำงาน และ sessionStorage ไม่ available - redirect อาจไม่สำเร็จ');
-        }
-        logger.log('[AuthService] Popup failed, falling back to redirect', { errorCode: error.code });
-        await signInWithRedirect(auth, this.facebookProvider);
-        return;
-      }
-      throw error;
-    }
-  }
-
-  async checkRedirectResult(): Promise<User | null> {
-    try {
-      const result = await getRedirectResult(auth);
-      if (result && result.user) {
-        return result.user;
-      }
-      
-      // ตรวจสอบว่า redirect result ไม่สำเร็จใน WebView หรือไม่
-      const webViewInfo = this.getWebViewInfo();
-      if (webViewInfo.isInWebView && !result) {
-        // Log warning เมื่อ detect WebView แต่ redirect result ไม่สำเร็จ
-        logger.warn(
-          '[AuthService] Redirect result ไม่สำเร็จใน WebView:',
-          {
-            isFacebookWebView: webViewInfo.isFacebookWebView,
-            isInWebView: webViewInfo.isInWebView,
-            sessionStorageAvailable: webViewInfo.sessionStorageAvailable,
-            userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'unknown',
-          }
-        );
-      }
-      
-      return null;
-    } catch (error: unknown) {
-      // เพิ่ม error handling สำหรับ WebView scenarios
-      if (isFirebaseError(error)) {
-        if (error.code === 'auth/account-exists-with-different-credential') {
-          throw new Error('บัญชีนี้ถูกใช้ด้วย provider อื่นแล้ว');
-        }
-        
-        // Log error สำหรับ WebView scenarios
-        const webViewInfo = this.getWebViewInfo();
-        if (webViewInfo.isInWebView) {
-          logger.error(
-            '[AuthService] Error checking redirect result in WebView:',
-            {
-              code: error.code,
-              message: error.message,
-              isFacebookWebView: webViewInfo.isFacebookWebView,
-              sessionStorageAvailable: webViewInfo.sessionStorageAvailable,
-            }
-          );
-        }
-      }
-      throw error;
-    }
-  }
 
   async checkIsAdmin(uid: string): Promise<boolean> {
     try {
@@ -355,6 +266,9 @@ export class AuthService {
   cleanup(): void {
     this.subscriptions.forEach((unsubscribe) => unsubscribe());
     this.subscriptions.clear();
+    
+    // Clean up reCAPTCHA verifier
+    this.resetOTPFlow();
   }
 }
 

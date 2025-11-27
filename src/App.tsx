@@ -7,7 +7,11 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { ConfigProvider, App as AntApp, Spin } from 'antd';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import GuestRSVPApp from '@/card/GuestRSVPApp';
+import IntroPage from '@/pages/IntroPage';
+import OTPLoginPage from '@/pages/OTPLoginPage';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
+import { AuthService } from '@/services/firebase/AuthService';
+import { User } from 'firebase/auth';
 // Admin Panel ใหม่ - Lazy load สำหรับ code splitting
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'));
 const DashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
@@ -26,7 +30,7 @@ import { logger } from '@/utils/logger';
 const SecurityCheck: React.FC<{
   isAdminPath: boolean;
   authLoading: boolean;
-  user: any;
+  user: User | null;
   isAdmin: boolean;
   pathname: string;
 }> = ({ isAdminPath, authLoading, user, isAdmin, pathname }) => {
@@ -153,15 +157,153 @@ const App: React.FC = () => {
     }
   };
 
-  // Guest mode: Show GuestRSVPApp
+  // Guest mode: Handle Guest flow (IntroPage → OTPLoginPage → GuestRSVPApp)
+  const [guestAuthState, setGuestAuthState] = useState<'intro' | 'login' | 'authenticated' | 'checking'>('checking');
+  const [guestUser, setGuestUser] = useState<User | null>(null);
+  const isCheckingAuthRef = useRef(false);
+  const authCheckAbortRef = useRef<AbortController | null>(null);
+
+  // Check if guest is already authenticated - Fixed race condition
+  useEffect(() => {
+    if (appMode !== 'guest') {
+      return;
+    }
+
+    const authService = AuthService.getInstance();
+    
+    // Prevent multiple simultaneous checks
+    if (isCheckingAuthRef.current) {
+      return;
+    }
+
+    isCheckingAuthRef.current = true;
+    const abortController = new AbortController();
+    authCheckAbortRef.current = abortController;
+    
+    setGuestAuthState('checking');
+
+    // Check current user
+    const currentUser = authService.getCurrentUser();
+    
+    if (currentUser) {
+      // Check if user is admin
+      authService.checkIsAdmin(currentUser.uid)
+        .then((isAdmin) => {
+          if (abortController.signal.aborted) return;
+          
+          if (!isAdmin) {
+            // Guest user is authenticated
+            setGuestUser(currentUser);
+            setGuestAuthState('authenticated');
+          } else {
+            // Admin user in guest path - redirect to admin
+            setGuestAuthState('intro');
+            window.location.href = '/admin';
+          }
+          isCheckingAuthRef.current = false;
+        })
+        .catch((error) => {
+          if (abortController.signal.aborted) return;
+          
+          logger.error('[App] Error checking admin status:', error);
+          // If check fails, assume guest (safer default)
+          setGuestUser(currentUser);
+          setGuestAuthState('authenticated');
+          isCheckingAuthRef.current = false;
+        });
+    } else {
+      setGuestAuthState('intro');
+      isCheckingAuthRef.current = false;
+    }
+
+    // Listen for auth state changes
+    const unsubscribe = authService.onAuthStateChange((user) => {
+      if (abortController.signal.aborted) return;
+      
+      if (user) {
+        // Prevent multiple simultaneous admin checks
+        if (isCheckingAuthRef.current) return;
+        isCheckingAuthRef.current = true;
+        
+        authService.checkIsAdmin(user.uid)
+          .then((isAdmin) => {
+            if (abortController.signal.aborted) return;
+            
+            if (!isAdmin) {
+              setGuestUser(user);
+              setGuestAuthState('authenticated');
+            } else {
+              // Admin user in guest path - redirect to admin
+              setGuestUser(null);
+              setGuestAuthState('intro');
+              window.location.href = '/admin';
+            }
+            isCheckingAuthRef.current = false;
+          })
+          .catch((error) => {
+            if (abortController.signal.aborted) return;
+            
+            logger.error('[App] Error checking admin status in auth state change:', error);
+            // If check fails, assume guest
+            setGuestUser(user);
+            setGuestAuthState('authenticated');
+            isCheckingAuthRef.current = false;
+          });
+      } else {
+        setGuestUser(null);
+        setGuestAuthState('intro');
+        isCheckingAuthRef.current = false;
+      }
+    });
+
+    return () => {
+      abortController.abort();
+      unsubscribe();
+      isCheckingAuthRef.current = false;
+    };
+  }, [appMode]);
+
   if (appMode === 'guest') {
     return (
       <ErrorBoundary>
-        <GuestRSVPApp
-          onExitGuestMode={() => {
-            window.location.href = '/admin';
+        <ConfigProvider
+          theme={{
+            token: {
+              colorPrimary: '#5c3a58',
+              fontFamily: 'Sarabun, Noto Sans Thai, sans-serif',
+              borderRadius: 8,
+            },
           }}
-        />
+        >
+          <AntApp>
+            {guestAuthState === 'checking' && (
+              <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fdfcf8] to-white">
+                <Spin size="large" />
+              </div>
+            )}
+            {guestAuthState === 'intro' && (
+              <IntroPage
+                onContinue={() => setGuestAuthState('login')}
+              />
+            )}
+            {guestAuthState === 'login' && (
+              <OTPLoginPage
+                onBack={() => setGuestAuthState('intro')}
+                onLoginSuccess={(user) => {
+                  setGuestUser(user);
+                  setGuestAuthState('authenticated');
+                }}
+              />
+            )}
+            {guestAuthState === 'authenticated' && guestUser && (
+              <GuestRSVPApp
+                onExitGuestMode={() => {
+                  window.location.href = '/admin';
+                }}
+              />
+            )}
+          </AntApp>
+        </ConfigProvider>
       </ErrorBoundary>
     );
   }

@@ -330,14 +330,14 @@ const SeatingPage: React.FC = () => {
     <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
         <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">จัดการที่นั่ง</h1>
-        <Button
+          <Button
           icon={<MenuOutlined />}
           onClick={() => setSidebarDrawerVisible(true)}
           className="md:hidden w-full sm:w-auto"
           size="middle"
-        >
+            >
           เปิดรายชื่อแขก
-        </Button>
+            </Button>
       </div>
 
       <Tabs
@@ -464,17 +464,17 @@ const SeatingPage: React.FC = () => {
           <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
             {/* Guest Sidebar - Hidden on mobile, shown in drawer */}
             <div className="hidden md:block flex-shrink-0">
-              <GuestSelectionSidebar
-                guests={guests}
-                selectedGuestId={selectedGuestId}
+            <GuestSelectionSidebar
+              guests={guests}
+              selectedGuestId={selectedGuestId}
                 selectedGuestIds={selectedGuestIds}
-                isAssignMode={isAssignMode}
-                onGuestClick={handleGuestClick}
-                onMemberClick={handleMemberClick}
-                onCancelAssign={handleCancelAssign}
+              isAssignMode={isAssignMode}
+              onGuestClick={handleGuestClick}
+              onMemberClick={handleMemberClick}
+              onCancelAssign={handleCancelAssign}
                 onGuestIdsChange={setSelectedGuestIds}
-                guestGroups={guestGroups}
-              />
+              guestGroups={guestGroups}
+            />
             </div>
             
             {/* Drawer for mobile */}
@@ -515,19 +515,19 @@ const SeatingPage: React.FC = () => {
                   {currentZone?.zoneName || 'ไม่มีชื่อโซน'}
                 </span>
                 {currentZone && (
-                  <Button
+                <Button
                     type="primary"
                     icon={<PlusOutlined />}
-                    onClick={() => {
+                  onClick={() => {
                       setEditingTable(null);
                       setIsTableModalVisible(true);
-                    }}
+                  }}
                     size="small"
                     className="flex-shrink-0"
-                  >
+                >
                     <span className="hidden sm:inline">เพิ่มโต๊ะ</span>
                     <span className="sm:hidden">เพิ่ม</span>
-                  </Button>
+                </Button>
                 )}
               </div>
             }

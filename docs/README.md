@@ -30,7 +30,12 @@
 - ✅ **Click-based Seating Assignment**: จัดที่นั่งแบบคลิก (เลือกแขก → คลิกโต๊ะ)
 - ✅ **RSVP Status Integration**: ผูกสถานะตอบรับ (`isComing`) กับสิทธิ์เช็คอิน
 - ✅ **UI Text Updates**: เปลี่ยนข้อความ "RSVP" เป็น "ตอบรับร่วมงาน"
-- ✅ **Google Login Only**: ใช้ Google Login เท่านั้น (ลบ Facebook Login)
+- ✅ **Firebase OTP Authentication**: เปลี่ยนจาก Google/Facebook Login เป็น OTP Phone Authentication สำหรับ Guest users
+  - Intro Page: หน้า Intro/การ์ดเชิญแบบ Basic UI, Mobile-First
+  - OTP Login: หน้ากรอกเบอร์โทรและ OTP พร้อม reCAPTCHA
+  - Guest Profile: ระบบจัดการ Guest Profile แยกจาก Identity
+  - Audit Logging: บันทึกเหตุการณ์สำคัญ (login, RSVP created/updated)
+- ✅ **Admin Login**: Admin ยังใช้ Email/Password login ได้ปกติ
 - ✅ **iOS Safari Redirect Fix**: แก้ไขปัญหา redirect login บน iOS Safari ให้ทำงานได้ถูกต้อง
 - ✅ **Configuration Update**: แก้ไขนามสกุล "Pisapeng" → "Phitpheng"
 - ✅ **Tree Data Table with Row Numbers**: ตารางแขกแสดงแบบ expandable rows พร้อมลำดับ (กลุ่มละ 1, 1.1, 1.2, ...)
@@ -98,10 +103,14 @@ src/
 │   │   ├── SeatingPage.tsx
 │   │   ├── RSVPsPage.tsx
 │   │   └── SettingsPage.tsx
-│   └── AdminLoginPage.tsx
+│   ├── AdminLoginPage.tsx  # Admin login (Email/Password)
+│   ├── IntroPage.tsx       # หน้า Intro/การ์ดเชิญ
+│   └── OTPLoginPage.tsx    # หน้า OTP Login
 ├── services/
 │   └── firebase/           # Firebase Service Classes (Singleton pattern)
 │       ├── AuthService.ts
+│       ├── GuestProfileService.ts  # Guest Profile management
+│       ├── AuditLogService.ts      # Audit logging
 │       ├── RSVPService.ts
 │       ├── GuestService.ts
 │       ├── ZoneService.ts
@@ -120,8 +129,25 @@ src/
 
 ## 🔐 Security
 
-- Firebase Authentication สำหรับ login
-- Firebase Realtime Database Rules สำหรับ authorization
+- **Firebase Phone Authentication**: OTP authentication สำหรับ Guest users
+- **Email/Password Authentication**: สำหรับ Admin users
+- **Firebase Realtime Database Rules**: สำหรับ authorization และ data access control
+- **reCAPTCHA**: ป้องกัน bot และ spam
+- **Audit Logging**: บันทึกเหตุการณ์สำคัญในระบบ
+
+## 📱 Authentication Flow
+
+### Guest Users
+1. เปิดหน้า IntroPage → แสดงการ์ดเชิญ
+2. คลิก "เข้าสู่ระบบด้วยเบอร์โทร" → ไปหน้า OTPLoginPage
+3. กรอกเบอร์โทร → รับ SMS OTP
+4. กรอก OTP → Login สำเร็จ → ไปหน้า GuestRSVPApp
+
+### Admin Users
+1. ไปที่ `/admin` → แสดง AdminLoginPage
+2. กรอก Email/Password → Login สำเร็จ → ไปหน้า Admin Panel
+
+ดูรายละเอียดเพิ่มเติม: [Firebase OTP Architecture](./FIREBASE_OTP_ARCHITECTURE.md)
 - Admin-only access สำหรับ Admin Panel
 
 ## 📝 License
