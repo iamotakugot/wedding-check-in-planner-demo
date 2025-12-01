@@ -543,17 +543,25 @@ const GuestsPage: React.FC = () => {
       key: 'phoneNumber',
       width: 150,
       render: (_, guest) => {
-        if (!guest.phoneNumber) return <Text type="secondary">-</Text>;
+        // Try to get phone number from guest first, then fallback to RSVP
+        let phoneNumber = guest.phoneNumber;
+        if (!phoneNumber && (guest.rsvpUid || guest.rsvpId)) {
+          const rsvp = rsvpMap.get(guest.rsvpUid || guest.rsvpId || '');
+          phoneNumber = rsvp?.phoneNumber;
+        }
+
+        if (!phoneNumber) return <Text type="secondary">-</Text>;
+
         return (
           <Space>
             <PhoneOutlined className="text-gray-400" />
-            <Text copyable>{guest.phoneNumber}</Text>
+            <Text copyable>{phoneNumber}</Text>
             <Tooltip title="โทรออก">
               <Button
                 type="link"
                 size="small"
                 icon={<PhoneOutlined />}
-                href={`tel:${guest.phoneNumber}`}
+                href={`tel:${phoneNumber}`}
                 className="text-green-600 hover:text-green-700"
               />
             </Tooltip>
@@ -748,9 +756,17 @@ const GuestsPage: React.FC = () => {
         <div className="grid grid-cols-2 gap-2 mb-3 text-sm text-gray-600">
           <div>
             <PhoneOutlined className="mr-2" />
-            {guest.phoneNumber ? (
-              <a href={`tel:${guest.phoneNumber}`} className="text-blue-600">{guest.phoneNumber}</a>
-            ) : '-'}
+            {(() => {
+              // Try to get phone number from guest first, then fallback to RSVP
+              let phoneNumber = guest.phoneNumber;
+              if (!phoneNumber && (guest.rsvpUid || guest.rsvpId)) {
+                const rsvp = rsvpMap.get(guest.rsvpUid || guest.rsvpId || '');
+                phoneNumber = rsvp?.phoneNumber;
+              }
+              return phoneNumber ? (
+                <a href={`tel:${phoneNumber}`} className="text-blue-600">{phoneNumber}</a>
+              ) : '-';
+            })()}
           </div>
           <div>
             <span className="mr-2">โต๊ะ:</span>
