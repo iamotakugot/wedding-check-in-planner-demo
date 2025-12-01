@@ -2436,7 +2436,7 @@ const CardBack: React.FC<{
                                     <div className="space-y-2 pt-2">
                                         <div className="flex items-center gap-2 flex-col sm:flex-row">
                                             <Input
-                                                placeholder={userInfo.displayName || "ชื่อ-นามสกุล"}
+                                                placeholder="ชื่อ-นามสกุล-ชื่อเล่น"
                                                 className="flex-1"
                                                 size="middle"
                                                 value={fullNameInput || form.getFieldValue('fullName') || ''}
