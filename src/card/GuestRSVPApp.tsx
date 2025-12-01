@@ -57,7 +57,7 @@ import {
     subscribeUserAppState,
 } from '@/services/firebase/appState';
 // นำเข้า Firebase Realtime Database functions
-import { get, ref, onValue, remove } from 'firebase/database';
+import { get, ref, onValue, remove, query, orderByChild, equalTo } from 'firebase/database';
 import { database } from '@/firebase/config';
 // นำเข้า TypeScript types
 import type { RSVPData } from '@/types';
@@ -1518,65 +1518,60 @@ const CardBack: React.FC<{
         if (currentUser && isLoggedIn) {
             setIsLoadingRSVP(true);
 
-            // 🔧 DevOps Fix: ใช้ realtime subscription แทน one-time fetch
-            const rsvpRef = ref(database, `rsvps`);
-            // Subscribe เพื่อรับการเปลี่ยนแปลง RSVP แบบ real-time
+            // 🔧 FIX: Query เฉพาะ RSVP ของ user นี้เท่านั้น (ใช้ orderByChild + equalTo)
+            const rsvpRef = query(
+                ref(database, `rsvps`),
+                orderByChild('uid'),
+                equalTo(currentUser)
+            );
+
+            // Subscribe เพื่อรับการเปลี่ยนแปลง RSVP ของ user นี้แบบ real-time
             const unsubscribe = onValue(rsvpRef, (snapshot) => {
                 if (!snapshot.exists()) {
-                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Google
+                    logger.log('📝 [RSVP] ไม่พบ RSVP - auto-fill จาก user info');
+                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก user info
                     if (userInfo) {
                         form.setFieldsValue({
                             fullName: userInfo.displayName || '',
                         });
                     }
+                    setSubmittedData(null); // ⚠️ Clear submitted data
                     setIsLoadingRSVP(false);
                     return;
                 }
 
                 const data = snapshot.val();
-                // แปลงข้อมูลจาก object เป็น array
-                const rsvps = Object.keys(data).map(key => {
-                    const rsvp = { id: key, ...data[key] };
-                    // ลบ phoneNumber ออกถ้ามี (สำหรับข้อมูลเก่า)
-                    if ('phoneNumber' in rsvp) {
-                        delete (rsvp as Record<string, unknown>).phoneNumber;
-                    }
-                    return rsvp;
-                });
+                // ดึง RSVP แรก (ควรมีแค่ 1 รายการต่อ user)
+                const rsvpId = Object.keys(data)[0];
+                const userRSVP = { id: rsvpId, ...data[rsvpId] };
 
-                // หา RSVP ของ user นี้
-                const userRSVP = rsvps.find(r => r.uid === currentUser);
-
-                if (userRSVP) {
-                    logger.log('✅ [RSVP] Realtime update - พบ RSVP:', userRSVP.id);
-                    setSubmittedData(userRSVP);
-
-                    // เติมข้อมูลลง form เพื่อให้แก้ไขได้
-                    // ใช้ fullName ถ้ามี หรือสร้างจาก firstName + lastName
-                    const fullName = userRSVP.fullName ||
-                        (userRSVP.firstName && userRSVP.lastName
-                            ? `${userRSVP.firstName} ${userRSVP.lastName}`
-                            : userRSVP.firstName || '');
-
-                    // เติมข้อมูลลง form
-                    form.setFieldsValue({
-                        isComing: userRSVP.isComing,
-                        side: userRSVP.side,
-                        relation: userRSVP.relation,
-                        fullName: fullName,
-                        note: userRSVP.note,
-                        accompanyingGuests: userRSVP.accompanyingGuests || [],
-                    });
-                } else if (userInfo) {
-                    // ถ้ายังไม่มี RSVP ให้ auto-fill จาก Google
-                    form.setFieldsValue({
-                        fullName: userInfo.displayName || '',
-                    });
+                // ลบ phoneNumber ออกถ้ามี (เก็บใน guestProfiles แล้ว)
+                if ('phoneNumber' in userRSVP) {
+                    delete (userRSVP as Record<string, unknown>).phoneNumber;
                 }
+
+                logger.log('✅ [RSVP] Realtime update - พบ RSVP ของ user:', { uid: currentUser, rsvpId });
+                setSubmittedData(userRSVP);
+
+                // เติมข้อมูลลง form เพื่อให้แก้ไขได้
+                const fullName = userRSVP.fullName ||
+                    (userRSVP.firstName && userRSVP.lastName
+                        ? `${userRSVP.firstName} ${userRSVP.lastName}`
+                        : userRSVP.firstName || '');
+
+                form.setFieldsValue({
+                    isComing: userRSVP.isComing,
+                    side: userRSVP.side,
+                    relation: userRSVP.relation,
+                    fullName: fullName,
+                    note: userRSVP.note,
+                    accompanyingGuests: userRSVP.accompanyingGuests || [],
+                });
 
                 setIsLoadingRSVP(false);
             }, (error) => {
                 logger.error('❌ [RSVP] เกิดข้อผิดพลาดในการ subscribe RSVP:', error);
+                setSubmittedData(null);
                 setIsLoadingRSVP(false);
             });
 
@@ -2507,13 +2502,9 @@ const CardBack: React.FC<{
                         <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <div
                                 onClick={() => {
-                                    if (!confirmedName) {
-                                        messageApi.warning('กรุณากรอกและยืนยันชื่อก่อนเลือก "ยินดีร่วมงาน"');
-                                        return;
-                                    }
                                     form.setFieldsValue({ isComing: 'yes' });
                                 }}
-                                className={`cursor-pointer relative h-24 sm:h-28 rounded-xl sm:rounded-2xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-1.5 sm:gap-2 shadow-lg active:scale-[0.98] ${!confirmedName ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] hover:shadow-xl'} ${isComing === 'yes' ? 'border-[#52c41a] bg-gradient-to-br from-[#f6ffed] to-[#e6f7d9] ring-2 sm:ring-4 ring-[#52c41a]/20 shadow-[#52c41a]/10' : 'border-gray-200 bg-white hover:border-[#52c41a]/50'}`}
+                                className={`cursor-pointer relative h-24 sm:h-28 rounded-xl sm:rounded-2xl border-2 transition-all duration-300 flex flex-col items-center justify-center gap-1.5 sm:gap-2 shadow-lg active:scale-[0.98] hover:scale-[1.02] hover:shadow-xl ${isComing === 'yes' ? 'border-[#52c41a] bg-gradient-to-br from-[#f6ffed] to-[#e6f7d9] ring-2 sm:ring-4 ring-[#52c41a]/20 shadow-[#52c41a]/10' : 'border-gray-200 bg-white hover:border-[#52c41a]/50'}`}
                             >
                                 {isComing === 'yes' && (
                                     <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
@@ -2542,14 +2533,7 @@ const CardBack: React.FC<{
                             </div>
                         </div>
 
-                        {!confirmedName && userInfo && (
-                            <Alert
-                                message="กรุณากรอกและยืนยันชื่อก่อนเลือก 'ยินดีร่วมงาน'"
-                                type="warning"
-                                showIcon
-                                className="mt-3 sm:mt-4 rounded-lg sm:rounded-xl border-orange-200 bg-orange-50 text-xs sm:text-sm"
-                            />
-                        )}
+
                     </Card>
 
 

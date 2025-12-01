@@ -123,11 +123,8 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
             <Form.Item
               name="phoneNumber"
               label="เบอร์โทรศัพท์"
-              rules={[
-                { pattern: /^[0-9]{9,10}$/, message: 'เบอร์โทรศัพท์ไม่ถูกต้อง' }
-              ]}
             >
-              <Input placeholder="เช่น 0812345678" maxLength={10} />
+              <Input placeholder="เช่น +66812345678" />
             </Form.Item>
           </Col>
           <Col span={12}>
