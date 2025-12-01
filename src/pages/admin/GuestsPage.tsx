@@ -1,12 +1,7 @@
-/**
- * Admin Guests Page
- * รวม Guest List และ Check-in (เรียบง่าย)
- */
-
-import React, { useState, useMemo, useEffect } from 'react';
-import { Tabs, Input, Table, Tag, Button, Space, App, Modal, Card, Avatar, Checkbox, Row, Col, Typography } from 'antd';
+import React, { useState, useEffect, useMemo } from 'react';
+import { App, Typography, Grid, Space, Input, Button, Tag, Avatar, Tooltip, Card, Modal, Table } from 'antd';
+import { SearchOutlined, PhoneOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, EditOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { CheckCircleOutlined, EditOutlined, DeleteOutlined, UserOutlined, SearchOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
@@ -14,13 +9,15 @@ import { useRSVPs } from '@/hooks/useRSVPs';
 import { useGuestGroups } from '@/hooks/useGuestGroups';
 import { Guest, Side, RSVPData } from '@/types';
 import { GuestService } from '@/services/firebase/GuestService';
-import { calculateCheckedInCount } from '@/utils/rsvpHelpers';
+
 import GuestFormDrawer from '@/components/admin/GuestFormDrawer';
 import RSVPStatusTag from '@/components/admin/RSVPStatusTag';
+import GroupMemberTooltip from '@/components/admin/GroupMemberTooltip';
 import { formatGuestName, getGuestRSVPStatus, renderMemberLabel } from '@/utils/guestHelpers';
 import { logger } from '@/utils/logger';
 
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 // Custom Search component to avoid Input.Search addonAfter warning
 const CustomSearch: React.FC<{
@@ -33,7 +30,7 @@ const CustomSearch: React.FC<{
   prefix?: React.ReactNode;
 }> = ({ placeholder, allowClear, style, onSearch, onChange, value, prefix }) => {
   const [searchValue, setSearchValue] = useState(value || '');
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setSearchValue(newValue);
@@ -86,54 +83,13 @@ const GuestsPage: React.FC = () => {
   const { rsvps } = useRSVPs(); // Get RSVP data for status integration
   const { guestGroups } = useGuestGroups(); // Get GuestGroup data
   const guestService = GuestService.getInstance();
-  
-  const [activeTab, setActiveTab] = useState('list');
+  const screens = useBreakpoint();
+
   const [searchText, setSearchText] = useState('');
-  const [checkInSearchText, setCheckInSearchText] = useState('');
-  const [selectedSide, setSelectedSide] = useState<Side | 'all'>('all');
-  const [checkInSelectedSide, setCheckInSelectedSide] = useState<Side | 'all'>('all');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-  const [selectedCheckInIds, setSelectedCheckInIds] = useState<string[]>([]);
 
 
-  // Get all members from groups for check-in
-  const allMembersForCheckIn = useMemo(() => {
-    const members: Array<{ guest: Guest; group: typeof guestGroups[0] | null; member: typeof guestGroups[0]['members'][0] | null }> = [];
-    
-    // Add members from groups
-    guestGroups.forEach(group => {
-      group.members.forEach(member => {
-        const guest = guests.find(g => g.id === member.id);
-        if (guest && !guest.checkedInAt) {
-          members.push({ guest, group, member });
-        }
-      });
-    });
-    
-    // Add individual guests (not in groups)
-    guests.forEach(guest => {
-      if (!guest.checkedInAt && !guest.groupId) {
-        members.push({ guest, group: null, member: null });
-      }
-    });
-    
-    return members;
-  }, [guests, guestGroups]);
-
-  // Filter members for check-in tab
-  const filteredCheckInMembers = useMemo(() => {
-    return allMembersForCheckIn.filter(({ guest, group }) => {
-      const matchesSearch = !checkInSearchText || 
-        formatGuestName(guest).toLowerCase().includes(checkInSearchText.toLowerCase()) ||
-        (group && group.groupName.toLowerCase().includes(checkInSearchText.toLowerCase()));
-      const matchesSide = checkInSelectedSide === 'all' || guest.side === checkInSelectedSide;
-      return matchesSearch && matchesSide;
-    });
-  }, [allMembersForCheckIn, checkInSearchText, checkInSelectedSide]);
-
-  // Check-in stats
-  const totalCheckedIn = useMemo(() => calculateCheckedInCount(guests), [guests]);
 
   // RSVP Map for status lookup
   const rsvpMap = useMemo(() => {
@@ -152,31 +108,24 @@ const GuestsPage: React.FC = () => {
     // 2. จาก rsvpUid หรือ rsvpId
     // 3. จาก guest id ที่ตรงกับ member ในกลุ่ม
     let group = null;
-    
+
     if (parentGuest.groupId) {
       group = guestGroups.find(g => g.groupId === parentGuest.groupId);
     }
-    
+
     // ถ้ายังไม่เจอ ให้ค้นหาจาก rsvpUid หรือ rsvpId
     if (!group && (parentGuest.rsvpUid || parentGuest.rsvpId)) {
       const rsvpId = parentGuest.rsvpUid || parentGuest.rsvpId;
       group = guestGroups.find(g => g.groupId === rsvpId);
     }
-    
+
     // ถ้ายังไม่เจอ ให้ค้นหาจาก guest id ที่ตรงกับ member ในกลุ่ม
     if (!group) {
       group = guestGroups.find(g => g.members.some(m => m.id === parentGuest.id));
     }
-    
+
     if (!group) {
       message.warning('ไม่พบข้อมูลกลุ่ม');
-      logger.warn('Group not found:', { 
-        guestId: parentGuest.id,
-        groupId: parentGuest.groupId,
-        rsvpUid: parentGuest.rsvpUid,
-        rsvpId: parentGuest.rsvpId,
-        availableGroups: guestGroups.map(g => ({ groupId: g.groupId, groupName: g.groupName }))
-      });
       return;
     }
 
@@ -185,16 +134,7 @@ const GuestsPage: React.FC = () => {
     const totalCount = group.totalCount || 0;
     // ใช้ค่าที่มากกว่าเพื่อความปลอดภัย
     const actualCount = Math.max(memberCount, totalCount);
-    
-    // Debug log
-    logger.info('Group check-in:', {
-      groupId: group.groupId,
-      groupName: group.groupName,
-      memberCount,
-      totalCount,
-      actualCount,
-      members: group.members?.map(m => ({ id: m.id, name: m.fullName }))
-    });
+
 
     if (actualCount <= 1) {
       message.warning(`กลุ่มนี้มีสมาชิกเพียงคนเดียว (พบ ${actualCount} คน)`);
@@ -283,7 +223,7 @@ const GuestsPage: React.FC = () => {
     try {
       const now = new Date().toISOString();
       const isCheckingIn = !guest.checkedInAt;
-      
+
       // เช็คอิน/ยกเลิกเช็คอินแขกหลัก
       await guestService.update(guest.id, {
         checkedInAt: isCheckingIn ? now : null,
@@ -331,77 +271,6 @@ const GuestsPage: React.FC = () => {
     }
   };
 
-  // Handle bulk check-in
-  const handleBulkCheckIn = async () => {
-    if (selectedCheckInIds.length === 0) {
-      message.warning('กรุณาเลือกแขกที่ต้องการเช็คอิน');
-      return;
-    }
-
-    try {
-      const now = new Date().toISOString();
-      let successCount = 0;
-      let failCount = 0;
-      const processedGroupIds = new Set<string>();
-
-      for (const guestId of selectedCheckInIds) {
-        const guest = guests.find(g => g.id === guestId);
-        if (!guest) continue;
-
-        const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
-        if (rsvpStatus === 'no') {
-          failCount++;
-          continue;
-        }
-
-        // เช็คอินแขกหลัก
-        await guestService.update(guestId, {
-          checkedInAt: now,
-          checkInMethod: 'manual',
-        });
-        successCount++;
-
-        // ถ้าแขกอยู่ในกลุ่ม → เช็คอินสมาชิกอื่นในกลุ่มด้วย (เช็คอินครั้งเดียวต่อกลุ่ม)
-        if (guest.groupId && !processedGroupIds.has(guest.groupId)) {
-          const group = guestGroups.find(g => g.groupId === guest.groupId);
-          if (group && group.totalCount > 1) {
-            // หาสมาชิกอื่นในกลุ่มที่ยังไม่เช็คอิน
-            const otherMembers = group.members
-              .filter(m => !selectedCheckInIds.includes(m.id) && !m.checkedInAt)
-              .map(m => guests.find(g => g.id === m.id))
-              .filter((g): g is Guest => g !== undefined);
-
-            // เช็คอินสมาชิกอื่นในกลุ่ม
-            for (const memberGuest of otherMembers) {
-              const memberRsvpStatus = getGuestRSVPStatus(memberGuest, rsvpMap);
-              if (memberRsvpStatus !== 'no') {
-                await guestService.update(memberGuest.id, {
-                  checkedInAt: now,
-                  checkInMethod: 'manual',
-                });
-                successCount++;
-              } else {
-                failCount++;
-              }
-            }
-
-            processedGroupIds.add(guest.groupId);
-          }
-        }
-      }
-
-      if (successCount > 0) {
-        message.success(`เช็คอิน ${successCount} คนสำเร็จ${failCount > 0 ? ` (${failCount} คนไม่สามารถเช็คอินได้)` : ''}`);
-      } else {
-        message.warning('ไม่มีแขกที่สามารถเช็คอินได้');
-      }
-      setSelectedCheckInIds([]);
-    } catch (error) {
-      logger.error('Error bulk checking in:', error);
-      message.error('เกิดข้อผิดพลาดในการเช็คอิน');
-    }
-  };
-
   // Handle form submit
   const handleFormSubmit = async (guest: Guest) => {
     try {
@@ -443,22 +312,22 @@ const GuestsPage: React.FC = () => {
     const data: Array<Guest & { children?: Guest[] }> = [];
     const processedGroupIds = new Set<string>();
     const processedGuestIds = new Set<string>();
-    
+
     // Add groups with children (sorted by group name)
-    const sortedGroups = [...guestGroups].sort((a, b) => 
+    const sortedGroups = [...guestGroups].sort((a, b) =>
       a.groupName.localeCompare(b.groupName)
     );
-    
+
     sortedGroups.forEach(group => {
       if (group.totalCount > 1 && !processedGroupIds.has(group.groupId)) {
         const groupGuests = group.members
           .map(member => guests.find(g => g.id === member.id))
           .filter((g): g is Guest => g !== undefined);
-        
+
         if (groupGuests.length > 0) {
           const parentGuest = groupGuests[0]; // First member as parent
           const childrenGuests = groupGuests.slice(1); // Rest as children
-          
+
           // Only add as tree node if there are children
           if (childrenGuests.length > 0) {
             data.push({
@@ -469,40 +338,40 @@ const GuestsPage: React.FC = () => {
             // Single member group - add as regular row
             data.push(parentGuest);
           }
-          
+
           // Mark all guests in this group as processed
           groupGuests.forEach(g => processedGuestIds.add(g.id));
           processedGroupIds.add(group.groupId);
         }
       }
     });
-    
+
     // Add individual guests (not in groups or groups with 1 member)
     guests.forEach(guest => {
       if (!processedGuestIds.has(guest.id)) {
         // ตรวจสอบว่า guest อยู่ใน group หรือไม่ (หลายวิธี)
         let group = null;
-        
+
         // วิธีที่ 1: หาจาก groupId
         if (guest.groupId) {
           group = guestGroups.find(g => g.groupId === guest.groupId);
         }
-        
+
         // วิธีที่ 2: หาจาก rsvpUid (เพราะ groupId อาจเป็น rsvp.uid)
         if (!group && guest.rsvpUid) {
           group = guestGroups.find(g => g.groupId === guest.rsvpUid);
         }
-        
+
         // วิธีที่ 3: หาจาก rsvpId
         if (!group && guest.rsvpId) {
           group = guestGroups.find(g => g.groupId === guest.rsvpId);
         }
-        
+
         // วิธีที่ 4: หาจาก guest id ที่อยู่ใน members
         if (!group) {
           group = guestGroups.find(g => g.members.some(m => m.id === guest.id));
         }
-        
+
         // ถ้ามี group → ตรวจสอบว่า guest อยู่ใน members หรือไม่
         if (group) {
           const isInGroupMembers = group.members.some(m => m.id === guest.id);
@@ -512,7 +381,7 @@ const GuestsPage: React.FC = () => {
             return; // ข้าม guest นี้
           }
         }
-        
+
         // ตรวจสอบว่า guest มีชื่อซ้ำกับ main guest ใน group อื่นหรือไม่
         const guestFullName = `${guest.firstName} ${guest.lastName}`.trim().toLowerCase();
         const isDuplicateMainGuest = guestGroups.some(g => {
@@ -526,13 +395,13 @@ const GuestsPage: React.FC = () => {
           }
           return false;
         });
-        
+
         // ถ้าเป็น duplicate main guest → ไม่ควรแสดง
         if (isDuplicateMainGuest) {
           processedGuestIds.add(guest.id);
           return; // ข้าม guest นี้
         }
-        
+
         // เพิ่มเฉพาะ guest ที่ไม่มี group หรือ group มี 1 member หรือ guest อยู่ใน members
         if (!group || group.totalCount <= 1) {
           data.push(guest);
@@ -540,7 +409,7 @@ const GuestsPage: React.FC = () => {
         }
       }
     });
-    
+
     return data;
   }, [guests, guestGroups]);
 
@@ -548,36 +417,34 @@ const GuestsPage: React.FC = () => {
   const filteredTreeData = useMemo(() => {
     return treeData.filter(item => {
       // Check parent
-      const parentMatchesSearch = !searchText || 
-        formatGuestName(item).toLowerCase().includes(searchText.toLowerCase());
-      const parentMatchesSide = selectedSide === 'all' || item.side === selectedSide;
-      
+      const parentMatchesSearch = !searchText ||
+        formatGuestName(item).toLowerCase().includes(searchText.toLowerCase()) ||
+        (item.phoneNumber && item.phoneNumber.includes(searchText));
+
       // Check children
-      const childrenMatchSearch = item.children?.some(child => 
-        formatGuestName(child).toLowerCase().includes(searchText.toLowerCase())
+      const childrenMatchSearch = item.children?.some(child =>
+        formatGuestName(child).toLowerCase().includes(searchText.toLowerCase()) ||
+        (child.phoneNumber && child.phoneNumber.includes(searchText))
       );
-      const childrenMatchSide = item.children?.some(child => 
-        selectedSide === 'all' || child.side === selectedSide
-      );
-      
-      return (parentMatchesSearch || childrenMatchSearch) && (parentMatchesSide || childrenMatchSide);
+
+      return (parentMatchesSearch || childrenMatchSearch);
     }).map(item => {
       // Filter children if needed
-      if (item.children && (searchText || selectedSide !== 'all')) {
+      if (item.children && searchText) {
         const filteredChildren = item.children.filter(child => {
-          const matchesSearch = !searchText || 
-            formatGuestName(child).toLowerCase().includes(searchText.toLowerCase());
-          const matchesSide = selectedSide === 'all' || child.side === selectedSide;
-          return matchesSearch && matchesSide;
+          const matchesSearch = !searchText ||
+            formatGuestName(child).toLowerCase().includes(searchText.toLowerCase()) ||
+            (child.phoneNumber && child.phoneNumber.includes(searchText));
+          return matchesSearch;
         });
-        
+
         // If no children match, return parent without children (or exclude if parent doesn't match)
         if (filteredChildren.length === 0) {
           // Only show parent if it matches
-          const parentMatches = (!searchText || 
-            formatGuestName(item).toLowerCase().includes(searchText.toLowerCase())) &&
-            (selectedSide === 'all' || item.side === selectedSide);
-          
+          const parentMatches = (!searchText ||
+            formatGuestName(item).toLowerCase().includes(searchText.toLowerCase()) ||
+            (item.phoneNumber && item.phoneNumber.includes(searchText)));
+
           if (parentMatches) {
             // Return parent without children
             const { children, ...parentWithoutChildren } = item;
@@ -585,7 +452,7 @@ const GuestsPage: React.FC = () => {
           }
           return null; // Exclude this item
         }
-        
+
         return {
           ...item,
           children: filteredChildren,
@@ -593,7 +460,7 @@ const GuestsPage: React.FC = () => {
       }
       return item;
     }).filter((item): item is Guest & { children?: Guest[] } => item !== null);
-  }, [treeData, searchText, selectedSide]);
+  }, [treeData, searchText]);
 
   // Table columns
   const columns: ColumnsType<Guest & { children?: Guest[] }> = [
@@ -605,17 +472,17 @@ const GuestsPage: React.FC = () => {
       render: (_, record) => {
         // Check if this is a parent row (has children)
         const isParent = record.children && record.children.length > 0;
-        
+
         if (isParent) {
           // Parent row - show group number
           const parentIndex = filteredTreeData.findIndex(item => item.id === record.id);
           return <Text strong>{parentIndex + 1}</Text>;
         } else {
           // Child row or standalone row - find parent
-          const parent = filteredTreeData.find(item => 
+          const parent = filteredTreeData.find(item =>
             item.children && item.children.some(child => child.id === record.id)
           );
-          
+
           if (parent) {
             // This is a child row
             const parentIndex = filteredTreeData.findIndex(item => item.id === parent.id);
@@ -623,7 +490,7 @@ const GuestsPage: React.FC = () => {
             return <Text type="secondary">{parentIndex + 1}.{childIndex + 1}</Text>;
           } else {
             // Standalone row (not in a group)
-            const standaloneIndex = filteredTreeData.findIndex(item => 
+            const standaloneIndex = filteredTreeData.findIndex(item =>
               !item.children && item.id === record.id
             );
             return <Text>{standaloneIndex + 1}</Text>;
@@ -639,28 +506,58 @@ const GuestsPage: React.FC = () => {
       render: (_, guest) => {
         const group = guestGroups.find(g => g.groupId === guest.groupId);
         const member = group?.members.find(m => m.id === guest.id);
-        
+
         if (group && member) {
           const memberLabel = renderMemberLabel(group, member);
+          const isFullyCheckedIn = group.checkedInCount === group.totalCount;
+
           return (
             <div className="min-w-0">
-              <div className="truncate" title={memberLabel}>
+              <div className="truncate font-medium" title={memberLabel}>
                 {memberLabel}
               </div>
               {group.totalCount > 1 && (
-                <Text type="secondary" className="text-xs truncate block" title={group.groupName}>
-                  {group.groupName} ({group.totalCount} คน)
-                </Text>
+                <GroupMemberTooltip group={group}>
+                  <Text
+                    type={isFullyCheckedIn ? "success" : "secondary"}
+                    className="text-xs truncate block cursor-help"
+                  >
+                    {group.groupName} ({group.checkedInCount}/{group.totalCount} คน)
+                  </Text>
+                </GroupMemberTooltip>
               )}
             </div>
           );
         }
-        
+
         const guestName = formatGuestName(guest);
         return (
-          <div className="min-w-0 truncate" title={guestName}>
+          <div className="min-w-0 truncate font-medium" title={guestName}>
             {guestName}
           </div>
+        );
+      },
+    },
+    {
+      title: 'เบอร์โทรศัพท์',
+      key: 'phoneNumber',
+      width: 150,
+      render: (_, guest) => {
+        if (!guest.phoneNumber) return <Text type="secondary">-</Text>;
+        return (
+          <Space>
+            <PhoneOutlined className="text-gray-400" />
+            <Text copyable>{guest.phoneNumber}</Text>
+            <Tooltip title="โทรออก">
+              <Button
+                type="link"
+                size="small"
+                icon={<PhoneOutlined />}
+                href={`tel:${guest.phoneNumber}`}
+                className="text-green-600 hover:text-green-700"
+              />
+            </Tooltip>
+          </Space>
         );
       },
     },
@@ -670,8 +567,8 @@ const GuestsPage: React.FC = () => {
       width: 100,
       render: (side: Side) => {
         switch (side) {
-          case 'groom': return <Tag color="blue">เจ้าบ่าว</Tag>;
-          case 'bride': return <Tag color="magenta">เจ้าสาว</Tag>;
+          case 'groom': return <Tag icon={<ManOutlined />} color="blue">เจ้าบ่าว</Tag>;
+          case 'bride': return <Tag icon={<WomanOutlined />} color="magenta">เจ้าสาว</Tag>;
           case 'both': return <Tag color="purple">ทั้งคู่</Tag>;
           default: return <Tag>ไม่ระบุ</Tag>;
         }
@@ -712,18 +609,16 @@ const GuestsPage: React.FC = () => {
         if (!checkedInAt) {
           return <Tag>ยังไม่เช็คอิน</Tag>;
         }
-        
+
         try {
           const date = new Date(checkedInAt);
           const formattedTime = date.toLocaleTimeString('th-TH', {
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
           });
           const formattedDate = date.toLocaleDateString('th-TH', {
-            year: 'numeric',
-            month: '2-digit',
             day: '2-digit',
+            month: '2-digit',
           });
           return (
             <div>
@@ -754,7 +649,7 @@ const GuestsPage: React.FC = () => {
         const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
         const canCheckIn = rsvpStatus !== 'no';
         const isParent = record.children && record.children.length > 0;
-        
+
         // ค้นหากลุ่มจากหลายวิธี
         let group = null;
         if (guest.groupId) {
@@ -767,350 +662,180 @@ const GuestsPage: React.FC = () => {
         if (!group) {
           group = guestGroups.find(g => g.members.some(m => m.id === guest.id));
         }
-        
+
         const hasMultipleMembers = group && group.members && group.members.length > 1;
         const isGroupOwner = group && group.members.find(m => m.id === guest.id)?.isOwner;
-        
+
         // ตรวจสอบว่าสมาชิกทั้งหมดเช็คอินแล้วหรือยัง
-        const allCheckedIn = group && group.members ? 
+        const allCheckedIn = group && group.members ?
           group.members.every(m => {
             const memberGuest = guests.find(g => g.id === m.id);
             return memberGuest && memberGuest.checkedInAt;
           }) : false;
-        
+
         return (
           <Space wrap>
             {/* แสดงปุ่มเช็คอิน/ยกเลิกเช็คอินยกกลุ่มสำหรับ parent row หรือ group owner */}
             {(isParent || (isGroupOwner && hasMultipleMembers)) && (
-              <Button
-                type={allCheckedIn ? "default" : "primary"}
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleGroupCheckIn(record)}
-                size="small"
-                danger={allCheckedIn}
-              >
-                {allCheckedIn ? 'ยกเลิกเช็คอินยกกลุ่ม' : 'เช็คอินยกกลุ่ม'}
-              </Button>
+              <Tooltip title={allCheckedIn ? 'ยกเลิกเช็คอินยกกลุ่ม' : 'เช็คอินยกกลุ่ม'}>
+                <Button
+                  type={allCheckedIn ? "default" : "primary"}
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => handleGroupCheckIn(record)}
+                  size="small"
+                  danger={allCheckedIn}
+                />
+              </Tooltip>
             )}
-            <Button
-              type="link"
-              icon={<CheckCircleOutlined />}
-              onClick={() => handleCheckIn(guest)}
-              disabled={!canCheckIn && !guest.checkedInAt}
-            >
-              {guest.checkedInAt ? 'ยกเลิกเช็คอิน' : 'เช็คอิน'}
-            </Button>
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => {
-                setEditingGuest(guest);
-                setIsDrawerVisible(true);
-              }}
-            >
-              แก้ไข
-            </Button>
-            <Button
-              type="link"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(guest.id)}
-            >
-              ลบ
-            </Button>
+            <Tooltip title={guest.checkedInAt ? 'ยกเลิกเช็คอิน' : 'เช็คอิน'}>
+              <Button
+                type="link"
+                icon={<CheckCircleOutlined />}
+                onClick={() => handleCheckIn(guest)}
+                disabled={!canCheckIn && !guest.checkedInAt}
+                className={guest.checkedInAt ? 'text-red-500' : 'text-green-500'}
+              />
+            </Tooltip>
+            <Tooltip title="แก้ไข">
+              <Button
+                type="link"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setEditingGuest(guest);
+                  setIsDrawerVisible(true);
+                }}
+              />
+            </Tooltip>
+            <Tooltip title="ลบ">
+              <Button
+                type="link"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(guest.id)}
+              />
+            </Tooltip>
           </Space>
         );
       },
     },
   ];
 
-  return (
-    <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
-        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">จัดการแขก</h1>
-        <Button
-          type="primary"
-          size="middle"
-          onClick={() => {
-            setEditingGuest(null);
-            setIsDrawerVisible(true);
-          }}
-          className="w-full sm:w-auto"
-        >
-          เพิ่มแขก
-        </Button>
-      </div>
+  const renderMobileCard = (guest: Guest) => {
+    const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
+    const canCheckIn = rsvpStatus !== 'no';
+    const table = tables.find(t => t.id === guest.tableId);
+    const zone = zones.find(z => z.id === guest.zoneId);
 
-      <Tabs 
-        activeKey={activeTab} 
-        onChange={setActiveTab}
-        size="small"
-        className="responsive-tabs"
-        items={[
-          {
-            key: 'list',
-            label: 'รายชื่อแขก',
-            children: (
-              <>
-                <div className="mb-3 sm:mb-4">
-                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                    <div className="flex-1 min-w-0">
-                      <CustomSearch
-                        placeholder="ค้นหาแขก"
-                        allowClear
-                        style={{ width: '100%', maxWidth: '100%' }}
-                        onSearch={setSearchText}
-                        onChange={(e) => setSearchText(e.target.value)}
-                      />
-                    </div>
-                    <Space.Compact className="w-full sm:w-auto flex-shrink-0">
-                      <Button
-                        onClick={() => setSelectedSide('all')}
-                        type={selectedSide === 'all' ? 'primary' : 'default'}
-                        size="middle"
-                        className="flex-1 sm:flex-none"
-                      >
-                        ทั้งหมด
-                      </Button>
-                      <Button
-                        onClick={() => setSelectedSide('groom')}
-                        type={selectedSide === 'groom' ? 'primary' : 'default'}
-                        size="middle"
-                        className="flex-1 sm:flex-none"
-                      >
-                        เจ้าบ่าว
-                      </Button>
-                      <Button
-                        onClick={() => setSelectedSide('bride')}
-                        type={selectedSide === 'bride' ? 'primary' : 'default'}
-                        size="middle"
-                        className="flex-1 sm:flex-none"
-                      >
-                        เจ้าสาว
-                      </Button>
-                    </Space.Compact>
-                  </div>
-                </div>
-                
-                <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-                  <Table<Guest & { children?: Guest[] }>
-                    columns={columns}
-                    dataSource={filteredTreeData}
-                    rowKey="id"
-                    loading={isLoading}
-                    pagination={{ 
-                      pageSize: 20,
-                      showSizeChanger: false,
-                      responsive: true,
-                      showTotal: (total) => `ทั้งหมด ${total} คน`,
-                    }}
-                    scroll={{ 
-                      x: 'max-content',
-                      y: 'calc(100vh - 400px)',
-                    }}
-                    className="shadow-sm"
-                    size="small"
-                    expandable={{
-                      defaultExpandAllRows: false,
-                      indentSize: 20,
-                      showExpandColumn: true,
-                      expandRowByClick: false,
-                      childrenColumnName: 'children',
-                    }}
-                  />
-                </div>
-              </>
-            ),
-          },
-          {
-            key: 'checkin',
-            label: (
-              <Space>
-                <span>เช็คอิน</span>
-                <Tag color={totalCheckedIn === guests.length ? 'success' : 'processing'}>
-                  {totalCheckedIn}/{guests.length}
-                </Tag>
+    return (
+      <Card key={guest.id} className="mb-3 shadow-sm" size="small">
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex gap-3">
+            <Avatar
+              icon={<UserOutlined />}
+              className={guest.side === 'groom' ? 'bg-blue-500' : guest.side === 'bride' ? 'bg-pink-500' : 'bg-purple-500'}
+            />
+            <div>
+              <Text strong className="text-base block">{formatGuestName(guest)}</Text>
+              <Space size="small" className="mt-1">
+                {guest.nickname && <Tag>{guest.nickname}</Tag>}
+                <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />
               </Space>
-            ),
-            children: (
-              <>
-          <div className="mb-3 sm:mb-4">
-            <Row gutter={[12, 12]}>
-              <Col xs={24} sm={24} md={12} lg={10}>
-                <CustomSearch
-                  placeholder="ค้นหาชื่อ/กลุ่ม"
-                  allowClear
-                  prefix={<SearchOutlined />}
-                  value={checkInSearchText}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCheckInSearchText(e.target.value)}
-                  style={{ width: '100%' }}
-                />
-              </Col>
-              <Col xs={24} sm={24} md={12} lg={14}>
-                <Space.Compact className="w-full">
-                  <Button
-                    onClick={() => setCheckInSelectedSide('all')}
-                    type={checkInSelectedSide === 'all' ? 'primary' : 'default'}
-                    className="flex-1 sm:flex-none"
-                  >
-                    ทั้งหมด
-                  </Button>
-                  <Button
-                    onClick={() => setCheckInSelectedSide('groom')}
-                    type={checkInSelectedSide === 'groom' ? 'primary' : 'default'}
-                    className="flex-1 sm:flex-none"
-                  >
-                    เจ้าบ่าว
-                  </Button>
-                  <Button
-                    onClick={() => setCheckInSelectedSide('bride')}
-                    type={checkInSelectedSide === 'bride' ? 'primary' : 'default'}
-                    className="flex-1 sm:flex-none"
-                  >
-                    เจ้าสาว
-                  </Button>
-                </Space.Compact>
-              </Col>
-            </Row>
-          </div>
-
-          {selectedCheckInIds.length > 0 && (
-            <div className="mb-3 sm:mb-4 p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300 shadow-md">
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircleOutlined className="text-blue-600 text-lg sm:text-xl" />
-                  <Text strong className="text-base sm:text-lg text-blue-900">
-                    เลือก {selectedCheckInIds.length} คน
-                  </Text>
-                </div>
-                <Space size="small" className="w-full sm:w-auto">
-                  <Button 
-                    onClick={() => setSelectedCheckInIds([])}
-                    size="middle"
-                    className="flex-1 sm:flex-none"
-                  >
-                    ยกเลิก
-                  </Button>
-                  <Button 
-                    type="primary" 
-                    onClick={handleBulkCheckIn} 
-                    size="middle"
-                    icon={<CheckCircleOutlined />}
-                    className="flex-1 sm:flex-none"
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    เช็คอิน {selectedCheckInIds.length} คน
-                  </Button>
-                </Space>
-              </div>
             </div>
-          )}
+          </div>
+          {guest.checkedInAt && <Tag color="green">เช็คอินแล้ว</Tag>}
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-            {filteredCheckInMembers.map(({ guest, group, member }) => {
-              const rsvpStatus = getGuestRSVPStatus(guest, rsvpMap);
-              const canCheckIn = rsvpStatus !== 'no';
-              const isSelected = selectedCheckInIds.includes(guest.id);
-              
-              const displayName = group && member 
-                ? renderMemberLabel(group, member)
-                : formatGuestName(guest);
+        <div className="grid grid-cols-2 gap-2 mb-3 text-sm text-gray-600">
+          <div>
+            <PhoneOutlined className="mr-2" />
+            {guest.phoneNumber ? (
+              <a href={`tel:${guest.phoneNumber}`} className="text-blue-600">{guest.phoneNumber}</a>
+            ) : '-'}
+          </div>
+          <div>
+            <span className="mr-2">โต๊ะ:</span>
+            {table && zone ? `${zone.zoneName} - ${table.tableName}` : '-'}
+          </div>
+        </div>
 
-              return (
-                <Card
-                  key={guest.id}
-                  size="small"
-                  className={`transition-all ${isSelected ? 'border-blue-500 border-2 shadow-lg' : 'hover:shadow-md'}`}
-                  styles={{
-                    body: { padding: '12px' }
-                  }}
-                >
-                  <div className="flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
-                    <Checkbox
-                      checked={isSelected}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCheckInIds([...selectedCheckInIds, guest.id]);
-                        } else {
-                          setSelectedCheckInIds(selectedCheckInIds.filter(id => id !== guest.id));
-                        }
-                      }}
-                      disabled={!canCheckIn}
-                    />
-                    <Avatar 
-                      size={{ xs: 40, sm: 48 }}
-                      icon={<UserOutlined />}
-                      style={{ 
-                        backgroundColor: guest.side === 'groom' ? '#1890ff' : '#eb2f96',
-                        flexShrink: 0
-                      }}
-                    >
-                      {displayName.charAt(0).toUpperCase()}
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm sm:text-base mb-1 truncate" title={displayName}>
-                        {displayName}
-                      </div>
-                      {group && (
-                        <Tag color="blue" className="mb-1 text-xs">
-                          {group.groupName}
-                        </Tag>
-                      )}
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        <Tag color={guest.side === 'groom' ? 'blue' : 'magenta'} className="text-xs">
-                          {guest.side === 'groom' ? 'เจ้าบ่าว' : guest.side === 'bride' ? 'เจ้าสาว' : 'ทั้งคู่'}
-                        </Tag>
-                        <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />
-                      </div>
-                      {member && member.relationToMain && (
-                        <Text type="secondary" className="text-xs block">
-                          {member.relationToMain}
-                        </Text>
-                      )}
-                      {!canCheckIn && (
-                        <Tag color="red" className="mt-1 text-xs">
-                          ไม่ตอบรับเข้าร่วมงาน
-                        </Tag>
-                      )}
-                    </div>
+        <div className="flex justify-end gap-2 border-t pt-2">
+          <Button
+            icon={<PhoneOutlined />}
+            href={guest.phoneNumber ? `tel:${guest.phoneNumber}` : undefined}
+            disabled={!guest.phoneNumber}
+          >
+            โทร
+          </Button>
+          <Button
+            type={guest.checkedInAt ? "default" : "primary"}
+            danger={!!guest.checkedInAt}
+            icon={<CheckCircleOutlined />}
+            onClick={() => handleCheckIn(guest)}
+            disabled={!canCheckIn && !guest.checkedInAt}
+          >
+            {guest.checkedInAt ? 'ยกเลิก' : 'เช็คอิน'}
+          </Button>
+          <Button icon={<EditOutlined />} onClick={() => {
+            setEditingGuest(guest);
+            setIsDrawerVisible(true);
+          }} />
+        </div>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="p-4 md:p-6 bg-gray-50 min-h-screen w-full">
+      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 m-0">รายชื่อแขก</h1>
+            <Text type="secondary">จัดการรายชื่อแขกและเช็คอิน</Text>
+          </div>
+          <div className="flex gap-2 w-full md:w-auto">
+            <CustomSearch
+              placeholder="ค้นหาชื่อ, เบอร์โทร"
+              allowClear
+              style={{ width: '100%', maxWidth: '300px' }}
+              onSearch={setSearchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+            <Button type="primary" onClick={() => {
+              setEditingGuest(null);
+              setIsDrawerVisible(true);
+            }}>
+              เพิ่มแขก
+            </Button>
+          </div>
+        </div>
+
+        {screens.md ? (
+          <Table
+            columns={columns}
+            dataSource={filteredTreeData}
+            rowKey="id"
+            loading={isLoading}
+            pagination={{ pageSize: 20 }}
+            scroll={{ x: 1200 }}
+            className="border border-gray-100 rounded-lg overflow-hidden"
+          />
+        ) : (
+          <div className="pb-20">
+            {filteredTreeData.map(item => {
+              if (item.children) {
+                return (
+                  <div key={item.id} className="mb-4 border rounded-lg p-2 bg-gray-50">
+                    <div className="mb-2 font-bold text-gray-700 px-2">{item.groupName || formatGuestName(item)} (กลุ่ม)</div>
+                    {renderMobileCard(item)}
+                    {item.children.map(child => renderMobileCard(child))}
                   </div>
-                  <Button
-                    type="primary"
-                    icon={<CheckCircleOutlined />}
-                    onClick={() => handleCheckIn(guest)}
-                    disabled={!canCheckIn}
-                    block
-                    size="middle"
-                    className="mt-2"
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    เช็คอิน
-                  </Button>
-                </Card>
-              );
+                );
+              }
+              return renderMobileCard(item);
             })}
           </div>
-
-          {filteredCheckInMembers.length === 0 && (
-            <div className="text-center py-12">
-              <Text type="secondary">
-                {checkInSearchText || checkInSelectedSide !== 'all' 
-                  ? 'ไม่พบแขกที่ยังไม่เช็คอิน' 
-                  : 'ไม่มีแขกที่ยังไม่เช็คอิน'}
-              </Text>
-            </div>
-          )}
-              </>
-            ),
-          },
-        ]}
-      />
+        )}
+      </div>
 
       <GuestFormDrawer
         visible={isDrawerVisible}
@@ -1118,13 +843,11 @@ const GuestsPage: React.FC = () => {
           setIsDrawerVisible(false);
           setEditingGuest(null);
         }}
-        guestToEdit={editingGuest}
         onSubmit={handleFormSubmit}
+        guestToEdit={editingGuest}
       />
-
     </div>
   );
 };
 
 export default GuestsPage;
-

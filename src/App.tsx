@@ -7,8 +7,6 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { ConfigProvider, App as AntApp, Spin } from 'antd';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import GuestRSVPApp from '@/card/GuestRSVPApp';
-import IntroPage from '@/pages/IntroPage';
-import OTPLoginPage from '@/pages/OTPLoginPage';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { AuthService } from '@/services/firebase/AuthService';
 import { User } from 'firebase/auth';
@@ -143,7 +141,7 @@ const App: React.FC = () => {
   const renderAdminContent = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><DashboardPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><DashboardPage onNavigate={handlePageChange} /></Suspense>;
       case 'guests':
         return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><GuestsPage /></Suspense>;
       case 'seating':
@@ -153,12 +151,12 @@ const App: React.FC = () => {
       case 'settings':
         return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><SettingsPage /></Suspense>;
       default:
-        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><DashboardPage /></Suspense>;
+        return <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}><DashboardPage onNavigate={handlePageChange} /></Suspense>;
     }
   };
 
-  // Guest mode: Handle Guest flow (IntroPage → OTPLoginPage → GuestRSVPApp)
-  const [guestAuthState, setGuestAuthState] = useState<'intro' | 'login' | 'authenticated' | 'checking'>('checking');
+  // Guest mode: Handle Guest flow (GuestRSVPApp → OTPLoginPage → GuestRSVPApp)
+  const [guestAuthState, setGuestAuthState] = useState<'app' | 'login' | 'checking'>('checking');
   const [guestUser, setGuestUser] = useState<User | null>(null);
   const isCheckingAuthRef = useRef(false);
   const authCheckAbortRef = useRef<AbortController | null>(null);
@@ -170,7 +168,7 @@ const App: React.FC = () => {
     }
 
     const authService = AuthService.getInstance();
-    
+
     // Prevent multiple simultaneous checks
     if (isCheckingAuthRef.current) {
       return;
@@ -179,79 +177,81 @@ const App: React.FC = () => {
     isCheckingAuthRef.current = true;
     const abortController = new AbortController();
     authCheckAbortRef.current = abortController;
-    
+
     setGuestAuthState('checking');
 
     // Check current user
     const currentUser = authService.getCurrentUser();
-    
+
     if (currentUser) {
       // Check if user is admin
       authService.checkIsAdmin(currentUser.uid)
         .then((isAdmin) => {
           if (abortController.signal.aborted) return;
-          
+
           if (!isAdmin) {
             // Guest user is authenticated
             setGuestUser(currentUser);
-            setGuestAuthState('authenticated');
+            setGuestAuthState('app');
           } else {
             // Admin user in guest path - redirect to admin
-            setGuestAuthState('intro');
+            setGuestAuthState('app');
             window.location.href = '/admin';
           }
           isCheckingAuthRef.current = false;
         })
         .catch((error) => {
           if (abortController.signal.aborted) return;
-          
+
           logger.error('[App] Error checking admin status:', error);
           // If check fails, assume guest (safer default)
           setGuestUser(currentUser);
-          setGuestAuthState('authenticated');
+          setGuestAuthState('app');
           isCheckingAuthRef.current = false;
         });
     } else {
-      setGuestAuthState('intro');
+      // Not logged in - show app immediately (user can navigate to login from button)
+      setGuestAuthState('app');
       isCheckingAuthRef.current = false;
     }
 
     // Listen for auth state changes
     const unsubscribe = authService.onAuthStateChange((user) => {
       if (abortController.signal.aborted) return;
-      
+
       if (user) {
         // Prevent multiple simultaneous admin checks
         if (isCheckingAuthRef.current) return;
         isCheckingAuthRef.current = true;
-        
+
         authService.checkIsAdmin(user.uid)
           .then((isAdmin) => {
             if (abortController.signal.aborted) return;
-            
+
             if (!isAdmin) {
               setGuestUser(user);
-              setGuestAuthState('authenticated');
+              setGuestAuthState('app');
             } else {
               // Admin user in guest path - redirect to admin
               setGuestUser(null);
-              setGuestAuthState('intro');
+              setGuestAuthState('app');
               window.location.href = '/admin';
             }
             isCheckingAuthRef.current = false;
           })
           .catch((error) => {
             if (abortController.signal.aborted) return;
-            
+
             logger.error('[App] Error checking admin status in auth state change:', error);
             // If check fails, assume guest
             setGuestUser(user);
-            setGuestAuthState('authenticated');
+            setGuestAuthState('app');
             isCheckingAuthRef.current = false;
           });
       } else {
         setGuestUser(null);
-        setGuestAuthState('intro');
+        // Stay on app even when logged out
+        setGuestAuthState('app');
         isCheckingAuthRef.current = false;
       }
     });
@@ -281,25 +281,12 @@ const App: React.FC = () => {
                 <Spin size="large" />
               </div>
             )}
-            {guestAuthState === 'intro' && (
-              <IntroPage
-                onContinue={() => setGuestAuthState('login')}
-              />
-            )}
-            {guestAuthState === 'login' && (
-              <OTPLoginPage
-                onBack={() => setGuestAuthState('intro')}
-                onLoginSuccess={(user) => {
-                  setGuestUser(user);
-                  setGuestAuthState('authenticated');
-                }}
-              />
-            )}
-            {guestAuthState === 'authenticated' && guestUser && (
+            {guestAuthState === 'app' && (
               <GuestRSVPApp
                 onExitGuestMode={() => {
                   window.location.href = '/admin';
                 }}
+                currentUser={guestUser}
               />
             )}
           </AntApp>

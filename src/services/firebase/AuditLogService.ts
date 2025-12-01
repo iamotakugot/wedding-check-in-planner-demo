@@ -185,6 +185,49 @@ export class AuditLogService {
     };
   }
 
+  /**
+   * Subscribe to recent audit logs (สำหรับ Admin)
+   * @param callback - callback function
+   * @param limit - จำนวน logs ที่ต้องการ (default: 100)
+   */
+  subscribeRecent(
+    callback: (logs: AuditLog[]) => void,
+    limit: number = 100
+  ): () => void {
+    const subscriptionId = `auditLog_recent_${Date.now()}_${Math.random()}`;
+    
+    const recentQuery = query(
+      this.auditLogsRef(),
+      orderByChild('createdAt'),
+      limitToLast(limit)
+    );
+    
+    const unsubscribe = onValue(recentQuery, (snapshot: DataSnapshot) => {
+      if (!snapshot.exists()) {
+        callback([]);
+        return;
+      }
+      
+      const data = snapshot.val();
+      const logs: AuditLog[] = Object.keys(data)
+        .map(key => ({ logId: key, ...data[key] }))
+        .sort((a: AuditLog, b: AuditLog) => {
+          const aTime = new Date(a.createdAt).getTime();
+          const bTime = new Date(b.createdAt).getTime();
+          return bTime - aTime; // เรียงจากใหม่ไปเก่า
+        });
+      
+      callback(logs);
+    });
+    
+    this.subscriptions.set(subscriptionId, unsubscribe);
+    
+    return () => {
+      unsubscribe();
+      this.subscriptions.delete(subscriptionId);
+    };
+  }
+
   cleanup(): void {
     this.subscriptions.forEach((unsubscribe) => unsubscribe());
     this.subscriptions.clear();

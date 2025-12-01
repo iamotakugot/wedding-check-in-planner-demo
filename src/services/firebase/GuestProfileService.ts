@@ -10,6 +10,19 @@ import { AuthService } from './AuthService';
 import { logger } from '@/utils/logger';
 import { User } from 'firebase/auth';
 
+/**
+ * ลบ undefined properties ออกจาก object (Firebase ไม่รองรับ undefined)
+ */
+function removeUndefinedProperties<T extends Record<string, any>>(obj: T): T {
+  const cleaned = { ...obj };
+  Object.keys(cleaned).forEach((key) => {
+    if (cleaned[key] === undefined) {
+      delete cleaned[key];
+    }
+  });
+  return cleaned;
+}
+
 export class GuestProfileService {
   private static instance: GuestProfileService;
 
@@ -25,21 +38,37 @@ export class GuestProfileService {
   /**
    * สร้างหรืออัปเดต Guest Profile หลังจาก OTP login สำเร็จ
    * @param user - Firebase User object
-   * @param phoneNumber - Phone number (จะใช้จาก user.phoneNumber ถ้าไม่ระบุ)
+   * @param phoneNumber - Phone number (จะใช้จาก user.phoneNumber ถ้าไม่ระบุ - แนะนำให้ใช้ user.phoneNumber)
    */
   async createOrUpdateProfile(user: User, phoneNumber?: string): Promise<GuestProfile> {
     try {
       const uid = user.uid;
-      const userPhoneNumber = phoneNumber || user.phoneNumber || '';
+      // ให้ความสำคัญกับ user.phoneNumber ก่อน (เป็น E.164 format จาก Firebase Auth)
+      // ใช้ phoneNumber parameter เป็น fallback เท่านั้น
+      const userPhoneNumber = user.phoneNumber || phoneNumber || '';
       
       // Validate phone number
       if (!userPhoneNumber || userPhoneNumber.trim().length === 0) {
         throw new Error('ไม่พบเบอร์โทรศัพท์');
       }
       
-      // Validate phone number format (should be in E.164 format from Firebase Auth)
+      // แปลง phone number เป็น E.164 format ถ้าจำเป็น
+      let finalPhoneNumber = userPhoneNumber;
       if (!userPhoneNumber.startsWith('+')) {
         logger.warn('[GuestProfileService] Phone number is not in E.164 format:', userPhoneNumber);
+        // พยายามแปลงเป็น E.164 format ถ้าเป็นเบอร์ไทย
+        const cleaned = userPhoneNumber.replace(/\D/g, '');
+        if (cleaned.length >= 9 && cleaned.length <= 10) {
+          // ถ้าเป็นเบอร์ไทย (เริ่มด้วย 0 หรือ 66)
+          if (cleaned.startsWith('0')) {
+            finalPhoneNumber = '+66' + cleaned.substring(1);
+          } else if (cleaned.startsWith('66')) {
+            finalPhoneNumber = '+' + cleaned;
+          } else {
+            finalPhoneNumber = '+66' + cleaned;
+          }
+          logger.log('[GuestProfileService] Converted phone number to E.164:', finalPhoneNumber);
+        }
       }
 
       // ตรวจสอบว่ามี profile อยู่แล้วหรือไม่
@@ -49,7 +78,7 @@ export class GuestProfileService {
       if (existingProfile) {
         // อัปเดต profile ที่มีอยู่
         const updates: Partial<GuestProfile> = {
-          phoneNumber: userPhoneNumber,
+          phoneNumber: finalPhoneNumber,
           updatedAt: now,
         };
 
@@ -58,25 +87,35 @@ export class GuestProfileService {
           updates.displayName = user.displayName;
         }
 
-        await update(ref(database, `guestProfiles/${uid}`), updates);
+        // ลบ undefined properties ก่อนบันทึก (Firebase ไม่รองรับ undefined)
+        const cleanedUpdates = removeUndefinedProperties(updates);
+
+        await update(ref(database, `guestProfiles/${uid}`), cleanedUpdates);
         
         logger.log('[GuestProfileService] Profile updated:', uid);
-        return { ...existingProfile, ...updates };
+        return { ...existingProfile, ...cleanedUpdates } as GuestProfile;
       } else {
         // สร้าง profile ใหม่
-        const newProfile: GuestProfile = {
+        const newProfile: Partial<GuestProfile> = {
           uid,
-          phoneNumber: userPhoneNumber,
-          displayName: user.displayName || undefined,
+          phoneNumber: finalPhoneNumber,
           role: 'guest',
           createdAt: now,
           updatedAt: now,
         };
 
-        await set(ref(database, `guestProfiles/${uid}`), newProfile);
+        // เพิ่ม displayName เฉพาะเมื่อมีค่า (ไม่ใช่ null หรือ undefined)
+        if (user.displayName) {
+          newProfile.displayName = user.displayName;
+        }
+
+        // ลบ undefined properties ก่อนบันทึก (Firebase ไม่รองรับ undefined)
+        const cleanedProfile = removeUndefinedProperties(newProfile);
+
+        await set(ref(database, `guestProfiles/${uid}`), cleanedProfile);
         
         logger.log('[GuestProfileService] Profile created:', uid);
-        return newProfile;
+        return cleanedProfile as GuestProfile;
       }
     } catch (error) {
       logger.error('[GuestProfileService] Error creating/updating profile:', error);

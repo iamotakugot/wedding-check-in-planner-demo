@@ -32,9 +32,12 @@ export function validateRSVP(data: {
     errors.push('กรุณากรอกชื่อ');
   }
 
-  if (!isRequired(data.lastName)) {
-    errors.push('กรุณากรอกนามสกุล');
-  }
+  // Validation lastName: ถ้า isComing='no' ไม่ต้องบังคับ lastName
+  // ถ้า isComing='yes' ก็ไม่ต้องบังคับนามสกุลแล้ว (ตาม requirement ใหม่)
+  // if (data.isComing === 'yes' && !isRequired(data.lastName)) {
+  //   errors.push('กรุณากรอกนามสกุล');
+  // }
+  // สำหรับ isComing='no' หรือ undefined ไม่ต้องตรวจสอบ lastName
 
   if (data.isComing !== 'yes' && data.isComing !== 'no') {
     errors.push('กรุณาเลือกสถานะการร่วมงาน');

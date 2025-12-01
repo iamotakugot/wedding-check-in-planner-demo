@@ -1,11 +1,11 @@
 /**
  * Admin Seating Page
- * จัดการที่นั่ง (เรียบง่าย, มี debounce)
+ * จัดการที่นั่ง (Responsive & Mobile Friendly)
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Card, Button, Tabs, App, Modal, Drawer, Input } from 'antd';
-import { PlusOutlined, MenuOutlined } from '@ant-design/icons';
+import { Card, Button, Tabs, App, Modal, List, Tag, Space, Typography, Grid, Segmented, Progress } from 'antd';
+import { PlusOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
@@ -18,12 +18,12 @@ import DraggableTable from '@/components/admin/DraggableTable';
 import ZoneModal from '@/components/admin/ZoneModal';
 import TableModal from '@/components/admin/TableModal';
 import TableDetailModal from '@/components/admin/TableDetailModal';
-import GuestSelectionSidebar from '@/components/admin/GuestSelectionSidebar';
 import { debounceAsync } from '@/utils/debounce';
 import { logger } from '@/utils/logger';
-import { renderMemberLabel } from '@/utils/guestHelpers';
+import { GRID_X_POSITIONS, GRID_Y_START, GRID_Y_STEP } from '@/constants/layout';
 
-// Tabs component used directly
+const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const SeatingPage: React.FC = () => {
   const { message } = App.useApp();
@@ -33,11 +33,11 @@ const SeatingPage: React.FC = () => {
   const { guestGroups } = useGuestGroups();
   const zoneService = ZoneService.getInstance();
   const tableService = TableService.getInstance();
+  const screens = useBreakpoint();
 
-  // Initialize selectedZoneId with first valid zone
-  // Use useEffect to update when zones load
+  // Initialize selectedZoneId
   const [selectedZoneId, setSelectedZoneId] = useState<string>('');
-  
+
   useEffect(() => {
     if (zones.length > 0 && !selectedZoneId) {
       const firstValidZone = zones.find(z => z && z.id && z.zoneName);
@@ -54,14 +54,10 @@ const SeatingPage: React.FC = () => {
   const [activeTable, setActiveTable] = useState<TableData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
-  
-  // Click-based assignment state
-  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
-  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
-  const [isAssignMode, setIsAssignMode] = useState(false);
-  const [sidebarDrawerVisible, setSidebarDrawerVisible] = useState(false);
-  const [editingZoneKey, setEditingZoneKey] = useState<string | null>(null);
-  const [editingZoneName, setEditingZoneName] = useState<string>('');
+
+  // View Mode (Canvas vs List)
+  const [viewMode, setViewMode] = useState<'canvas' | 'list'>('canvas');
+
   const seatingManager = new SeatingManager();
 
   const currentZone = zones.find((z) => z && z.id === selectedZoneId && z.zoneName);
@@ -72,7 +68,7 @@ const SeatingPage: React.FC = () => {
     [selectedZoneId, tables]
   );
 
-  // Count seated members per table (from guestGroups)
+  // Count seated members per table
   const seatedMembersByTable = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of tables) {
@@ -80,7 +76,6 @@ const SeatingPage: React.FC = () => {
         map.set(t.tableId, 0);
       }
     }
-    // Count members with seat assignments
     for (const group of guestGroups) {
       for (const member of group.members) {
         if (member.seat?.tableId) {
@@ -92,7 +87,7 @@ const SeatingPage: React.FC = () => {
     return map;
   }, [guestGroups, tables]);
 
-  // Keep guestsByTable for components that need Guest objects (backward compatibility)
+  // Guests by table map
   const guestsByTable = useMemo(() => {
     const map = new Map<string, Guest[]>();
     for (const t of tables) {
@@ -110,9 +105,6 @@ const SeatingPage: React.FC = () => {
     return map;
   }, [guests, tables]);
 
-  // Note: GuestSelectionSidebar uses guestGroups directly for members
-  // and filters guests prop internally for individual guests
-
   // Table position update handler
   const handleTablePositionUpdate = useCallback(
     debounceAsync(async (id: string, newX: number, newY: number) => {
@@ -126,113 +118,11 @@ const SeatingPage: React.FC = () => {
     []
   );
 
-  // Handle guest/member click for assignment (รายบุคคล)
-  const handleGuestClick = (guestId: string) => {
-    setSelectedGuestId(guestId);
-    setIsAssignMode(true);
-    
-    // Find member in groups to show proper label
-    let memberLabel = '';
-    for (const group of guestGroups) {
-      const member = group.members.find(m => m.id === guestId);
-      if (member) {
-        memberLabel = renderMemberLabel(group, member);
-        break;
-      }
-    }
-    
-    if (memberLabel) {
-      message.info(`เลือกโต๊ะสำหรับ ${memberLabel}`);
-    } else {
-      const guest = guests.find(g => g.id === guestId);
-      const guestName = guest ? `${guest.firstName} ${guest.lastName}`.trim() : 'แขก';
-      message.info(`เลือกโต๊ะสำหรับ ${guestName}`);
-    }
-  };
-
-  // Handle member click (same as guest click for now)
-  const handleMemberClick = (memberId: string) => {
-    handleGuestClick(memberId);
-  };
-
-  // Handle table click for assignment or selection
+  // Handle table click
   const handleTableClick = async (table: TableData) => {
-    // Bulk assignment: if multiple guests selected
-    if (selectedGuestIds.length > 0) {
-      try {
-        let successCount = 0;
-        let failCount = 0;
-        
-        for (const guestId of selectedGuestIds) {
-          try {
-            await seatingManager.assignGuestToTable(guestId, table.tableId, table.zoneId);
-            successCount++;
-          } catch (error) {
-            failCount++;
-            logger.error(`Error assigning guest ${guestId}:`, error);
-          }
-        }
-        
-        if (successCount > 0) {
-          message.success(`จัดที่นั่ง ${successCount} คนสำเร็จ${failCount > 0 ? ` (${failCount} คนไม่สำเร็จ)` : ''}`);
-        } else {
-          message.error(`ไม่สามารถจัดที่นั่งได้ (${failCount} คน)`);
-        }
-        
-        setSelectedGuestIds([]);
-        setSelectedGuestId(null);
-        setIsAssignMode(false);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-        message.error(errorMessage);
-      }
-      return;
-    }
-    
-    if (isAssignMode && selectedGuestId) {
-      // Single assignment mode: assign guest to table
-      try {
-        // จัดที่นั่งรายบุคคล
-        await seatingManager.assignGuestToTable(selectedGuestId, table.tableId, table.zoneId);
-        
-        // Find member in groups to show proper success message
-        let memberLabel = '';
-        for (const group of guestGroups) {
-          const member = group.members.find(m => m.id === selectedGuestId);
-          if (member) {
-            memberLabel = renderMemberLabel(group, member);
-            break;
-          }
-        }
-        
-        if (memberLabel) {
-          message.success(`จัดที่นั่ง ${memberLabel} สำเร็จ`);
-        } else {
-          const guest = guests.find(g => g.id === selectedGuestId);
-          const guestName = guest ? `${guest.firstName} ${guest.lastName}`.trim() : 'แขก';
-          message.success(`จัดที่นั่ง ${guestName} สำเร็จ`);
-        }
-        
-        setSelectedGuestId(null);
-        setIsAssignMode(false);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-        message.error(errorMessage);
-      }
-    } else {
-      // Selection mode: select table
-      setSelectedTableId(table.id === selectedTableId ? null : table.id);
-    }
+    setSelectedTableId(table.id === selectedTableId ? null : table.id);
+    // Modal opening is now handled by onOpenDetail only
   };
-
-  // Cancel assignment mode
-  const handleCancelAssign = () => {
-    setSelectedGuestId(null);
-    setSelectedGuestIds([]);
-    setIsAssignMode(false);
-    message.info('ยกเลิกการจัดที่นั่ง');
-  };
-
 
   const handleZoneSubmit = async (zone: Zone) => {
     try {
@@ -257,7 +147,43 @@ const SeatingPage: React.FC = () => {
         await tableService.update(table.id, table);
         message.success('อัพเดทโต๊ะเรียบร้อย');
       } else {
-        await tableService.create(table);
+        // Calculate next available position
+        let newX = table.x;
+        let newY = table.y;
+
+        // If it's a new table (no ID yet, or just created), find a free spot
+        // We check if the proposed position overlaps with any existing table
+        const existingTables = tables.filter(t => t.zoneId === selectedZoneId);
+
+        // Function to check overlap
+        const isOverlapping = (x: number, y: number) => {
+          return existingTables.some(t =>
+            Math.abs(t.x - x) < 10 && Math.abs(t.y - y) < 10 // Increased threshold for safety
+          );
+        };
+
+        // If the default position is taken, find the next available slot
+        if (isOverlapping(newX, newY)) {
+          let found = false;
+          // Grid search: Top to bottom, Left to right
+          for (let y = GRID_Y_START; y <= 100; y += GRID_Y_STEP) {
+            for (const x of GRID_X_POSITIONS) {
+              if (!isOverlapping(x, y)) {
+                newX = x;
+                newY = y;
+                found = true;
+                break;
+              }
+            }
+            if (found) break;
+          }
+        }
+
+        await tableService.create({
+          ...table,
+          x: newX,
+          y: newY
+        });
         message.success('เพิ่มโต๊ะเรียบร้อย');
       }
       setIsTableModalVisible(false);
@@ -268,8 +194,6 @@ const SeatingPage: React.FC = () => {
     }
   };
 
-
-  // Handle delete zone by key (used by editable tabs)
   const handleDeleteZoneByKey = async (zoneId: string) => {
     Modal.confirm({
       title: 'ยืนยันการลบ',
@@ -279,30 +203,24 @@ const SeatingPage: React.FC = () => {
           const zone = zones.find(z => z && z.id === zoneId && z.zoneId);
           if (zone) {
             const tablesToDelete = tables.filter(t => t && t.zoneId === zone.zoneId);
-            
-            // Clear tableId/zoneId ของ guests ที่ถูก assign ไปยังโต๊ะ/โซนที่ถูกลบ
+
             const { GuestService } = await import('@/services/firebase/GuestService');
             const guestService = GuestService.getInstance();
-            
+
             for (const table of tablesToDelete) {
-              // หา guests ที่ถูก assign ไปยังโต๊ะนี้
               const guestsInTable = guests.filter(g => g.tableId === table.tableId && g.zoneId === zone.zoneId);
-              
-              // Clear tableId/zoneId ของ guests เหล่านี้
               for (const guest of guestsInTable) {
                 await guestService.update(guest.id, {
                   tableId: null,
                   zoneId: null,
                 });
               }
-              
               await tableService.delete(table.id);
             }
-            
+
             await zoneService.delete(zoneId);
             message.success('ลบโซนเรียบร้อย');
-            
-            // Force refresh selectedZoneId if deleted zone was selected
+
             if (selectedZoneId === zoneId) {
               const remainingZones = zones.filter(z => z.id !== zoneId);
               if (remainingZones.length > 0) {
@@ -320,24 +238,35 @@ const SeatingPage: React.FC = () => {
     });
   };
 
-  // Table deletion handled in TableDetailModal or can be added later
+  // Drag & Drop State
+  const [dragIndex, setDragIndex] = useState(-1);
+  const [dragOverIndex, setDragOverIndex] = useState(-1);
+
+  // Sort zones by order
+  const sortedZones = useMemo(() => {
+    return [...zones].sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [zones]);
 
   if (zonesLoading || tablesLoading || guestsLoading) {
     return <div className="p-6">Loading...</div>;
   }
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
-        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">จัดการที่นั่ง</h1>
-          <Button
-          icon={<MenuOutlined />}
-          onClick={() => setSidebarDrawerVisible(true)}
-          className="md:hidden w-full sm:w-auto"
-          size="middle"
-            >
-          เปิดรายชื่อแขก
-            </Button>
+    <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+        <h1 className="text-2xl font-bold text-gray-800 m-0">จัดการที่นั่ง</h1>
+        <Space>
+          {/* Mobile View Toggle */}
+          <Segmented
+            options={[
+              { label: 'ผัง', value: 'canvas', icon: <AppstoreOutlined /> },
+              { label: 'รายการ', value: 'list', icon: <UnorderedListOutlined /> },
+            ]}
+            value={viewMode}
+            onChange={(val) => setViewMode(val as 'canvas' | 'list')}
+            className="md:hidden"
+          />
+        </Space>
       </div>
 
       <Tabs
@@ -346,60 +275,74 @@ const SeatingPage: React.FC = () => {
         onChange={setSelectedZoneId}
         size="small"
         className="responsive-tabs"
+        renderTabBar={(props, DefaultTabBar) => (
+          <DefaultTabBar {...props}>
+            {(node) => {
+              // Ensure items exist before trying to find index
+              const items = (props as any).items;
+              if (!items) return node;
+              const index = items.findIndex((item: any) => item.key === node.key);
+              if (index === -1) return node;
+
+              return (
+                <div
+                  key={node.key}
+                  draggable
+                  onDragStart={(e) => {
+                    setDragIndex(index);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragEnter={() => setDragOverIndex(index)}
+                  onDragEnd={async () => {
+                    if (dragIndex !== -1 && dragOverIndex !== -1 && dragIndex !== dragOverIndex) {
+                      const newZones = [...sortedZones];
+                      const [draggedItem] = newZones.splice(dragIndex, 1);
+                      newZones.splice(dragOverIndex, 0, draggedItem);
+
+                      try {
+                        const updates = newZones.map((z, i) => zoneService.update(z.id, { order: i + 1 }));
+                        await Promise.all(updates);
+                        message.success('จัดลำดับโซนเรียบร้อย');
+                      } catch (error) {
+                        logger.error('Error reordering zones:', error);
+                        message.error('เกิดข้อผิดพลาดในการจัดลำดับ');
+                      }
+                    }
+                    setDragIndex(-1);
+                    setDragOverIndex(-1);
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  style={{ cursor: 'move', display: 'inline-flex' }}
+                  className={`draggable-tab ${dragOverIndex === index ? 'drag-over' : ''}`}
+                >
+                  {node}
+                </div>
+              );
+            }}
+          </DefaultTabBar>
+        )}
         onEdit={(targetKey, action) => {
           if (action === 'add') {
-            // เพิ่มโซนใหม่
             setEditingZone(null);
             setIsZoneModalVisible(true);
           } else if (action === 'remove' && typeof targetKey === 'string') {
-            // ลบโซน
             const zoneToDelete = zones.find(z => z && z.id === targetKey);
             if (zoneToDelete) {
               handleDeleteZoneByKey(targetKey);
             }
           }
         }}
-        items={zones
+        items={sortedZones
           .filter((zone): zone is Zone => !!(zone && zone.id && zone.zoneName))
           .map(zone => ({
             key: zone.id,
-            closable: zones.length > 1, // ไม่ให้ลบถ้ามีโซนเดียว
-            label: editingZoneKey === zone.id ? (
-              <Input
-                value={editingZoneName}
-                onChange={(e) => setEditingZoneName(e.target.value)}
-                onBlur={async () => {
-                  if (editingZoneName.trim() && editingZoneName !== zone.zoneName) {
-                    try {
-                      await zoneService.update(zone.id, {
-                        ...zone,
-                        zoneName: editingZoneName.trim(),
-                      });
-                      message.success('แก้ไขชื่อโซนเรียบร้อย');
-                    } catch (error) {
-                      logger.error('Error updating zone name:', error);
-                      message.error('เกิดข้อผิดพลาด');
-                      setEditingZoneName(zone.zoneName || '');
-                    }
-                  } else {
-                    setEditingZoneName(zone.zoneName || '');
-                  }
-                  setEditingZoneKey(null);
-                }}
-                onPressEnter={async (e) => {
-                  e.currentTarget.blur();
-                }}
-                onClick={(e) => e.stopPropagation()}
-                style={{ width: 150, minWidth: 100 }}
-                autoFocus
-                size="small"
-              />
-            ) : (
+            closable: zones.length > 1,
+            label: (
               <span
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  setEditingZoneKey(zone.id);
-                  setEditingZoneName(zone.zoneName || '');
+                  setEditingZone(zone);
+                  setIsZoneModalVisible(true);
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -410,30 +353,17 @@ const SeatingPage: React.FC = () => {
                     onOk: async () => {
                       try {
                         const tablesToDelete = tables.filter(t => t && t.zoneId === zone.zoneId);
-                        
-                        // Clear tableId/zoneId ของ guests ที่ถูก assign ไปยังโต๊ะ/โซนที่ถูกลบ
                         const { GuestService } = await import('@/services/firebase/GuestService');
                         const guestService = GuestService.getInstance();
-                        
                         for (const table of tablesToDelete) {
-                          // หา guests ที่ถูก assign ไปยังโต๊ะนี้
                           const guestsInTable = guests.filter(g => g.tableId === table.tableId && g.zoneId === zone.zoneId);
-                          
-                          // Clear tableId/zoneId ของ guests เหล่านี้
                           for (const guest of guestsInTable) {
-                            await guestService.update(guest.id, {
-                              tableId: null,
-                              zoneId: null,
-                            });
+                            await guestService.update(guest.id, { tableId: null, zoneId: null });
                           }
-                          
                           await tableService.delete(table.id);
                         }
-                        
                         await zoneService.delete(zone.id);
                         message.success('ลบโซนเรียบร้อย');
-                        
-                        // Force refresh selectedZoneId if deleted zone was selected
                         if (selectedZoneId === zone.id) {
                           const remainingZones = zones.filter(z => z.id !== zone.id);
                           if (remainingZones.length > 0) {
@@ -450,7 +380,7 @@ const SeatingPage: React.FC = () => {
                   });
                 }}
                 style={{ cursor: 'pointer', userSelect: 'none' }}
-                title="ดับเบิ้ลคลิกเพื่อแก้ไขชื่อโซน | คลิกขวาเพื่อลบโซน"
+                title="ดับเบิ้ลคลิกเพื่อแก้ไขโซน | คลิกขวาเพื่อลบโซน"
               >
                 {zone.zoneName || 'ไม่มีชื่อ'}
               </span>
@@ -460,121 +390,106 @@ const SeatingPage: React.FC = () => {
 
       {currentZone && (
         <div className="mt-4">
-
-          <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-            {/* Guest Sidebar - Hidden on mobile, shown in drawer */}
-            <div className="hidden md:block flex-shrink-0">
-            <GuestSelectionSidebar
-              guests={guests}
-              selectedGuestId={selectedGuestId}
-                selectedGuestIds={selectedGuestIds}
-              isAssignMode={isAssignMode}
-              onGuestClick={handleGuestClick}
-              onMemberClick={handleMemberClick}
-              onCancelAssign={handleCancelAssign}
-                onGuestIdsChange={setSelectedGuestIds}
-              guestGroups={guestGroups}
-            />
-            </div>
-            
-            {/* Drawer for mobile */}
-            <Drawer
-              title="แขกที่ยังไม่ได้จัดที่นั่ง"
-              placement="left"
-              onClose={() => setSidebarDrawerVisible(false)}
-              open={sidebarDrawerVisible}
-              width="85%"
-              styles={{ body: { padding: '12px' } }}
-              style={{ maxWidth: 400 }}
-            >
-              <GuestSelectionSidebar
-                guests={guests}
-                selectedGuestId={selectedGuestId}
-                selectedGuestIds={selectedGuestIds}
-                isAssignMode={isAssignMode}
-                onGuestClick={(id) => {
-                  handleGuestClick(id);
-                  setSidebarDrawerVisible(false);
-                }}
-                onMemberClick={(id) => {
-                  handleMemberClick(id);
-                  setSidebarDrawerVisible(false);
-                }}
-                onCancelAssign={handleCancelAssign}
-                onGuestIdsChange={setSelectedGuestIds}
-                guestGroups={guestGroups}
-              />
-            </Drawer>
-
-          {/* Canvas Area */}
-          <Card 
-            className="flex-1 shadow-sm min-w-0"
-            title={
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-sm sm:text-base md:text-lg font-semibold truncate flex-1 min-w-0">
-                  {currentZone?.zoneName || 'ไม่มีชื่อโซน'}
-                </span>
-                {currentZone && (
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                  onClick={() => {
-                      setEditingTable(null);
-                      setIsTableModalVisible(true);
-                  }}
-                    size="small"
-                    className="flex-shrink-0"
-                >
-                    <span className="hidden sm:inline">เพิ่มโต๊ะ</span>
-                    <span className="sm:hidden">เพิ่ม</span>
-                </Button>
-                )}
-              </div>
-            }
-            styles={{ body: { padding: '12px sm:16px' } }}
-          >
-            <div
-              id="layout-canvas"
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: '300px',
-                minHeight: '300px',
-                border: '1px solid #e0e0e0',
-                borderRadius: '8px',
-                backgroundColor: '#fafafa',
-                overflow: 'auto',
-              }}
-              className="sm:h-[400px] md:h-[500px] lg:h-[600px]"
-            >
-              {tablesInCurrentZone
-                .filter(table => table && table.id && table.tableId)
-                .map(table => {
-                  const seatedGuests = guestsByTable.get(table.tableId) || [];
-                  const seatedMemberCount = seatedMembersByTable.get(table.tableId) || 0;
-                  return (
-                    <DraggableTable
-                      key={table.id}
-                      table={table}
-                      seatedGuests={seatedGuests}
-                      seatedMemberCount={seatedMemberCount}
-                      zoneColor={currentZone?.color || '#1890ff'}
-                      onTablePositionUpdate={handleTablePositionUpdate}
-                      onTableClick={handleTableClick}
-                      isAssignMode={isAssignMode || selectedGuestIds.length > 0}
-                      disabled={isAssignMode}
-                      isSelected={selectedTableId === table.id}
-                      selectedCount={selectedGuestIds.length}
-                      onOpenDetail={(t: TableData) => {
-                        setActiveTable(t);
-                        setIsDetailModalOpen(true);
-                        setSelectedTableId(t.id);
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Main Content Area */}
+            <Card
+              className="flex-1 shadow-sm min-w-0"
+              title={
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-semibold">{currentZone?.zoneName || 'ไม่มีชื่อโซน'}</span>
+                  {currentZone && (
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        setEditingTable(null);
+                        setIsTableModalVisible(true);
                       }}
-                    />
-                  );
-                })}
-            </div>
-          </Card>
+                      size="small"
+                    >
+                      เพิ่มโต๊ะ
+                    </Button>
+                  )}
+                </div>
+              }
+              styles={{ body: { padding: '16px' } }}
+            >
+              {viewMode === 'canvas' && (screens.md || viewMode === 'canvas') ? (
+                <div
+                  id="layout-canvas"
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: 'calc(100vh - 220px)',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: '8px',
+                    backgroundColor: '#fafafa',
+                    overflow: 'auto',
+                  }}
+                >
+                  {tablesInCurrentZone
+                    .filter(table => table && table.id && table.tableId)
+                    .map(table => {
+                      const seatedGuests = guestsByTable.get(table.tableId) || [];
+                      const seatedMemberCount = seatedMembersByTable.get(table.tableId) || 0;
+                      return (
+                        <DraggableTable
+                          key={table.id}
+                          table={table}
+                          seatedGuests={seatedGuests}
+                          seatedMemberCount={seatedMemberCount}
+                          zoneColor={currentZone?.color || '#1890ff'}
+                          onTablePositionUpdate={handleTablePositionUpdate}
+                          onTableClick={handleTableClick}
+                          isAssignMode={false}
+                          disabled={false}
+                          isSelected={selectedTableId === table.id}
+                          selectedCount={0}
+                          onOpenDetail={(t: TableData) => {
+                            setActiveTable(t);
+                            setIsDetailModalOpen(true);
+                            setSelectedTableId(t.id);
+                          }}
+                        />
+                      );
+                    })}
+                </div>
+              ) : (
+                // List View for Mobile
+                <List
+                  grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 4, xxl: 6 }}
+                  dataSource={tablesInCurrentZone}
+                  renderItem={table => {
+                    const seatedMemberCount = seatedMembersByTable.get(table.tableId) || 0;
+                    const isFull = seatedMemberCount >= table.capacity;
+                    return (
+                      <List.Item>
+                        <Card
+                          hoverable
+                          onClick={() => handleTableClick(table)}
+                          className={`border-2 ${selectedTableId === table.id ? 'border-blue-500' : 'border-transparent'}`}
+                          size="small"
+                        >
+                          <div className="flex justify-between items-center mb-2">
+                            <Text strong>{table.tableName}</Text>
+                            <Tag color={isFull ? 'red' : 'green'}>{seatedMemberCount}/{table.capacity}</Tag>
+                          </div>
+                          <Progress
+                            percent={Math.round((seatedMemberCount / table.capacity) * 100)}
+                            showInfo={false}
+                            size="small"
+                            status={isFull ? 'exception' : 'active'}
+                          />
+                          <div className="mt-2 text-xs text-gray-500 text-center">
+                            แตะเพื่อจัดการ
+                          </div>
+                        </Card>
+                      </List.Item>
+                    );
+                  }}
+                />
+              )}
+            </Card>
           </div>
         </div>
       )}
@@ -610,10 +525,33 @@ const SeatingPage: React.FC = () => {
           }}
           table={activeTable}
           guests={guestsByTable.get(activeTable.tableId) || []}
+          unassignedGuests={guests.filter(g => !g.tableId)}
           guestGroups={guestGroups}
+          onAssignGuests={async (guestIds: string[]) => {
+            try {
+              let successCount = 0;
+              let failCount = 0;
+              for (const guestId of guestIds) {
+                try {
+                  await seatingManager.assignGuestToTable(guestId, activeTable.tableId, activeTable.zoneId);
+                  successCount++;
+                } catch (error) {
+                  failCount++;
+                  logger.error(`Error assigning guest ${guestId}:`, error);
+                }
+              }
+              if (successCount > 0) {
+                message.success(`เพิ่มแขก ${successCount} คนเข้าโต๊ะเรียบร้อย${failCount > 0 ? ` (${failCount} คนไม่สำเร็จ)` : ''}`);
+              } else {
+                message.error(`ไม่สามารถเพิ่มแขกได้ (${failCount} คน)`);
+              }
+            } catch (error) {
+              logger.error('Error assigning guests:', error);
+              message.error('เกิดข้อผิดพลาด');
+            }
+          }}
           onUnassignGuest={async (guestId: string) => {
             try {
-              // Unassign guest from table using SeatingManager
               await seatingManager.unassignGuestFromTable(guestId);
               message.success('ย้ายแขกออกจากโต๊ะเรียบร้อย');
             } catch (error) {
@@ -621,31 +559,7 @@ const SeatingPage: React.FC = () => {
               message.error('เกิดข้อผิดพลาด');
             }
           }}
-          onUnassignGuests={async (guestIds: string[]) => {
-            try {
-              let successCount = 0;
-              let failCount = 0;
-              
-              for (const guestId of guestIds) {
-                try {
-                  await seatingManager.unassignGuestFromTable(guestId);
-                  successCount++;
-                } catch (error) {
-                  failCount++;
-                  logger.error(`Error unassigning guest ${guestId}:`, error);
-                }
-              }
-              
-              if (successCount > 0) {
-                message.success(`ย้าย ${successCount} คนออกจากโต๊ะเรียบร้อย${failCount > 0 ? ` (${failCount} คนไม่สำเร็จ)` : ''}`);
-              } else {
-                message.error(`ไม่สามารถย้ายออกได้ (${failCount} คน)`);
-              }
-            } catch (error) {
-              logger.error('Error unassigning guests:', error);
-              message.error('เกิดข้อผิดพลาด');
-            }
-          }}
+
         />
       )}
     </div>
@@ -653,5 +567,3 @@ const SeatingPage: React.FC = () => {
 };
 
 export default SeatingPage;
-
-

@@ -1,139 +1,188 @@
 # Development Guide
 
-## Code Review Checklist
-- [ ] ตรวจสอบ infinite loops (useEffect dependencies)
-- [ ] ตรวจสอบ memory leaks (cleanup functions)
-- [ ] ตรวจสอบ type safety
-- [ ] ตรวจสอบ error handling
-- [ ] ตรวจสอบ performance (debounce, memoization)
+This guide covers how to set up the development environment, run the project, and deploy changes.
 
-## Testing Guidelines
-- Manual testing สำหรับ critical flows
-- Test mobile compatibility (Messenger, LINE, Instagram in-app browsers)
-- Test realtime sync (Card ↔ Admin)
-- Test error scenarios
+## 📂 Project Structure
 
-## Test Cases
+```
+src/
+├── card/                  # Guest-facing components (Invitation Card)
+│   ├── GuestRSVPApp.tsx   # Main RSVP application
+│   └── MusicPlayer.tsx    # Background music player
+├── components/            # Shared UI components
+│   ├── admin/             # Admin-specific components (10 files)
+│   └── common/            # Common shared components (2 files)
+├── constants/             # Application constants (3 files)
+├── data/                  # Static data files (1 file)
+├── firebase/              # Firebase configuration (1 file)
+├── hooks/                 # Custom React hooks (9 files)
+│   ├── useAdminAuth.ts
+│   ├── useConfig.ts
+│   ├── useCountdown.ts
+│   ├── useGuestGroups.ts
+│   ├── useGuests.ts
+│   ├── useRSVPs.ts
+│   ├── useRSVPSync.ts
+│   ├── useTables.ts
+│   └── useZones.ts
+├── managers/              # Business logic managers (3 files)
+│   ├── CheckInManager.ts
+│   ├── RSVPManager.ts
+│   └── SeatingManager.ts
+├── pages/                 # Page components
+│   ├── admin/             # Admin Panel pages (6 files)
+│   │   ├── AdminLayout.tsx
+│   │   ├── DashboardPage.tsx
+│   │   ├── GuestsPage.tsx
+│   │   ├── RSVPsPage.tsx
+│   │   ├── SeatingPage.tsx
+│   │   └── SettingsPage.tsx
+│   ├── AdminLoginPage.tsx # Admin login (Email/Password)
+│   ├── IntroPage.tsx      # Guest intro/invitation card
+│   └── OTPLoginPage.tsx   # Guest OTP login
+├── services/              # Firebase services (10 files)
+│   └── firebase/
+│       ├── AuditLogService.ts
+│       ├── AuthService.ts
+│       ├── ConfigService.ts
+│       ├── GuestProfileService.ts
+│       ├── GuestService.ts
+│       ├── RSVPService.ts
+│       ├── TableService.ts
+│       ├── ZoneService.ts
+│       ├── appState.ts
+│       └── sessions.ts
+├── styles/                # Global styles & Tailwind config (1 file)
+├── utils/                 # Helper functions (7 files)
+├── types.ts               # TypeScript type definitions
+├── App.tsx                # Main application entry point
+└── main.tsx               # React DOM rendering
+```
 
-### Group Check-in
-- [ ] เลือกแขกจาก checkbox ใน Group Check-in Modal → เช็คอินสำเร็จ
-- [ ] แขกที่ไม่มาร่วมงาน (`isComing === 'no'`) → ปุ่มเช็คอิน disabled
-- [ ] แขกที่เช็คอินแล้ว → checkbox disabled
-- [ ] เช็คอินหลายคนพร้อมกัน → Real-time sync ไปยัง Admin Panel
+## 🛠️ Setup & Installation
 
-### Seating Click-based Assignment
-- [ ] คลิกแขกจาก Sidebar → ระบบเข้าสู่ Assign Mode
-- [ ] คลิกโต๊ะ → จัดที่นั่งสำเร็จ
-- [ ] Drag & drop ถูก disable เมื่ออยู่ใน Assign Mode
-- [ ] Visual indicator (border highlight) แสดงเมื่ออยู่ใน Assign Mode
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
 
-### RSVP Status Integration
-- [ ] แสดงสถานะตอบรับใน GuestsPage table
-- [ ] เช็คอิน disabled สำหรับแขกที่ไม่มาร่วมงาน
-- [ ] Real-time sync เมื่อ RSVP status เปลี่ยน
+2.  **Environment Variables**:
+    Copy `.env.example` (if available) or create `.env.local`:
+    ```env
+    VITE_FIREBASE_API_KEY=...
+    VITE_FIREBASE_AUTH_DOMAIN=...
+    VITE_FIREBASE_DATABASE_URL=...
+    VITE_FIREBASE_PROJECT_ID=...
+    VITE_FIREBASE_STORAGE_BUCKET=...
+    VITE_FIREBASE_MESSAGING_SENDER_ID=...
+    VITE_FIREBASE_APP_ID=...
+    ```
 
-### Auth Testing
+## 🏃‍♂️ Running Locally
 
-#### Normal Browser (Chrome/Safari)
-- [ ] Google login ทำงานปกติ (ใช้ popup หรือ redirect ตาม browser)
-- [ ] Redirect result ถูก handle ถูกต้องหลัง redirect
-- [ ] หลังจาก redirect login สำเร็จ → flip ไปหน้า login form อัตโนมัติ
-- [ ] Auth state persist หลัง refresh
-- [ ] Logout ทำงานถูกต้อง
+Start the Vite development server:
+```bash
+npm run dev
+```
+Access the app at `http://localhost:5173`.
 
-#### Messenger WebView
-- [ ] เปิดลิงค์จาก Messenger → ไม่มี modal บังการ์ดหน้าแรก
-- [ ] Flip ไปหน้า "ลงทะเบียน" → เห็น inline banner เตือน
-- [ ] Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-- [ ] ปุ่ม "คัดลอกลิงก์" ทำงานถูกต้อง (แสดง toast เมื่อสำเร็จ)
-- [ ] ปุ่ม "เปิดในเบราว์เซอร์" ทำงานถูกต้อง (เปิด external browser)
-- [ ] Google login ยังทำงานได้ (ใช้ redirect flow)
-- [ ] ผู้ใช้สามารถกลับมาดูการ์ดและสลับไปมาระหว่างการ์ด ↔ ฟอร์มได้ตามปกติ
+## 🧪 Testing & Linting
 
-#### Instagram WebView
-- [ ] เปิดลิงค์จาก Instagram → ไม่มี modal บังการ์ดหน้าแรก
-- [ ] Flip ไปหน้า "ลงทะเบียน" → เห็น inline banner เตือน
-- [ ] Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-- [ ] Google login ยังทำงานได้ (ใช้ redirect flow)
+- **Linting**:
+    ```bash
+    npm run lint
+    ```
+- **Type Checking**:
+    ```bash
+    npm run typecheck
+    ```
+- **Validate (Lint + Typecheck + Build)**:
+    ```bash
+    npm run validate
+    ```
 
-#### Facebook App WebView
-- [ ] เปิดลิงค์จาก Facebook App → ไม่มี modal บังการ์ดหน้าแรก
-- [ ] Flip ไปหน้า "ลงทะเบียน" → เห็น inline banner เตือน
-- [ ] Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-- [ ] Google login ยังทำงานได้ (ใช้ redirect flow)
+## 🚀 Deployment
 
-#### Redirect Flow
-- [ ] Redirect result ถูก handle ถูกต้องใน normal browser
-- [ ] Redirect result ไม่สำเร็จใน WebView → แสดง warning (ถ้ามี redirect params)
-- [ ] SessionStorage error ไม่แสดง error message (log warning เท่านั้น)
-- [ ] Auth state sync ถูกต้องหลัง redirect
+The application is deployed to Firebase Hosting.
 
-### Authentication & Profile Display
+1.  **Build the project**:
+    ```bash
+    npm run build
+    ```
+    This generates the production assets in the `dist/` directory.
 
-#### Google Profile Photo
-- [ ] Google provider ให้ `photoURL` โดยอัตโนมัติ
-- [ ] UI ใช้ `auth.currentUser.photoURL` เป็นหลัก
-- [ ] ถ้า `photoURL` หลักไม่มี ให้ตรวจสอบ `providerData` สำหรับ Google provider
-- [ ] Fallback logic: `user.photoURL` → `user.providerData.find(p => p.providerId === 'google.com')?.photoURL` → `undefined` (แสดง icon)
-- [ ] Avatar แสดงรูปโปรไฟล์ Google บนหน้า RSVP registration
-- [ ] Avatar แสดงรูปโปรไฟล์ใน Admin RSVPs page
-- [ ] Debug logging แสดง providerData และ photoURL หลัง login
+2.  **Deploy to Firebase**:
+    ```bash
+    firebase deploy
+    ```
+    *Note: You need the Firebase CLI installed and logged in (`npm install -g firebase-tools` && `firebase login`).*
 
-#### Profile Data Storage
-- [ ] RSVP data เก็บ `photoURL` จาก `getAvatarUrl(userInfo)` (ไม่ใช่ `userInfo?.photoURL` โดยตรง)
-- [ ] `getAvatarUrl` function ตรวจสอบ providerData ถ้า photoURL หลักไม่มี
+## 📦 Dependencies
 
-## Pre-Deploy Checklist
+### Core Dependencies
+- **React** (v18.2.0): UI library
+- **TypeScript** (v5.2.2): Type safety
+- **Vite** (v5.0.8): Build tool and dev server
+- **Firebase** (v12.6.0): Backend services (Auth, Realtime Database)
 
-1. **Type Checking**: `npm run typecheck`
-   - ตรวจสอบว่าไม่มี type errors
-   - ตรวจสอบว่าไม่มี unused variables/imports
+### UI Libraries
+- **Ant Design** (v5.12.8): Admin Panel UI components
+- **@ant-design/icons** (v5.2.6): Icon library
+- **Tailwind CSS** (v3.4.18): Utility-first CSS framework
+- **PostCSS** (v8.5.6) + **Autoprefixer** (v10.4.22): CSS processing
 
-2. **Build**: `npm run build`
-   - ตรวจสอบว่าไม่มี build errors
-   - ตรวจสอบ warnings (chunk size, etc.)
-   - ตรวจสอบ bundle size
+### Development Tools
+- **ESLint** (v8.55.0): Linting
+    - `@typescript-eslint/eslint-plugin` & `@typescript-eslint/parser`
+    - `eslint-plugin-react`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`
+    - `eslint-plugin-security`: Security linting
+- **Testing Libraries**:
+    - `@testing-library/react` (v16.3.0)
+    - `@testing-library/jest-dom` (v6.9.1)
+    - `vitest` (v4.0.10): Test runner
+    - `jsdom` (v27.0.1): DOM implementation for testing
 
-3. **Test in Development**:
-   - Test critical flows (login, RSVP, check-in, seating)
-   - Test mobile compatibility
-   - Test realtime sync
+## 🔧 Troubleshooting
 
-4. **Deploy Firebase Rules**: `firebase deploy --only database`
-   - ตรวจสอบว่า rules ถูก deploy แล้ว
-   - ตรวจสอบว่า `.indexOn` rules ครบถ้วน
+### Common Issues
 
-5. **Deploy Application**: `firebase deploy --only hosting`
-   - ตรวจสอบว่า deploy สำเร็จ
-   - ตรวจสอบ URL และ test production
+**1. Vite EPERM Error on Windows**
+```
+Error: EPERM: operation not permitted, remove '.vite/deps'
+```
+**Solution**: 
+- Close all running dev servers
+- Delete `.vite` folder manually
+- Run `npm run dev` again
 
-6. **Post-Deploy Verification**:
-   - Test production environment
-   - Monitor errors และ performance
-   - ตรวจสอบ realtime sync
+**2. Firebase Auth Errors**
+```
+Firebase: Error (auth/configuration-not-found)
+```
+**Solution**: 
+- Verify all environment variables in `.env.local` are correct
+- Ensure Firebase project has Phone Authentication and Email/Password enabled
 
-## Deployment Process
-1. `npm run typecheck && npm run build`
-2. ตรวจสอบ build errors และ warnings
-3. `firebase deploy --only database`
-4. `firebase deploy --only hosting`
-5. Monitor errors และ performance
+**3. Real-time Database Permission Denied**
+```
+PERMISSION_DENIED: Permission denied
+```
+**Solution**:
+- Upload `database.rules.json` to Firebase Console
+- Verify admin UID is added to `/admins/{uid}: true` in Realtime Database
 
-## Troubleshooting
+**4. Type Errors**
+```
+Cannot find module '@/...' or its corresponding type declarations
+```
+**Solution**:
+- Verify `tsconfig.json` has correct path aliases
+- Run `npm install` to ensure all types are installed
 
-### Infinite Loops
-- ตรวจสอบ useEffect dependencies
-- ใช้ useRef สำหรับ values ที่ไม่ต้องการ trigger re-render
-- ใช้ functional updates สำหรับ state
+## 🤝 Contributing
 
-### Memory Leaks
-- ตรวจสอบ cleanup functions ใน useEffect
-- Unsubscribe Firebase listeners
-- Remove event listeners
-
-### Performance Issues
-- ใช้ React DevTools Profiler
-- ตรวจสอบ bundle size
-- ใช้ code splitting
-- Optimize Firebase queries
-
+1. Follow the existing code structure (Services → Managers → Hooks)
+2. Use TypeScript for all new files
+3. Run `npm run validate` before committing
+4. Follow Ant Design guidelines for UI components
+5. Use Tailwind utilities for custom styling

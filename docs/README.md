@@ -1,155 +1,119 @@
-# Wedding Planner - ระบบจัดการงานแต่งงาน
+# Wedding Planner
 
-ระบบจัดการงานแต่งงานแบบ Real-time ที่ใช้ Firebase Realtime Database และ React
+ระบบจัดการงานแต่งงานแบบ Real-time ที่ใช้ Firebase Realtime Database และ React เพื่อช่วยคู่บ่าวสาวและผู้จัดงานจัดการแขก ที่นั่ง และการตอบรับได้อย่างมีประสิทธิภาพ
 
-## ✨ Features
+A real-time wedding management system built with React, TypeScript, and Firebase. This application helps couples and organizers manage guest lists, seating arrangements, and RSVPs efficiently with live updates across all devices.
 
-- **Guest RSVP App**: หน้า card เชิญแต่งงานสำหรับแขก
-- **Admin Panel**: ระบบจัดการงานแต่งงานสำหรับผู้ดูแล (Responsive Design)
-  - Dashboard: สถิติภาพรวม (รองรับ mobile, tablet, desktop)
-  - จัดการแขก: เพิ่ม/แก้ไข/ลบแขก, เช็คอิน, Group Check-in (checkbox per guest)
-    - Tree Data Table: แสดงแขกแบบ expandable rows (กลุ่มละ 1, 1.1, 1.2, ...)
-    - คอลัมน์ลำดับ: แสดงลำดับกลุ่ม (1, 2, 3, ...) และลำดับสมาชิกในกลุ่ม (1.1, 1.2, ...)
-    - Responsive Table: รองรับทุกขนาดหน้าจอ พร้อม horizontal scroll
-  - จัดการที่นั่ง: จัดโซนและโต๊ะ, Click-based Assignment, Cascader Filter, Bulk Unassign
-    - Responsive Canvas: ปรับขนาดตามหน้าจอ
-    - Mobile Drawer: ใช้ Drawer สำหรับ sidebar บน mobile
-  - RSVP: ดูรายการตอบรับ (Responsive Table)
-  - ตั้งค่า: จัดการการ์ดแต่งงานและลิงค์เชิญ (Responsive Form)
+## ✨ Key Features
 
-## 📱 Responsive Design
+### Guest-Facing Features
+- **Digital Invitation Card**: Beautiful, mobile-first invitation card with music player
+- **OTP Authentication**: Secure phone number login with SMS OTP verification
+- **RSVP Form**: Easy-to-use form for guests to confirm attendance
+- **Guest Profile Management**: Automatic profile creation for returning guests
 
-ระบบรองรับทุกอุปกรณ์:
-- **Mobile** (< 768px): Layout แบบ vertical, Drawer สำหรับ sidebar, ปุ่มและ text ขนาดเหมาะสม
-- **Tablet** (768px - 1024px): Layout แบบ hybrid, sidebar แบบ collapsible
-- **Desktop** (> 1024px): Layout แบบเต็มรูปแบบ, sidebar แบบ fixed
+### Admin Panel Features
+- **Dashboard**: Real-time statistics and overview of all wedding data
+- **Guest Management**:
+    - Add, edit, and delete guests
+    - Expandable tree view with group organization
+    - Individual and group check-in support
+    - Track RSVP status and check-in times
+- **Seating Arrangement**:
+    - Visual canvas-based seating layout
+    - Zone and table management
+    - Drag-and-drop guest assignment
+    - Click-based assignment mode
+    - Cascader filter by relationship (Friends, Family, etc.)
+    - Bulk unassign functionality
+- **RSVP Management**: Real-time tracking of guest responses with timestamps
+- **Settings**: Configure wedding card details and invitation URLs
 
-## 🆕 New in 2025 Update
+### Technical Features
+- **Real-time Sync**: All data updates instantly across all devices
+- **Responsive Design**: Fully optimized for Mobile, Tablet, and Desktop
+- **Audit Logging**: Track important events (login, RSVP changes)
+- **Secure Authentication**:
+    - **Guests**: Firebase Phone Authentication (OTP)
+    - **Admins**: Email/Password authentication
 
-- ✅ **Group Check-in with Checkbox Selection**: เช็คอินแขกหลายคนพร้อมกันจากกลุ่มเดียวกัน
-- ✅ **Click-based Seating Assignment**: จัดที่นั่งแบบคลิก (เลือกแขก → คลิกโต๊ะ)
-- ✅ **RSVP Status Integration**: ผูกสถานะตอบรับ (`isComing`) กับสิทธิ์เช็คอิน
-- ✅ **UI Text Updates**: เปลี่ยนข้อความ "RSVP" เป็น "ตอบรับร่วมงาน"
-- ✅ **Firebase OTP Authentication**: เปลี่ยนจาก Google/Facebook Login เป็น OTP Phone Authentication สำหรับ Guest users
-  - Intro Page: หน้า Intro/การ์ดเชิญแบบ Basic UI, Mobile-First
-  - OTP Login: หน้ากรอกเบอร์โทรและ OTP พร้อม reCAPTCHA
-  - Guest Profile: ระบบจัดการ Guest Profile แยกจาก Identity
-  - Audit Logging: บันทึกเหตุการณ์สำคัญ (login, RSVP created/updated)
-- ✅ **Admin Login**: Admin ยังใช้ Email/Password login ได้ปกติ
-- ✅ **iOS Safari Redirect Fix**: แก้ไขปัญหา redirect login บน iOS Safari ให้ทำงานได้ถูกต้อง
-- ✅ **Configuration Update**: แก้ไขนามสกุล "Pisapeng" → "Phitpheng"
-- ✅ **Tree Data Table with Row Numbers**: ตารางแขกแสดงแบบ expandable rows พร้อมลำดับ (กลุ่มละ 1, 1.1, 1.2, ...)
-- ✅ **Timestamp Columns**: เพิ่มคอลัมน์เวลาแก้ไขในหน้า RSVPs และเวลาเช็คอินในหน้า Guests
-- ✅ **Auto-refresh Guest Groups**: แก้ไขปัญหาการอัพเดตแขกที่ยังไม่ได้จัดที่นั่งหลังลบโซน/โต๊ะ
-- ✅ **Duplicate Guest Prevention**: ป้องกันการแสดงแขกซ้ำในกลุ่มเดียวกัน
-- ✅ **Main Guest Selection**: ปรับปรุงการเลือก main guest ให้ถูกต้องตามชื่อใน RSVP
-- ✅ **Performance Optimization**: ลด re-render ที่ไม่จำเป็นใน useGuestGroups hook
-- ✅ **Responsive Admin UI**: Redesign หน้า admin ทั้งหมดให้ responsive และใช้ภาษาไทย
-- ✅ **Cascader Filter for Guest Selection**: ใช้ Cascader แบบ Multiple สำหรับกรองแขกตามความสัมพันธ์ (เพื่อน, ญาติ, ผู้ใหญ่, ครอบครัว, อื่นๆ)
-- ✅ **Real-time Seating Updates**: แก้ไขปัญหาการอัพเดตจำนวนที่นั่งและแขกในโต๊ะให้อัพเดตทันทีโดยไม่ต้องรีเฟรช
-- ✅ **Bulk Unassign from Table**: เพิ่มปุ่ม "ย้ายออกทั้งหมด" ใน TableDetailModal เพื่อย้ายแขกทั้งหมดออกจากโต๊ะในครั้งเดียว
-- ✅ **Improved TableDetailModal UI**: ปรับปรุง UI ของ modal ให้สวยงามขึ้น พร้อม Card สำหรับปุ่มย้ายออกทั้งหมด
-- ✅ **Editable Zone Tabs**: ดับเบิ้ลคลิกที่ tab เพื่อแก้ไขชื่อโซน, คลิกขวาเพื่อลบโซน
-- ✅ **Add Table Button in Card Header**: ย้ายปุ่ม "เพิ่มโต๊ะ" ไปไว้ใน Card header ของ Canvas Area
-- ✅ **Responsive Design**: Redesign หน้า admin ทั้งหมดให้ responsive และใช้งานได้ทุกอุปกรณ์ (mobile, tablet, desktop)
-- ✅ **Modern UI/UX**: ปรับปรุง UI/UX ให้สวยงาม ใช้งานง่าย และรองรับทุกขนาดหน้าจอ
+## 🛠️ Tech Stack
+
+- **Frontend**: [React](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
+- **UI Framework**: [Ant Design](https://ant.design/), [Tailwind CSS](https://tailwindcss.com/)
+- **Backend**: [Firebase Realtime Database](https://firebase.google.com/docs/database)
+- **Authentication**: [Firebase Authentication](https://firebase.google.com/docs/auth)
+- **Deployment**: [Firebase Hosting](https://firebase.google.com/docs/hosting)
 
 ## 🚀 Quick Start
 
-### ติดตั้ง Dependencies
+### Prerequisites
+- Node.js (v18 or higher)
+- npm or yarn
+- Firebase project with:
+    - Realtime Database enabled
+    - Authentication enabled (Phone + Email/Password)
 
-```bash
-npm install
-```
+### Installation
 
-### ตั้งค่า Firebase
+1. **Clone the repository**:
+    ```bash
+    git clone <repository-url>
+    cd wedding-planner
+    ```
 
-1. สร้างไฟล์ `.env.local`:
+2. **Install dependencies**:
+    ```bash
+    npm install
+    ```
 
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
-VITE_FIREBASE_DATABASE_URL=your_database_url
-VITE_FIREBASE_PROJECT_ID=your_project_id
-```
+3. **Set up environment variables**:
+    Create a `.env.local` file in the root directory:
+    ```env
+    VITE_FIREBASE_API_KEY=your_api_key
+    VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
+    VITE_FIREBASE_DATABASE_URL=your_database_url
+    VITE_FIREBASE_PROJECT_ID=your_project_id
+    VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+    VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+    VITE_FIREBASE_APP_ID=your_app_id
+    ```
 
-2. อัปเดต `database.rules.json` ใน Firebase Console
+4. **Configure Firebase**:
+    - Upload `database.rules.json` to Firebase Console
+    - Set up admin users in Realtime Database under `/admins/{uid}: true`
+    - Enable Phone Authentication and Email/Password in Firebase Console
 
-### รัน Development Server
+5. **Start the development server**:
+    ```bash
+    npm run dev
+    ```
+    Access at `http://localhost:5173`
 
-```bash
-npm run dev
-```
+## 📖 Documentation
 
-### Build และ Deploy
+- **[Architecture](./docs/ARCHITECTURE.md)**: System design, authentication flows, and database schema
+- **[Development Guide](./docs/DEVELOPMENT.md)**: Detailed setup, project structure, and deployment
 
-```bash
-npm run build
-firebase deploy
-```
+## 🌐 Routes
 
-## 📁 โครงสร้างโปรเจกต์
+- `/` - Guest invitation card and RSVP form (requires OTP login)
+- `/admin` - Admin panel (requires admin credentials)
+    - `/admin` (Dashboard view)
+    - `/admin` (Guests view)
+    - `/admin` (Seating view)
+    - `/admin` (RSVPs view)
+    - `/admin` (Settings view)
 
-```
-src/
-├── card/                    # หน้า card เชิญแต่งงาน
-│   ├── GuestRSVPApp.tsx
-│   └── MusicPlayer.tsx
-├── pages/
-│   ├── admin/              # Admin Panel
-│   │   ├── AdminLayout.tsx
-│   │   ├── DashboardPage.tsx
-│   │   ├── GuestsPage.tsx
-│   │   ├── SeatingPage.tsx
-│   │   ├── RSVPsPage.tsx
-│   │   └── SettingsPage.tsx
-│   ├── AdminLoginPage.tsx  # Admin login (Email/Password)
-│   ├── IntroPage.tsx       # หน้า Intro/การ์ดเชิญ
-│   └── OTPLoginPage.tsx    # หน้า OTP Login
-├── services/
-│   └── firebase/           # Firebase Service Classes (Singleton pattern)
-│       ├── AuthService.ts
-│       ├── GuestProfileService.ts  # Guest Profile management
-│       ├── AuditLogService.ts      # Audit logging
-│       ├── RSVPService.ts
-│       ├── GuestService.ts
-│       ├── ZoneService.ts
-│       ├── TableService.ts
-│       ├── ConfigService.ts
-│       ├── sessions.ts
-│       └── appState.ts
-├── managers/                # Business Logic Managers
-│   ├── RSVPManager.ts
-│   ├── SeatingManager.ts
-│   └── CheckInManager.ts
-├── hooks/                   # Custom hooks
-├── utils/                   # Utility functions
-└── types.ts                 # TypeScript types
-```
+## 📝 Available Scripts
 
-## 🔐 Security
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run lint` - Run ESLint
+- `npm run typecheck` - Run TypeScript type checking
+- `npm run validate` - Run typecheck + build
+- `npm run preview` - Preview production build
 
-- **Firebase Phone Authentication**: OTP authentication สำหรับ Guest users
-- **Email/Password Authentication**: สำหรับ Admin users
-- **Firebase Realtime Database Rules**: สำหรับ authorization และ data access control
-- **reCAPTCHA**: ป้องกัน bot และ spam
-- **Audit Logging**: บันทึกเหตุการณ์สำคัญในระบบ
-
-## 📱 Authentication Flow
-
-### Guest Users
-1. เปิดหน้า IntroPage → แสดงการ์ดเชิญ
-2. คลิก "เข้าสู่ระบบด้วยเบอร์โทร" → ไปหน้า OTPLoginPage
-3. กรอกเบอร์โทร → รับ SMS OTP
-4. กรอก OTP → Login สำเร็จ → ไปหน้า GuestRSVPApp
-
-### Admin Users
-1. ไปที่ `/admin` → แสดง AdminLoginPage
-2. กรอก Email/Password → Login สำเร็จ → ไปหน้า Admin Panel
-
-ดูรายละเอียดเพิ่มเติม: [Firebase OTP Architecture](./FIREBASE_OTP_ARCHITECTURE.md)
-- Admin-only access สำหรับ Admin Panel
-
-## 📝 License
+## 📄 License
 
 MIT

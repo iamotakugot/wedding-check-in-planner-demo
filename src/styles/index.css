@@ -861,3 +861,12 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Custom scrollbar to hide it */
+.custom-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.custom-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

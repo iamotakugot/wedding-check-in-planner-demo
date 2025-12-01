@@ -1,166 +1,269 @@
-# Architecture Documentation
+# System Architecture
 
-## Overview
-ระบบ Wedding Planner ใช้ React + TypeScript + Firebase Realtime Database
+This document provides an overview of the technical architecture of the Wedding Planner application.
 
-## Architecture Pattern
+## 🏗️ High-Level Architecture
 
-### OOP Structure
-- **Service Layer**: Class-based services (Singleton pattern)
-  - `RSVPService`: จัดการ RSVP operations (create, update, get, subscribe)
-  - `GuestService`: จัดการ Guest operations (CRUD, createFromRSVP, updateFromRSVP)
-  - `ZoneService`: จัดการ Zone operations (CRUD, subscribe)
-  - `TableService`: จัดการ Table operations (CRUD, subscribe)
-  - `ConfigService`: จัดการ Config operations (wedding card config)
-  - `AuthService`: จัดการ Authentication (login, logout, social auth, WebView detection)
+The application follows a **Client-Serverless** architecture using **React** for the frontend and **Firebase** for backend services (Database, Auth, Hosting).
 
-- **Manager Layer**: Business logic managers
-  - `RSVPManager`: จัดการ RSVP และ Guest synchronization
-  - `SeatingManager`: จัดการการจัดที่นั่ง
-  - `CheckInManager`: จัดการ check-in และ group management
+```mermaid
+graph TD
+    Client[Client (Browser)]
+    Auth[Firebase Auth]
+    DB[Firebase Realtime DB]
+    Hosting[Firebase Hosting]
 
-- **Hook Layer**: React hooks ที่ใช้ service instances
-  - `useRSVPs`: RSVP data hook
-  - `useGuests`: Guest data hook
-  - `useZones`: Zone data hook
-  - `useTables`: Table data hook
-  - `useConfig`: Config data hook
-  - `useRSVPSync`: Auto-sync RSVP to Guest hook
-
-## Data Flow
-
-### Guest Flow (Card Page)
-1. Guest เข้าสู่ระบบ (Google/Facebook)
-2. สร้าง/อัปเดต RSVP (ตอบรับร่วมงาน)
-3. `useRSVPSync` auto-create Guest entries
-4. Real-time sync ไปยัง Admin Panel
-
-### Admin Flow
-1. Admin login
-2. ใช้ hooks เพื่อดึงข้อมูล real-time
-3. จัดการ Guests, Zones, Tables
-4. Real-time sync ไปยัง Card Page (config changes)
-
-### Group Check-in Flow
-1. แอดมินเลือกกลุ่มจากรายชื่อแขก
-2. เปิด Modal Group Check-in
-3. เลือกแขกที่ต้องการเช็คอินจาก checkbox (per guest)
-4. ระบบตรวจสอบ RSVP status (`isComing`) ก่อนเช็คอิน
-5. เช็คอินเฉพาะแขกที่เลือก
-6. Real-time sync ไปยัง Card Page
-
-### Click-based Seating Assignment Flow
-1. แอดมินเลือกแขกจาก Sidebar (แขกที่ยังไม่ได้จัดที่นั่ง)
-2. ระบบเข้าสู่ "Assign Mode" (disable drag & drop)
-3. แอดมินคลิกโต๊ะที่ต้องการจัดที่นั่ง
-4. ระบบเรียก `SeatingManager.assignGuestToTable()`
-5. Real-time sync ไปยัง Card Page
-
-### Auth Flow & In-App Browser Handling
-
-#### WebView Detection
-- ใช้ `navigator.userAgent` patterns เพื่อ detect:
-  - **Messenger WebView**: `FBAN/Messenger`, `Messenger/\d+`, `FB_IAB.*Messenger`
-  - **Instagram WebView**: `Instagram`, `FB_IAB.*Instagram`, `FBAN/Instagram`
-  - **Facebook App WebView**: `FBAN/FB`, `FB_IAB.*FB`, `FB4A` (ไม่ใช่ Messenger)
-- ตรวจสอบ `sessionStorage` availability ก่อน redirect
-
-#### Facebook Login Flow
-- **Normal Browser (Chrome/Safari)**:
-  1. ใช้ `signInWithPopup` เป็นหลัก
-  2. ถ้า popup ถูก block → fallback เป็น `signInWithRedirect`
-  3. ตรวจสอบ redirect result ด้วย `getRedirectResult()`
-  4. Login สำเร็จ → sync auth state
-
-- **In-App Browser (Messenger/Instagram/Facebook App)**:
-  1. Detect WebView environment
-  2. แสดง inline banner เตือน (ไม่ block login)
-  3. Banner มีปุ่ม "คัดลอกลิงก์" และ "เปิดในเบราว์เซอร์"
-  4. ผู้ใช้สามารถลอง login ได้ แต่ banner จะเตือนว่าอาจไม่สำเร็จ
-  5. User เปิดใน external browser → login ทำงานปกติ
-
-#### Redirect Flow
-- ใช้ `signInWithRedirect` สำหรับ:
-  - Facebook WebView (เมื่อ sessionStorage available)
-  - WebView ที่ไม่มี sessionStorage (fallback)
-  - เมื่อ popup ถูก block
-- ตรวจสอบ redirect result:
-  - เรียก `checkRedirectResult()` ก่อน `onAuthStateChanged`
-  - Handle errors (sessionStorage unavailable, missing initial state)
-  - Log warnings เมื่อ redirect result ไม่สำเร็จใน WebView
-
-#### Session Persistence
-- ใช้ `browserLocalPersistence` สำหรับ Firebase Auth
-- ตรวจสอบ sessionStorage availability ก่อน redirect
-- ถ้า sessionStorage ไม่ available → แสดง warning และแนะนำให้เปิดใน browser
-
-## Firebase Realtime Database Structure
-
-```
-/
-├── rsvps/
-│   └── {rsvpId}/
-│       ├── uid
-│       ├── firstName
-│       ├── lastName
-│       ├── isComing
-│       └── guestId
-├── guests/
-│   └── {guestId}/
-│       ├── rsvpUid
-│       ├── tableId
-│       ├── zoneId
-│       └── groupId
-├── zones/
-│   └── {zoneId}/
-├── tables/
-│   └── {tableId}/
-│       └── zoneId
-├── config/
-│   └── weddingCard/
-└── admins/
-    └── {uid}: true
+    Client -->|Authenticate| Auth
+    Client -->|Read/Write Data| DB
+    Client -->|Load Assets| Hosting
+    Auth -->|Token| Client
+    DB -->|Real-time Updates| Client
 ```
 
-## Performance Optimizations
+## 🔐 Authentication
 
-1. **Code Splitting**: Lazy load admin pages
-2. **Bundle Optimization**: Manual chunks สำหรับ vendor libraries
-3. **Firebase Indexes**: `.indexOn` rules สำหรับ queries
-4. **Debouncing**: Drag operations, state updates
+The system supports two distinct user roles with different authentication methods:
 
-## Mobile Compatibility
+### 1. Guest Users (Public)
+- **Method**: Phone Number Authentication (OTP).
+- **Flow**:
+    1. User visits the invitation link (Intro Page).
+    2. User enters phone number.
+    3. Firebase sends SMS with OTP.
+    4. User enters OTP to verify identity.
+    5. On success, user gains access to the RSVP form.
+- **Security**: Prevents unauthorized access to private event details while keeping it easy for guests.
 
-- Facebook Messenger WebView support
-- Responsive design
-- Touch-friendly UI
-- Optimized for mobile browsers
+### 2. Admin Users (Organizers)
+- **Method**: Email and Password.
+- **Flow**:
+    1. User navigates to `/admin`.
+    2. User logs in with credentials.
+    3. System verifies admin privileges via Firebase Custom Claims or Database rules.
+- **Access**: Full access to the Admin Panel (Dashboard, Guests, Seating, Settings).
 
-## Social Login in Embedded Browsers (Messenger/Instagram)
+## 💾 Database Schema
 
-### Overview
-ระบบไม่บล็อก login ตรง ๆ แต่แสดง inline banner เตือนและแนะนำให้เปิดใน external browser เพื่อความปลอดภัยและความเสถียรของ OAuth flow
+The data is structured in a JSON tree within Firebase Realtime Database:
 
-### Rationale
-- **Google/Facebook Security Policies**: ไม่แนะนำ OAuth ผ่าน embedded WebView เนื่องจาก:
-  - Session storage/cookies อาจไม่ persist
-  - Redirect flow อาจไม่ทำงาน
-  - Security concerns เกี่ยวกับ third-party storage
-- **User Experience**: ไม่บังการ์ดหน้าแรก แต่เตือนเฉพาะเมื่อผู้ใช้กด "ลงทะเบียน" แล้ว
+```json
+{
+  "rsvps": {
+    "rsvpId": {
+      "uid": "user_firebase_uid",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "+66812345678",
+      "email": "john@example.com",
+      "isComing": true,
+      "numberOfGuests": 2,
+      "relationship": "friend",
+      "guestId": "linked_guest_id",
+      "createdAt": 1234567890,
+      "updatedAt": 1234567890
+    }
+  },
+  "guests": {
+    "guestId": {
+      "name": "John Doe",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "+66812345678",
+      "email": "john@example.com",
+      "relationship": "friend",
+      "groupId": "group_123",
+      "groupName": "John's Group",
+      "tableId": "table_1",
+      "tableName": "Table 1",
+      "zoneId": "zone_A",
+      "zoneName": "VIP Zone",
+      "rsvpUid": "user_firebase_uid",
+      "rsvpId": "rsvpId",
+      "isComing": true,
+      "checkedIn": false,
+      "checkedInAt": null,
+      "createdAt": 1234567890,
+      "updatedAt": 1234567890
+    }
+  },
+  "zones": {
+    "zoneId": {
+      "id": "zoneId",
+      "name": "VIP Zone",
+      "order": 1,
+      "createdAt": 1234567890
+    }
+  },
+  "tables": {
+    "tableId": {
+      "id": "tableId",
+      "name": "Table 1",
+      "zoneId": "zone_A",
+      "zoneName": "VIP Zone",
+      "capacity": 10,
+      "x": 100,
+      "y": 200,
+      "order": 1,
+      "createdAt": 1234567890
+    }
+  },
+  "config": {
+    "weddingCard": {
+      "groomFirstName": "John",
+      "groomLastName": "Doe",
+      "brideFirstName": "Jane",
+      "brideLastName": "Smith",
+      "weddingDate": "2025-12-31",
+      "ceremonyTime": "14:00",
+      "location": "Grand Hotel",
+      "mapUrl": "https://maps.google.com/..."
+    }
+  },
+  "admins": {
+    "admin_uid": true
+  },
+  "guestProfiles": {
+    "user_uid": {
+      "uid": "user_uid",
+      "phoneNumber": "+66812345678",
+      "displayName": "John Doe",
+      "role": "guest",
+      "createdAt": 1234567890,
+      "lastLoginAt": 1234567890
+    }
+  },
+  "auditLogs": {
+    "logId": {
+      "uid": "user_uid",
+      "action": "rsvp_created",
+      "details": {...},
+      "createdAt": 1234567890
+    }
+  },
+  "userSessions": {
+    "user_uid": {
+      "sessionId": {...}
+    }
+  },
+  "adminSessions": {
+    "admin_uid": {
+      "sessionId": {...}
+    }
+  },
+  "userAppState": {
+    "user_uid": {...}
+  },
+  "adminAppState": {
+    "admin_uid": {
+      "currentView": "dashboard"
+    }
+  }
+}
+```
 
-### Implementation
-1. **Detection**: ใช้ `AuthService.getWebViewInfo()` เพื่อตรวจจับ embedded browser
-2. **Banner Display**: แสดง inline banner เฉพาะเมื่อ:
-   - `isFlipped === true` (flip ไปหน้า form แล้ว)
-   - `isInWebView === true` (อยู่ใน embedded browser)
-3. **User Actions**:
-   - **คัดลอกลิงก์**: ใช้ `navigator.clipboard.writeText()` พร้อม toast notification
-   - **เปิดในเบราว์เซอร์**: ใช้ `window.open(url, '_blank')` สำหรับ iOS/Android จะเด้งไป Safari/Chrome
-4. **Login Flow**: ไม่ block login - ผู้ใช้สามารถลอง login ได้ แต่ banner จะเตือนว่าอาจไม่สำเร็จ
+## 🧩 Key Components
 
-### References
-- [Firebase – Best practices for `signInWithRedirect`](https://firebase.google.com/docs/auth/web/redirect-best-practices)
-- [Google – Security changes to OAuth 2.0 in embedded webviews](https://developers.google.com/identity/protocols/oauth2/policies)
-- [Facebook – Deprecating support for FB Login on Android embedded browsers](https://developers.facebook.com/docs/facebook-login/android)
-- Common OAuth errors in in-app browsers: `disallowed_useragent` error
+### Service Layer (`src/services/firebase`)
+Encapsulates Firebase operations using the Singleton pattern. All services are class-based and maintain a single instance throughout the app lifecycle.
 
+- **AuthService**: Authentication management
+    - Login/Logout (Email/Password for admins, Phone/OTP for guests)
+    - Session management
+    - Admin privilege checking
+    - WebView detection for in-app browsers
+- **RSVPService**: RSVP operations
+    - Create/Update/Delete RSVPs
+    - Subscribe to real-time RSVP changes
+    - Link RSVPs to guest records
+- **GuestService**: Guest management
+    - CRUD operations for guests
+    - Auto-create guests from RSVP data
+    - Sync RSVP updates to guest records
+    - Check-in management
+- **GuestProfileService**: Guest profile management
+    - Create/Update guest profiles (separate from identity)
+    - Link profiles to Firebase Auth UIDs
+- **TableService / ZoneService**: Seating arrangement
+    - CRUD operations for tables and zones
+    - Real-time subscription to layout changes
+- **ConfigService**: Wedding configuration
+    - Manage wedding card details
+    - Update ceremony information
+- **AuditLogService**: Event logging
+    - Log important actions (login, RSVP changes)
+    - Admin-only access to logs
+- **appState.ts**: User session state
+    - Persist admin panel view state
+    - Sync state across devices
+- **sessions.ts**: Session management
+    - Track user sessions
+    - Separate admin and guest sessions
+
+### Managers (`src/managers`)
+Orchestrate complex business logic involving multiple services:
+
+- **RSVPManager**: RSVP and Guest synchronization
+    - Auto-sync RSVP data to Guest records
+    - Handle RSVP updates and propagate to guests
+- **SeatingManager**: Seating assignment logic
+    - Assign/Unassign guests to tables
+    - Validate table capacity
+    - Bulk operations
+- **CheckInManager**: Check-in workflow
+    - Individual guest check-in
+    - Group check-in with RSVP validation
+    - Update check-in timestamps
+
+### Hooks (`src/hooks`)
+Custom React hooks for state management and real-time data subscriptions:
+
+- **useAdminAuth**: Admin authentication state
+- **useGuests**: Real-time guest data subscription
+- **useRSVPs**: Real-time RSVP data subscription
+- **useZones / useTables**: Real-time seating data
+- **useConfig**: Wedding configuration data
+- **useRSVPSync**: Auto-sync RSVP to Guest records (runs in admin mode)
+- **useGuestGroups**: Organize guests by groups with memoization
+- **useCountdown**: Wedding countdown timer
+
+## 🔄 Data Flow
+
+### Guest Flow (RSVP Submission)
+1. Guest visits invitation link (`/`)
+2. Clicks "Login with Phone" → redirected to OTP Login Page
+3. Enters phone number → receives SMS OTP
+4. Enters OTP → authenticated
+5. Fills RSVP form (name, guests count, relationship)
+6. Submits RSVP → `RSVPService.createRSVP()`
+7. `useRSVPSync` hook detects new RSVP
+8. Auto-creates Guest record via `GuestService.createFromRSVP()`
+9. Real-time sync to Admin Panel
+
+### Admin Flow (Guest Management)
+1. Admin logs in at `/admin` with Email/Password
+2. Navigates to Guests page
+3. Views real-time guest list (tree structure with groups)
+4. Can:
+    - Add/Edit/Delete guests manually
+    - Check-in individual guests
+    - Group check-in with checkbox selection
+    - View RSVP status and timestamps
+5. All changes sync in real-time to Firebase
+
+### Seating Assignment Flow
+1. Admin navigates to Seating page
+2. Creates Zones and Tables
+3. Two assignment methods:
+    - **Drag-and-drop**: Drag guest from sidebar to table
+    - **Click-based**: Select guest → click target table
+4. `SeatingManager.assignGuestToTable()` validates capacity
+5. Updates `guests/{guestId}/tableId` and `guests/{guestId}/zoneId`
+6. Real-time update to canvas and guest list
+
+## 🛡️ Security Model
+
+- **Database Rules**: Firebase Security Rules ensure:
+    - Guests can only read/write their own RSVP data.
+    - Admins have full read/write access.
+    - Public data (like config) is read-only for unauthenticated users.
+- **Validation**: Input validation on both client-side (Zod/Yup) and server-side (Security Rules).

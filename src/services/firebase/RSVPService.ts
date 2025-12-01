@@ -31,7 +31,7 @@ export class RSVPService {
   private static instance: RSVPService;
   private subscriptions: Map<string, () => void> = new Map();
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): RSVPService {
     if (!RSVPService.instance) {
@@ -55,22 +55,38 @@ export class RSVPService {
       if (!rsvp.firstName || !rsvp.firstName.trim()) {
         throw new Error('กรุณากรอกชื่อ');
       }
-      if (!rsvp.lastName || !rsvp.lastName.trim()) {
-        throw new Error('กรุณากรอกนามสกุล');
-      }
+
       if (!rsvp.isComing || (rsvp.isComing !== 'yes' && rsvp.isComing !== 'no')) {
         throw new Error('กรุณาเลือกสถานะการร่วมงาน');
       }
+
+      // จัดการ lastName: ถ้า isComing='no' ให้อนุญาตให้ว่างได้ และ auto-fill เป็น "-"
+      let finalLastName = (rsvp.lastName || '').trim();
+      if (rsvp.isComing === 'no' && !finalLastName) {
+        finalLastName = '-';
+      }
+
+      // ถ้า isComing='yes' ไม่บังคับให้มีนามสกุลแล้ว
+      // if (rsvp.isComing === 'yes' && !finalLastName) {
+      //   throw new Error('กรุณากรอกนามสกุล');
+      // }
+
       if (rsvp.isComing === 'yes' && !rsvp.side) {
         throw new Error('กรุณาเลือกฝ่าย');
       }
 
       const now = new Date().toISOString();
-      const fullName = `${rsvp.firstName.trim()} ${rsvp.lastName.trim()}`.trim();
+      // สร้าง fullName โดยรองรับกรณี lastName เป็น "-"
+      const firstName = rsvp.firstName.trim();
+      const lastName = finalLastName;
+      const fullName = lastName && lastName !== '-'
+        ? `${firstName} ${lastName}`.trim()
+        : firstName;
 
       const rsvpData: Omit<RSVPData, 'id'> = {
         ...rsvp,
         uid: user.uid,
+        lastName: finalLastName,
         fullName,
         createdAt: now,
         updatedAt: now,
@@ -82,7 +98,7 @@ export class RSVPService {
       }
 
       await set(newRef, rsvpData);
-      
+
       // Log audit event
       try {
         const auditService = AuditLogService.getInstance();
@@ -97,7 +113,7 @@ export class RSVPService {
         // Don't fail RSVP creation if audit log fails
         logger.warn('Failed to create audit log for RSVP creation:', auditError);
       }
-      
+
       return newRef.key;
     } catch (error) {
       if (isFirebaseError(error) && error.code === 'PERMISSION_DENIED') {
@@ -118,7 +134,7 @@ export class RSVPService {
 
     // ตรวจสอบว่าเป็น admin หรือเป็นเจ้าของ RSVP
     const isAdmin = await AuthService.getInstance().checkIsAdmin(user.uid);
-    
+
     if (!isAdmin) {
       // ถ้าไม่ใช่ admin ต้องตรวจสอบว่าเป็นเจ้าของ RSVP
       const existingRSVP = await this.getByUid(user.uid);
@@ -137,14 +153,25 @@ export class RSVPService {
       const currentRSVPs = await this.getAll();
       const rsvp = currentRSVPs.find(r => r.id === id);
       if (rsvp) {
-        const firstName = updates.firstName || rsvp.firstName;
-        const lastName = updates.lastName || rsvp.lastName;
-        updatesWithTimestamp.fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        const firstName = (updates.firstName || rsvp.firstName).trim();
+        let lastName = (updates.lastName !== undefined ? updates.lastName : rsvp.lastName || '').trim();
+        const isComing = updates.isComing !== undefined ? updates.isComing : rsvp.isComing;
+
+        // ถ้า isComing='no' และ lastName ว่าง ให้ auto-fill เป็น "-"
+        if (isComing === 'no' && !lastName) {
+          lastName = '-';
+          updatesWithTimestamp.lastName = '-';
+        }
+
+        // สร้าง fullName โดยรองรับกรณี lastName เป็น "-"
+        updatesWithTimestamp.fullName = lastName && lastName !== '-'
+          ? `${firstName} ${lastName}`.trim()
+          : firstName;
       }
     }
 
     await update(ref(database, `rsvps/${id}`), updatesWithTimestamp);
-    
+
     // Log audit event
     try {
       const auditService = AuditLogService.getInstance();
@@ -180,21 +207,21 @@ export class RSVPService {
 
     const snapshot = await get(this.rsvpsRef());
     if (!snapshot.exists()) return null;
-    
+
     const data = snapshot.val();
     const rsvps = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-    
+
     // หา RSVP ที่มี uid ตรงกัน (เรียงตาม createdAt ล่าสุด)
     const matchingRSVPs = rsvps.filter((r: RSVPData) => r.uid === uid);
     if (matchingRSVPs.length === 0) return null;
-    
+
     // เรียงตาม createdAt และคืนค่าล่าสุด
     matchingRSVPs.sort((a: RSVPData, b: RSVPData) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
     });
-    
+
     return matchingRSVPs[0];
   }
 
@@ -212,7 +239,7 @@ export class RSVPService {
 
   subscribe(callback: (rsvps: RSVPData[]) => void): () => void {
     const subscriptionId = `rsvp_${Date.now()}_${Math.random()}`;
-    
+
     const unsubscribe = onValue(this.rsvpsRef(), (snapshot: DataSnapshot) => {
       if (!snapshot.exists()) {
         callback([]);
@@ -222,9 +249,9 @@ export class RSVPService {
       const rsvps = Object.keys(data).map(key => ({ id: key, ...data[key] }));
       callback(rsvps);
     });
-    
+
     this.subscriptions.set(subscriptionId, unsubscribe);
-    
+
     // Return cleanup function
     return () => {
       unsubscribe();

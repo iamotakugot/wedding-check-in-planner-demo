@@ -1,14 +1,11 @@
-/**
- * Admin RSVPs Page
- * แสดงรายการ RSVP
- */
-
 import React, { useState, useEffect } from 'react';
-import { Table, Tag, Button, Modal, Descriptions, Space, Avatar, Input } from 'antd';
+import { Table, Tag, Button, Modal, Descriptions, Space, Avatar, Input, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { EyeOutlined, UserOutlined, SearchOutlined } from '@ant-design/icons';
+import { EyeOutlined, UserOutlined, SearchOutlined, PhoneOutlined, ManOutlined, WomanOutlined } from '@ant-design/icons';
 import { useRSVPs } from '@/hooks/useRSVPs';
 import { RSVPData } from '@/types';
+
+const { Text } = Typography;
 
 // Custom Search component to avoid Input.Search addonAfter warning
 const CustomSearch: React.FC<{
@@ -20,7 +17,7 @@ const CustomSearch: React.FC<{
   value?: string;
 }> = ({ placeholder, allowClear, style, onSearch, onChange, value }) => {
   const [searchValue, setSearchValue] = useState(value || '');
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setSearchValue(newValue);
@@ -73,51 +70,68 @@ const RSVPsPage: React.FC = () => {
   const filteredRSVPs = rsvps.filter(rsvp => {
     if (!searchText) return true;
     const fullName = `${rsvp.firstName} ${rsvp.lastName}`.toLowerCase();
-    return fullName.includes(searchText.toLowerCase());
+    const phone = rsvp.phoneNumber || '';
+    const nickname = rsvp.nickname || '';
+    const search = searchText.toLowerCase();
+    return fullName.includes(search) || phone.includes(search) || nickname.toLowerCase().includes(search);
   });
 
   const columns: ColumnsType<RSVPData> = [
     {
-      title: 'ชื่อ-นามสกุล',
+      title: 'ผู้ร่วมงาน',
       key: 'name',
-      width: 200,
+      width: 250,
       fixed: 'left' as const,
       render: (_, record) => (
-        <Space>
+        <Space size="middle">
           <Avatar
-            size="small"
+            size="large"
             src={record.photoURL || undefined}
             icon={!record.photoURL && <UserOutlined />}
-            style={{ 
-              backgroundColor: record.isComing === 'yes' ? '#52c41a' : '#8c8c8c' 
-            }}
+            className={record.isComing === 'yes' ? 'bg-green-500' : 'bg-gray-400'}
           />
-          <div className="min-w-0">
-            <div className="font-medium text-sm md:text-base truncate" title={`${record.firstName} ${record.lastName}`}>
+          <div className="flex flex-col">
+            <Text strong className="text-base">
               {record.firstName} {record.lastName}
-            </div>
-            {record.nickname && (
-              <span className="text-xs text-gray-500 truncate block" title={record.nickname}>
-                ({record.nickname})
-              </span>
-            )}
+            </Text>
+            <Space size="small">
+              {record.nickname && (
+                <Tag color="default" className="mr-0 text-xs">
+                  {record.nickname}
+                </Tag>
+              )}
+              {record.side === 'groom' ? (
+                <Tag icon={<ManOutlined />} color="blue" className="mr-0 text-xs">เจ้าบ่าว</Tag>
+              ) : (
+                <Tag icon={<WomanOutlined />} color="magenta" className="mr-0 text-xs">เจ้าสาว</Tag>
+              )}
+            </Space>
           </div>
         </Space>
       ),
     },
     {
-      title: 'ฝ่าย',
-      dataIndex: 'side',
-      width: 100,
-      render: (side: string) => {
-        switch (side) {
-          case 'groom':
-            return <Tag color="blue">เจ้าบ่าว</Tag>;
-          case 'bride':
-            return <Tag color="pink">เจ้าสาว</Tag>;
-          default:
-            return <Tag>{side}</Tag>;
-        }
+      title: 'เบอร์โทรศัพท์',
+      dataIndex: 'phoneNumber',
+      key: 'phoneNumber',
+      width: 180,
+      render: (phone: string | undefined) => {
+        if (!phone) return <Text type="secondary">-</Text>;
+        return (
+          <Space>
+            <PhoneOutlined className="text-gray-400" />
+            <Text copyable>{phone}</Text>
+            <Tooltip title="โทรออก">
+              <Button
+                type="link"
+                size="small"
+                icon={<PhoneOutlined />}
+                href={`tel:${phone}`}
+                className="text-green-600 hover:text-green-700"
+              />
+            </Tooltip>
+          </Space>
+        );
       },
     },
     {
@@ -125,9 +139,7 @@ const RSVPsPage: React.FC = () => {
       dataIndex: 'relation',
       width: 150,
       render: (relation: string) => (
-        <span className="truncate block" title={relation}>
-          {relation}
-        </span>
+        <Tag color="purple">{relation}</Tag>
       ),
     },
     {
@@ -135,58 +147,36 @@ const RSVPsPage: React.FC = () => {
       dataIndex: 'isComing',
       width: 120,
       render: (isComing: string) => (
-        <Tag color={isComing === 'yes' ? 'green' : 'red'}>
+        <Tag color={isComing === 'yes' ? 'success' : 'error'} className="px-3 py-1 text-sm rounded-full">
           {isComing === 'yes' ? 'ยินดีร่วมงาน' : 'ไม่สะดวก'}
         </Tag>
       ),
     },
     {
-      title: 'จำนวนคน',
+      title: 'ผู้ติดตาม',
       key: 'attendees',
       width: 100,
       align: 'center' as const,
       render: (_, record) => {
         if (record.isComing !== 'yes') return '-';
         const total = 1 + (record.accompanyingGuestsCount || 0);
-        return <span className="font-medium">{total}</span>;
-      },
-    },
-    {
-      title: 'เวลาแก้ไข',
-      key: 'updatedAt',
-      width: 180,
-      render: (_, record) => {
-        if (!record.updatedAt) return '-';
-        try {
-          const date = new Date(record.updatedAt);
-          const formattedDate = date.toLocaleDateString('th-TH', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-          });
-          const formattedTime = date.toLocaleTimeString('th-TH', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          });
-          return (
-            <span className="text-xs text-gray-600" title={date.toLocaleString('th-TH')}>
-              {formattedDate} {formattedTime}
-            </span>
-          );
-        } catch (error) {
-          return <span className="text-xs text-gray-400">-</span>;
-        }
+        return (
+          <Space direction="vertical" size={0}>
+            <Text strong className="text-lg">{total}</Text>
+            <Text type="secondary" className="text-xs">ท่าน</Text>
+          </Space>
+        );
       },
     },
     {
       title: 'จัดการ',
       key: 'actions',
-      width: 120,
+      width: 100,
       fixed: 'right' as const,
       render: (_, record) => (
         <Button
-          type="link"
+          type="primary"
+          ghost
           icon={<EyeOutlined />}
           size="small"
           onClick={() => {
@@ -194,107 +184,128 @@ const RSVPsPage: React.FC = () => {
             setModalVisible(true);
           }}
         >
-          <span className="hidden md:inline">ดูรายละเอียด</span>
-          <span className="md:hidden">ดู</span>
+          ดู
         </Button>
       ),
     },
   ];
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 max-w-full overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2 sm:gap-3">
-        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">ตอบรับ</h1>
-        <div className="w-full sm:w-auto flex-1 sm:flex-none" style={{ maxWidth: '100%' }}>
-          <CustomSearch
-            placeholder="ค้นหาชื่อ-นามสกุล"
-            allowClear
-            style={{ width: '100%', maxWidth: '100%' }}
-            onSearch={setSearchText}
-            onChange={(e) => setSearchText(e.target.value)}
-          />
+    <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 m-0">รายการตอบรับ (RSVP)</h1>
+            <Text type="secondary">จัดการและตรวจสอบรายชื่อผู้ตอบรับเข้าร่วมงาน</Text>
+          </div>
+          <div className="w-full md:w-80">
+            <CustomSearch
+              placeholder="ค้นหาชื่อ, เบอร์โทร, หรือชื่อเล่น"
+              allowClear
+              style={{ width: '100%' }}
+              onSearch={setSearchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
         <Table
           columns={columns}
           dataSource={filteredRSVPs}
           rowKey="id"
           loading={isLoading}
-          pagination={{ 
-            pageSize: 20,
-            showSizeChanger: false,
-            responsive: true,
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
             showTotal: (total) => `ทั้งหมด ${total} รายการ`,
           }}
-          scroll={{ 
-            x: 'max-content',
-            y: 'calc(100vh - 350px)',
-          }}
-          className="shadow-sm"
-          size="small"
+          scroll={{ x: 1000 }}
+          className="border border-gray-100 rounded-lg overflow-hidden"
         />
       </div>
 
       <Modal
-        title="รายละเอียด RSVP"
+        title={
+          <Space>
+            <UserOutlined />
+            <span>รายละเอียดการตอบรับ</span>
+          </Space>
+        }
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false);
           setSelectedRSVP(null);
         }}
-        footer={null}
-        width="95%"
-        styles={{ body: { padding: '16px sm:24px' } }}
-        style={{ maxWidth: 600 }}
+        footer={[
+          <Button key="close" onClick={() => setModalVisible(false)}>
+            ปิด
+          </Button>
+        ]}
+        width={600}
+        centered
       >
         {selectedRSVP && (
-          <Descriptions 
-            column={{ xs: 1, sm: 1, md: 1 }} 
-            bordered
-            size="small"
-          >
-            <Descriptions.Item label="ชื่อ-นามสกุล">
-              {selectedRSVP.firstName} {selectedRSVP.lastName}
-            </Descriptions.Item>
-            <Descriptions.Item label="ชื่อเล่น">
-              {selectedRSVP.nickname || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="ฝ่าย">
-              {selectedRSVP.side === 'groom' ? 'เจ้าบ่าว' : 'เจ้าสาว'}
-            </Descriptions.Item>
-            <Descriptions.Item label="ความสัมพันธ์">
-              {selectedRSVP.relation}
-            </Descriptions.Item>
-            <Descriptions.Item label="สถานะ">
-              <Tag color={selectedRSVP.isComing === 'yes' ? 'green' : 'red'}>
-                {selectedRSVP.isComing === 'yes' ? 'ยินดีร่วมงาน' : 'ไม่สะดวก'}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="จำนวนคน">
-              {selectedRSVP.isComing === 'yes' ? 1 + (selectedRSVP.accompanyingGuestsCount || 0) : '-'}
-            </Descriptions.Item>
-            {selectedRSVP.accompanyingGuests && selectedRSVP.accompanyingGuests.length > 0 && (
-              <Descriptions.Item label="ผู้ติดตาม">
-                <ul>
-                  {selectedRSVP.accompanyingGuests.map((guest, index) => (
-                    <li key={index}>
-                      {guest.name} ({guest.relationToMain})
-                    </li>
-                  ))}
-                </ul>
+          <div className="py-4">
+            <div className="flex items-center gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+              <Avatar
+                size={64}
+                src={selectedRSVP.photoURL || undefined}
+                icon={!selectedRSVP.photoURL && <UserOutlined />}
+                className={selectedRSVP.isComing === 'yes' ? 'bg-green-500' : 'bg-gray-400'}
+              />
+              <div>
+                <h3 className="text-xl font-bold m-0 text-gray-800">
+                  {selectedRSVP.firstName} {selectedRSVP.lastName}
+                </h3>
+                <Space className="mt-1">
+                  {selectedRSVP.nickname && <Tag>{selectedRSVP.nickname}</Tag>}
+                  <Tag color={selectedRSVP.side === 'groom' ? 'blue' : 'magenta'}>
+                    {selectedRSVP.side === 'groom' ? 'ฝั่งเจ้าบ่าว' : 'ฝั่งเจ้าสาว'}
+                  </Tag>
+                </Space>
+              </div>
+            </div>
+
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="เบอร์โทรศัพท์">
+                {selectedRSVP.phoneNumber ? (
+                  <Space>
+                    <PhoneOutlined />
+                    <Text copyable>{selectedRSVP.phoneNumber}</Text>
+                    <Button type="link" size="small" href={`tel:${selectedRSVP.phoneNumber}`}>โทรออก</Button>
+                  </Space>
+                ) : '-'}
               </Descriptions.Item>
-            )}
-            {selectedRSVP.note && (
+              <Descriptions.Item label="สถานะ">
+                <Tag color={selectedRSVP.isComing === 'yes' ? 'green' : 'red'}>
+                  {selectedRSVP.isComing === 'yes' ? 'ยินดีร่วมงาน' : 'ไม่สะดวก'}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="ความสัมพันธ์">
+                {selectedRSVP.relation}
+              </Descriptions.Item>
+              <Descriptions.Item label="จำนวนผู้ร่วมงาน">
+                {selectedRSVP.isComing === 'yes' ? `${1 + (selectedRSVP.accompanyingGuestsCount || 0)} ท่าน` : '-'}
+              </Descriptions.Item>
+              {selectedRSVP.accompanyingGuests && selectedRSVP.accompanyingGuests.length > 0 && (
+                <Descriptions.Item label="รายชื่อผู้ติดตาม">
+                  <ul className="list-disc pl-4 m-0">
+                    {selectedRSVP.accompanyingGuests.map((guest, index) => (
+                      <li key={index} className="text-gray-600">
+                        {guest.name} <span className="text-gray-400">({guest.relationToMain})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="หมายเหตุ">
-                {selectedRSVP.note}
+                {selectedRSVP.note || '-'}
               </Descriptions.Item>
-            )}
-            <Descriptions.Item label="วันที่สร้าง">
-              {selectedRSVP.createdAt ? new Date(selectedRSVP.createdAt).toLocaleString('th-TH') : '-'}
-            </Descriptions.Item>
-          </Descriptions>
+              <Descriptions.Item label="วันที่ตอบรับ">
+                {selectedRSVP.createdAt ? new Date(selectedRSVP.createdAt).toLocaleString('th-TH') : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+          </div>
         )}
       </Modal>
     </div>

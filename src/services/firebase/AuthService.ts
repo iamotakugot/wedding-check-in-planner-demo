@@ -97,7 +97,10 @@ export class AuthService {
     // Clean up existing verifier if any
     if (this.recaptchaVerifier) {
       try {
-        this.recaptchaVerifier.clear();
+        // ตรวจสอบว่า verifier มี render method หรือไม่ก่อน clear
+        if (this.recaptchaVerifier && typeof (this.recaptchaVerifier as any).clear === 'function') {
+          this.recaptchaVerifier.clear();
+        }
       } catch (error) {
         logger.warn('[AuthService] Error clearing existing recaptcha verifier:', error);
       }
@@ -106,15 +109,37 @@ export class AuthService {
     // Create new verifier
     // Use invisible reCAPTCHA if containerId is not provided
     const recaptchaContainerId = containerId || 'recaptcha-container';
-    this.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
-      size: 'invisible',
-      callback: () => {
-        logger.log('[AuthService] reCAPTCHA verified successfully');
-      },
-      'expired-callback': () => {
-        logger.warn('[AuthService] reCAPTCHA expired');
-      },
-    });
+    
+    // ตรวจสอบและสร้าง DOM element ถ้ายังไม่มี
+    let containerElement = document.getElementById(recaptchaContainerId);
+    if (!containerElement) {
+      // สร้าง element ใหม่ถ้าไม่มี
+      containerElement = document.createElement('div');
+      containerElement.id = recaptchaContainerId;
+      containerElement.className = 'hidden';
+      document.body.appendChild(containerElement);
+      logger.log('[AuthService] Created recaptcha container element:', recaptchaContainerId);
+    }
+    
+    // ตรวจสอบว่า element มีอยู่ใน DOM จริงๆ
+    if (!document.body.contains(containerElement)) {
+      document.body.appendChild(containerElement);
+    }
+    
+    try {
+      this.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
+        size: 'invisible',
+        callback: () => {
+          logger.log('[AuthService] reCAPTCHA verified successfully');
+        },
+        'expired-callback': () => {
+          logger.warn('[AuthService] reCAPTCHA expired');
+        },
+      });
+    } catch (error) {
+      logger.error('[AuthService] Error creating RecaptchaVerifier:', error);
+      throw error;
+    }
 
     return this.recaptchaVerifier;
   }
@@ -224,9 +249,20 @@ export class AuthService {
     }
     if (this.recaptchaVerifier) {
       try {
-        this.recaptchaVerifier.clear();
+        // ตรวจสอบว่า verifier มี clear method หรือไม่ก่อนเรียก
+        if (this.recaptchaVerifier && typeof (this.recaptchaVerifier as any).clear === 'function') {
+          // ตรวจสอบว่า DOM element ยังมีอยู่ก่อน clear
+          const containerId = (this.recaptchaVerifier as any).containerId || 'recaptcha-container';
+          const element = document.getElementById(containerId);
+          if (element) {
+            this.recaptchaVerifier.clear();
+          } else {
+            logger.warn('[AuthService] Recaptcha container element not found, skipping clear');
+          }
+        }
       } catch (error) {
         logger.warn('[AuthService] Error clearing recaptcha verifier:', error);
+        // ยังคง reset verifier แม้ว่า clear จะล้มเหลว
       }
       this.recaptchaVerifier = null;
     }

@@ -29,7 +29,7 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
     // Wait for form to be mounted before setting values
     const timer = setTimeout(() => {
       if (!form) return;
-      
+
       if (guestToEdit) {
         form.setFieldsValue(guestToEdit);
       } else {
@@ -118,13 +118,28 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
             </Form.Item>
           </Col>
         </Row>
-        <Form.Item
-          name="gender"
-          label="เพศ"
-          rules={[{ required: true, message: 'กรุณาเลือกเพศ' }]}
-        >
-          <Select placeholder="เลือกเพศ" options={GENDER_OPTIONS} />
-        </Form.Item>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="phoneNumber"
+              label="เบอร์โทรศัพท์"
+              rules={[
+                { pattern: /^[0-9]{9,10}$/, message: 'เบอร์โทรศัพท์ไม่ถูกต้อง' }
+              ]}
+            >
+              <Input placeholder="เช่น 0812345678" maxLength={10} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="gender"
+              label="เพศ"
+              rules={[{ required: true, message: 'กรุณาเลือกเพศ' }]}
+            >
+              <Select placeholder="เลือกเพศ" options={GENDER_OPTIONS} />
+            </Form.Item>
+          </Col>
+        </Row>
         <Form.Item
           name="relationToCouple"
           label="ความสัมพันธ์กับคู่บ่าวสาว"

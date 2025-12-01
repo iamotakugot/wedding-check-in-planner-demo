@@ -84,7 +84,10 @@ export function mapRSVPToGuestGroup(
   }
 
   // ใช้ชื่อจาก RSVP เป็น groupName (ไม่ใช่ชื่อ mainGuest)
-  const groupName = `${rsvp.firstName} ${rsvp.lastName}`.trim() || formatGuestName(mainGuest);
+  // ใช้ fullName ถ้ามี หรือสร้างจาก firstName + lastName (กรอง "-" ออก)
+  const groupName = rsvp.fullName || 
+    `${rsvp.firstName} ${rsvp.lastName && rsvp.lastName !== '-' ? rsvp.lastName : ''}`.trim() || 
+    formatGuestName(mainGuest);
 
   // แยก main guest และ accompanying guests
   // กรอง guest ที่ซ้ำกับ main guest ออก (ชื่อเดียวกันแต่ไม่ใช่ main guest เอง)

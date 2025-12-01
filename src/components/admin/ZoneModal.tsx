@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Modal, Form, Input, AutoComplete, InputNumber } from 'antd';
+import { Modal, Form, Input, AutoComplete } from 'antd';
 import { Zone } from '@/types';
 import { ZONE_NAME_OPTIONS } from '@/data/formOptions';
 
@@ -53,7 +53,6 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ visible, onClose, zoneToEdit, onS
         form={form}
         layout="vertical"
         onFinish={handleFinish}
-        initialValues={{ order: 1 }}
       >
         <Form.Item
           name="zoneId"
@@ -84,9 +83,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ visible, onClose, zoneToEdit, onS
         <Form.Item name="color" label="สีประจำโซน (สำหรับ Layout)" rules={[{ required: true }]}>
           <Input type="color" style={{ width: 100 }} />
         </Form.Item>
-        <Form.Item name="order" label="ลำดับการแสดง" rules={[{ required: true }]}>
-          <InputNumber min={1} style={{ width: '100%' }} />
-        </Form.Item>
+
       </Form>
     </Modal>
   );

@@ -10,6 +10,7 @@ export interface Guest {
   rsvpUid?: string | null; // Deprecated: เก็บไว้เพื่อ backward compatibility
   firstName: string;
   lastName: string;
+  phoneNumber?: string; // เบอร์โทรศัพท์ (Optional)
   nickname: string;
   age: number | null;
   gender: 'male' | 'female' | 'other';

@@ -1,0 +1,7 @@
+
+> wedding-planner@0.0.2 typecheck
+> tsc --noEmit
+
+src/card/GuestRSVPApp.tsx(918,25): error TS6133: 'onBack' is declared but its value is never read.
+src/pages/admin/GuestsPage.tsx(870,9): error TS2322: Type '{ visible: boolean; onClose: () => void; onSubmit: (guest: Guest) => Promise<void>; initialValues: Guest | undefined; }' is not assignable to type 'IntrinsicAttributes & GuestFormDrawerProps'.
+  Property 'initialValues' does not exist on type 'IntrinsicAttributes & GuestFormDrawerProps'.
