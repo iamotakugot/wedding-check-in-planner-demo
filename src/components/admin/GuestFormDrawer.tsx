@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { Drawer, Form, Input, InputNumber, Select, Space, Button, Row, Col } from 'antd';
+import { Drawer, Form, Input, InputNumber, Select, Space, Button, Row, Col, Segmented } from 'antd';
+import { ManOutlined, WomanOutlined } from '@ant-design/icons';
 import { Guest } from '@/types';
-import { GENDER_OPTIONS, SIDE_OPTIONS } from '@/data/formOptions';
+import { SIDE_OPTIONS } from '@/data/formOptions';
 
 const { TextArea } = Input;
 
@@ -133,7 +134,14 @@ const GuestFormDrawer: React.FC<GuestFormDrawerProps> = ({
               label="เพศ"
               rules={[{ required: true, message: 'กรุณาเลือกเพศ' }]}
             >
-              <Select placeholder="เลือกเพศ" options={GENDER_OPTIONS} />
+              <Segmented
+                block
+                options={[
+                  { label: 'ชาย', value: 'male', icon: <ManOutlined /> },
+                  { label: 'หญิง', value: 'female', icon: <WomanOutlined /> },
+                  { label: 'อื่น ๆ', value: 'other' },
+                ]}
+              />
             </Form.Item>
           </Col>
         </Row>

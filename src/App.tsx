@@ -23,6 +23,7 @@ import { useRSVPSync } from '@/hooks/useRSVPSync';
 // Services ใหม่
 import { getAdminAppState, updateAdminAppState, subscribeAdminAppState } from '@/services/firebase/appState';
 import { logger } from '@/utils/logger';
+import { AdminDataProvider } from '@/contexts/AdminDataContext';
 
 // Security check component that uses App.useApp() hook
 const SecurityCheck: React.FC<{
@@ -324,21 +325,29 @@ const App: React.FC = () => {
             isAdmin={isAdmin}
             pathname={pathname}
           />
+
+
+          // ... (existing imports)
+
+          // ... (inside App component)
+
           {isAdmin ? (
             <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>}>
-              <AdminLayout
-                currentView={currentView}
-                setCurrentView={handlePageChange}
-                onLogout={async () => {
-                  try {
-                    await logout();
-                  } catch (error) {
-                    logger.error('Error logging out:', error);
-                  }
-                }}
-              >
-                {renderAdminContent()}
-              </AdminLayout>
+              <AdminDataProvider>
+                <AdminLayout
+                  currentView={currentView}
+                  setCurrentView={handlePageChange}
+                  onLogout={async () => {
+                    try {
+                      await logout();
+                    } catch (error) {
+                      logger.error('Error logging out:', error);
+                    }
+                  }}
+                >
+                  {renderAdminContent()}
+                </AdminLayout>
+              </AdminDataProvider>
             </Suspense>
           ) : (
             <AdminLoginPage

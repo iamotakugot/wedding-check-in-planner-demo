@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { App, Typography, Grid, Space, Input, Button, Tag, Avatar, Tooltip, Card, Modal, Table } from 'antd';
-import { SearchOutlined, PhoneOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, EditOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons';
+import { App, Typography, Grid, Space, Input, Button, Tag, Avatar, Tooltip, Card, Modal, Table, FloatButton, Select, Checkbox } from 'antd';
+import { SearchOutlined, PhoneOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, EditOutlined, DeleteOutlined, UserOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
@@ -59,19 +59,16 @@ const CustomSearch: React.FC<{
   }, [value]);
 
   return (
-    <Space.Compact style={style}>
-      <Input
-        placeholder={placeholder}
-        value={searchValue}
-        onChange={handleChange}
-        onPressEnter={handleSearch}
-        prefix={prefix}
-        allowClear={allowClear}
-        onClear={handleClear}
-        style={{ flex: 1 }}
-      />
-      <Button icon={<SearchOutlined />} onClick={handleSearch} />
-    </Space.Compact>
+    <Input
+      placeholder={placeholder}
+      value={searchValue}
+      onChange={handleChange}
+      onPressEnter={handleSearch}
+      prefix={prefix || <SearchOutlined className="text-gray-400" />}
+      allowClear={allowClear}
+      style={style}
+      className="w-full"
+    />
   );
 };
 
@@ -86,6 +83,8 @@ const GuestsPage: React.FC = () => {
   const screens = useBreakpoint();
 
   const [searchText, setSearchText] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
 
@@ -416,6 +415,28 @@ const GuestsPage: React.FC = () => {
   // Filter tree data based on search and side
   const filteredTreeData = useMemo(() => {
     return treeData.filter(item => {
+      // 1. Check Category Filter
+      let matchesCategory = true;
+      if (filterCategory !== 'all') {
+        if (filterCategory === 'groom') matchesCategory = item.side === 'groom';
+        else if (filterCategory === 'bride') matchesCategory = item.side === 'bride';
+        else if (filterCategory === 'rsvp_yes') {
+          const status = getGuestRSVPStatus(item, rsvpMap);
+          matchesCategory = status === 'yes';
+        }
+        else if (filterCategory === 'rsvp_no') {
+          const status = getGuestRSVPStatus(item, rsvpMap);
+          matchesCategory = status === 'no';
+        }
+        else if (filterCategory === 'rsvp_pending') {
+          const status = getGuestRSVPStatus(item, rsvpMap);
+          matchesCategory = status === 'pending';
+        }
+      }
+
+      if (!matchesCategory) return false;
+
+      // 2. Check Search Text
       // Check parent
       const parentMatchesSearch = !searchText ||
         formatGuestName(item).toLowerCase().includes(searchText.toLowerCase()) ||
@@ -460,7 +481,52 @@ const GuestsPage: React.FC = () => {
       }
       return item;
     }).filter((item): item is Guest & { children?: Guest[] } => item !== null);
-  }, [treeData, searchText]);
+  }, [treeData, searchText, filterCategory, rsvpMap]);
+
+  // Instant Filter Dropdown Component
+  const InstantFilterDropdown = ({
+    setSelectedKeys,
+    selectedKeys,
+    confirm,
+    clearFilters,
+    options,
+  }: any) => {
+    return (
+      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
+        <Space direction="vertical">
+          {options.map((option: any) => (
+            <Checkbox
+              key={option.value}
+              checked={selectedKeys.includes(option.value)}
+              onChange={(e) => {
+                const newKeys = e.target.checked
+                  ? [...selectedKeys, option.value]
+                  : selectedKeys.filter((key: any) => key !== option.value);
+                setSelectedKeys(newKeys);
+                confirm();
+              }}
+            >
+              {option.label}
+            </Checkbox>
+          ))}
+          <Button
+            type="link"
+            size="small"
+            onClick={() => {
+              if (clearFilters) {
+                clearFilters();
+                confirm();
+              }
+            }}
+            disabled={selectedKeys.length === 0}
+            style={{ padding: 0 }}
+          >
+            ล้างตัวกรอง
+          </Button>
+        </Space>
+      </div>
+    );
+  };
 
   // Table columns
   const columns: ColumnsType<Guest & { children?: Guest[] }> = [
@@ -469,32 +535,24 @@ const GuestsPage: React.FC = () => {
       key: 'order',
       width: 80,
       align: 'center',
-      render: (_, record) => {
+      render: (_, record, index) => {
         // Check if this is a parent row (has children)
         const isParent = record.children && record.children.length > 0;
 
-        if (isParent) {
-          // Parent row - show group number
-          const parentIndex = filteredTreeData.findIndex(item => item.id === record.id);
-          return <Text strong>{parentIndex + 1}</Text>;
-        } else {
-          // Child row or standalone row - find parent
-          const parent = filteredTreeData.find(item =>
-            item.children && item.children.some(child => child.id === record.id)
-          );
+        // Check if this is a child row (by checking if it has a parent in the tree)
+        // Note: In AntD Table, for child rows, 'index' is the index within the parent's children array.
+        // We can't easily get the parent's current sorted index to do "1.1", "1.2".
+        // So we will just show the local index.
 
-          if (parent) {
-            // This is a child row
-            const parentIndex = filteredTreeData.findIndex(item => item.id === parent.id);
-            const childIndex = parent.children!.findIndex(child => child.id === record.id);
-            return <Text type="secondary">{parentIndex + 1}.{childIndex + 1}</Text>;
-          } else {
-            // Standalone row (not in a group)
-            const standaloneIndex = filteredTreeData.findIndex(item =>
-              !item.children && item.id === record.id
-            );
-            return <Text>{standaloneIndex + 1}</Text>;
-          }
+        // However, we need to distinguish between "Top level row 1" and "Child row 1".
+        // We can check if the record is in filteredTreeData (top level).
+        const isTopLevel = filteredTreeData.some(item => item.id === record.id);
+
+        if (isTopLevel) {
+          return <Text strong>{index + 1}</Text>;
+        } else {
+          // It's a child
+          return <Text type="secondary" style={{ fontSize: '0.8em' }}>#{index + 1}</Text>;
         }
       },
     },
@@ -503,6 +561,7 @@ const GuestsPage: React.FC = () => {
       key: 'name',
       width: 200,
       fixed: 'left' as const,
+      sorter: (a, b) => (a.firstName || '').localeCompare(b.firstName || ''),
       render: (_, guest) => {
         const group = guestGroups.find(g => g.groupId === guest.groupId);
         const member = group?.members.find(m => m.id === guest.id);
@@ -573,6 +632,18 @@ const GuestsPage: React.FC = () => {
       title: 'ฝ่าย',
       dataIndex: 'side',
       width: 100,
+      sorter: (a, b) => (a.side || '').localeCompare(b.side || ''),
+      filterDropdown: (props) => (
+        <InstantFilterDropdown
+          {...props}
+          options={[
+            { label: 'เจ้าบ่าว', value: 'groom' },
+            { label: 'เจ้าสาว', value: 'bride' },
+            { label: 'ทั้งคู่', value: 'both' },
+          ]}
+        />
+      ),
+      onFilter: (value, record) => record.side === value,
       render: (side: Side) => {
         switch (side) {
           case 'groom': return <Tag icon={<ManOutlined />} color="blue">เจ้าบ่าว</Tag>;
@@ -586,6 +657,25 @@ const GuestsPage: React.FC = () => {
       title: 'สถานะตอบรับ',
       key: 'rsvpStatus',
       width: 120,
+      sorter: (a, b) => {
+        const statusA = getGuestRSVPStatus(a, rsvpMap);
+        const statusB = getGuestRSVPStatus(b, rsvpMap);
+        return statusA.localeCompare(statusB);
+      },
+      filterDropdown: (props) => (
+        <InstantFilterDropdown
+          {...props}
+          options={[
+            { label: 'มา', value: 'yes' },
+            { label: 'ไม่มา', value: 'no' },
+            { label: 'รอระบุ', value: 'pending' },
+          ]}
+        />
+      ),
+      onFilter: (value, record) => {
+        const status = getGuestRSVPStatus(record, rsvpMap);
+        return status === value;
+      },
       render: (_, guest) => {
         return <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />;
       },
@@ -594,6 +684,11 @@ const GuestsPage: React.FC = () => {
       title: 'โต๊ะ',
       key: 'table',
       width: 150,
+      sorter: (a, b) => {
+        const tableA = tables.find(t => t.id === a.tableId)?.tableName || '';
+        const tableB = tables.find(t => t.id === b.tableId)?.tableName || '';
+        return tableA.localeCompare(tableB);
+      },
       render: (_, guest) => {
         const table = tables.find(t => t.id === guest.tableId);
         const zone = zones.find(z => z.id === guest.zoneId);
@@ -612,6 +707,12 @@ const GuestsPage: React.FC = () => {
       title: 'เช็คอิน',
       key: 'checkedIn',
       width: 180,
+      sorter: (a, b) => {
+        if (!a.checkedInAt && !b.checkedInAt) return 0;
+        if (!a.checkedInAt) return -1;
+        if (!b.checkedInAt) return 1;
+        return new Date(a.checkedInAt).getTime() - new Date(b.checkedInAt).getTime();
+      },
       render: (_, guest) => {
         const checkedInAt = guest.checkedInAt;
         if (!checkedInAt) {
@@ -735,91 +836,176 @@ const GuestsPage: React.FC = () => {
     const zone = zones.find(z => z.id === guest.zoneId);
 
     return (
-      <Card key={guest.id} className="mb-3 shadow-sm" size="small">
-        <div className="flex justify-between items-start mb-2">
-          <div className="flex gap-3">
+      <Card
+        key={guest.id}
+        className="mb-2"
+        size="small"
+        styles={{
+          body: {
+            padding: 'clamp(6px, 2vw, 12px)',
+          }
+        }}
+      >
+        {/* Header with name and check-in status */}
+        <div className="flex justify-between items-start mb-2 gap-2">
+          <div className="flex gap-2 items-start min-w-0 flex-1">
             <Avatar
+              size={32}
               icon={<UserOutlined />}
               className={guest.side === 'groom' ? 'bg-blue-500' : guest.side === 'bride' ? 'bg-pink-500' : 'bg-purple-500'}
             />
-            <div>
-              <Text strong className="text-base block">{formatGuestName(guest)}</Text>
-              <Space size="small" className="mt-1">
-                {guest.nickname && <Tag>{guest.nickname}</Tag>}
-                <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} />
+            <div className="min-w-0 flex-1">
+              <Text
+                strong
+                className="block truncate"
+                title={formatGuestName(guest)}
+                style={{ fontSize: 'clamp(0.8125rem, 2.5vw, 0.875rem)' }}
+              >
+                {formatGuestName(guest)}
+              </Text>
+              <Space size={4} wrap className="mt-0.5">
+                {guest.nickname && <Tag className="text-xs m-0 px-1.5 py-0">{guest.nickname}</Tag>}
+                <RSVPStatusTag guest={guest} rsvpMap={rsvpMap} size="small" />
               </Space>
             </div>
           </div>
-          {guest.checkedInAt && <Tag color="green">เช็คอินแล้ว</Tag>}
+          {guest.checkedInAt && (
+            <Tag color="green" className="text-xs m-0 px-1.5 py-0 shrink-0">
+              เช็คอิน
+            </Tag>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-3 text-sm text-gray-600">
-          <div>
-            <PhoneOutlined className="mr-2" />
+        {/* Info grid - compact on mobile */}
+        <div
+          className="grid grid-cols-1 gap-1 mb-2 text-gray-600"
+          style={{ fontSize: 'clamp(0.6875rem, 2vw, 0.75rem)' }}
+        >
+          <div className="flex items-center gap-1 truncate">
+            <PhoneOutlined className="text-gray-400 shrink-0" style={{ fontSize: '11px' }} />
             {(() => {
-              // Try to get phone number from guest first, then fallback to RSVP
               let phoneNumber = guest.phoneNumber;
               if (!phoneNumber && (guest.rsvpUid || guest.rsvpId)) {
                 const rsvp = rsvpMap.get(guest.rsvpUid || guest.rsvpId || '');
                 phoneNumber = rsvp?.phoneNumber;
               }
               return phoneNumber ? (
-                <a href={`tel:${phoneNumber}`} className="text-blue-600">{phoneNumber}</a>
-              ) : '-';
+                <a href={`tel:${phoneNumber}`} className="text-blue-600 truncate">{phoneNumber}</a>
+              ) : (
+                <span className="text-gray-400">-</span>
+              );
             })()}
           </div>
-          <div>
-            <span className="mr-2">โต๊ะ:</span>
-            {table && zone ? `${zone.zoneName} - ${table.tableName}` : '-'}
-          </div>
+          {(table || zone) && (
+            <div className="flex items-center gap-1 truncate">
+              <span className="text-gray-400 shrink-0">โต๊ะ:</span>
+              <span className="truncate" title={table && zone ? `${zone.zoneName} - ${table.tableName}` : '-'}>
+                {table && zone ? `${zone.zoneName} - ${table.tableName}` : '-'}
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t pt-2">
+        {/* Action buttons - compact */}
+        <div className="flex justify-end gap-1.5 border-t pt-2">
+          {(() => {
+            let phoneNumber = guest.phoneNumber;
+            if (!phoneNumber && (guest.rsvpUid || guest.rsvpId)) {
+              const rsvp = rsvpMap.get(guest.rsvpUid || guest.rsvpId || '');
+              phoneNumber = rsvp?.phoneNumber;
+            }
+            return phoneNumber ? (
+              <Button
+                size="small"
+                icon={<PhoneOutlined style={{ fontSize: 'clamp(10px, 2vw, 12px)' }} />}
+                href={`tel:${phoneNumber}`}
+                style={{ fontSize: 'clamp(0.6875rem, 2vw, 0.75rem)', padding: 'clamp(2px, 1vw, 4px) clamp(6px, 2vw, 8px)' }}
+              >
+                โทร
+              </Button>
+            ) : null;
+          })()}
           <Button
-            icon={<PhoneOutlined />}
-            href={guest.phoneNumber ? `tel:${guest.phoneNumber}` : undefined}
-            disabled={!guest.phoneNumber}
-          >
-            โทร
-          </Button>
-          <Button
+            size="small"
             type={guest.checkedInAt ? "default" : "primary"}
             danger={!!guest.checkedInAt}
-            icon={<CheckCircleOutlined />}
+            icon={<CheckCircleOutlined style={{ fontSize: 'clamp(10px, 2vw, 12px)' }} />}
             onClick={() => handleCheckIn(guest)}
             disabled={!canCheckIn && !guest.checkedInAt}
+            style={{ fontSize: 'clamp(0.6875rem, 2vw, 0.75rem)', padding: 'clamp(2px, 1vw, 4px) clamp(6px, 2vw, 8px)' }}
           >
             {guest.checkedInAt ? 'ยกเลิก' : 'เช็คอิน'}
           </Button>
-          <Button icon={<EditOutlined />} onClick={() => {
-            setEditingGuest(guest);
-            setIsDrawerVisible(true);
-          }} />
+          <Button
+            size="small"
+            icon={<EditOutlined style={{ fontSize: 'clamp(10px, 2vw, 12px)' }} />}
+            onClick={() => {
+              setEditingGuest(guest);
+              setIsDrawerVisible(true);
+            }}
+            style={{ padding: 'clamp(2px, 1vw, 4px) clamp(6px, 2vw, 8px)' }}
+          />
         </div>
       </Card>
     );
   };
 
   return (
-    <div className="p-4 md:p-6 bg-gray-50 min-h-screen w-full">
-      <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800 m-0">รายชื่อแขก</h1>
-            <Text type="secondary">จัดการรายชื่อแขกและเช็คอิน</Text>
+    <div className="p-2 md:p-4 lg:p-6 w-full h-full">
+      <div className="bg-white rounded-lg md:rounded-xl shadow-sm p-3 md:p-4 lg:p-6 mb-4 md:mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 mb-4 md:mb-6">
+          <div className="w-full md:w-auto">
+            <h1
+              className="font-bold text-gray-800 m-0"
+              style={{ fontSize: 'clamp(1.125rem, 4vw, 1.5rem)' }}
+            >
+              รายชื่อแขก
+            </h1>
+            <Text
+              type="secondary"
+              style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}
+            >
+              จัดการรายชื่อแขกและเช็คอิน
+            </Text>
           </div>
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto items-center">
+            <Select
+              defaultValue="all"
+              size="large"
+              style={{ width: 160 }}
+              onChange={setFilterCategory}
+              options={[
+                { value: 'all', label: 'ทั้งหมด' },
+                { value: 'groom', label: 'ฝั่งเจ้าบ่าว' },
+                { value: 'bride', label: 'ฝั่งเจ้าสาว' },
+                { value: 'rsvp_yes', label: 'ตอบรับ: มา' },
+                { value: 'rsvp_no', label: 'ตอบรับ: ไม่มา' },
+                { value: 'rsvp_pending', label: 'ตอบรับ: รอ' },
+              ]}
+              className="shadow-sm"
+            />
             <CustomSearch
-              placeholder="ค้นหาชื่อ, เบอร์โทร"
+              placeholder="ค้นหาชื่อ, เบอร์โทร..."
               allowClear
-              style={{ width: '100%', maxWidth: '300px' }}
+              size="large"
+              style={{
+                flex: 1,
+                minWidth: '200px',
+              }}
               onSearch={setSearchText}
               onChange={(e) => setSearchText(e.target.value)}
+              className="shadow-sm"
             />
-            <Button type="primary" onClick={() => {
-              setEditingGuest(null);
-              setIsDrawerVisible(true);
-            }}>
+            <Button
+              type="primary"
+              size="large"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingGuest(null);
+                setIsDrawerVisible(true);
+              }}
+              className="shrink-0 shadow-sm bg-pink-500 hover:bg-pink-600 border-pink-500 hover:border-pink-600"
+            >
               เพิ่มแขก
             </Button>
           </div>
@@ -836,12 +1022,17 @@ const GuestsPage: React.FC = () => {
             className="border border-gray-100 rounded-lg overflow-hidden"
           />
         ) : (
-          <div className="pb-20">
+          <div className="pb-4">
             {filteredTreeData.map(item => {
               if (item.children) {
                 return (
-                  <div key={item.id} className="mb-4 border rounded-lg p-2 bg-gray-50">
-                    <div className="mb-2 font-bold text-gray-700 px-2">{item.groupName || formatGuestName(item)} (กลุ่ม)</div>
+                  <div key={item.id} className="mb-3 border rounded-lg p-2 bg-gray-50">
+                    <div
+                      className="mb-1.5 font-bold text-gray-700 px-2"
+                      style={{ fontSize: 'clamp(0.8125rem, 2.5vw, 0.875rem)' }}
+                    >
+                      {item.groupName || formatGuestName(item)} (กลุ่ม)
+                    </div>
                     {renderMobileCard(item)}
                     {item.children.map(child => renderMobileCard(child))}
                   </div>

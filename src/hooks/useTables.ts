@@ -1,47 +1,19 @@
 /**
  * Custom hook สำหรับ Table data
- * ใช้ TableService instance
+ * ใช้ข้อมูลจาก AdminDataContext
  */
 
-import { useState, useEffect } from 'react';
-import { TableData } from '@/types';
-import { TableService } from '@/services/firebase/TableService';
-import { logger } from '@/utils/logger';
+import { useAdminData } from '@/contexts/AdminDataContext';
 
 export const useTables = (isEnabled: boolean = true) => {
-  const [tables, setTables] = useState<TableData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { tables, isLoading } = useAdminData();
 
-  useEffect(() => {
-    if (!isEnabled) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    const tableService = TableService.getInstance();
-
-    // Load initial data
-    tableService.getAll()
-      .then((data) => {
-        setTables(data);
-        setIsLoading(false);
-      })
-      .catch((error) => {
-        logger.error('Error loading tables:', error);
-        setIsLoading(false);
-      });
-
-    // Subscribe to real-time updates
-    const unsubscribe = tableService.subscribe((data) => {
-      setTables(data);
-      setIsLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
+  if (!isEnabled) {
+    return {
+      tables: [],
+      isLoading: false,
     };
-  }, [isEnabled]);
+  }
 
   return {
     tables,

@@ -1,47 +1,19 @@
 /**
  * Custom hook สำหรับ Zone data
- * ใช้ ZoneService instance
+ * ใช้ข้อมูลจาก AdminDataContext
  */
 
-import { useState, useEffect } from 'react';
-import { Zone } from '@/types';
-import { ZoneService } from '@/services/firebase/ZoneService';
-import { logger } from '@/utils/logger';
+import { useAdminData } from '@/contexts/AdminDataContext';
 
 export const useZones = (isEnabled: boolean = true) => {
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { zones, isLoading } = useAdminData();
 
-  useEffect(() => {
-    if (!isEnabled) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    const zoneService = ZoneService.getInstance();
-
-    // Load initial data
-    zoneService.getAll()
-      .then((data) => {
-        setZones(data);
-        setIsLoading(false);
-      })
-      .catch((error) => {
-        logger.error('Error loading zones:', error);
-        setIsLoading(false);
-      });
-
-    // Subscribe to real-time updates
-    const unsubscribe = zoneService.subscribe((data) => {
-      setZones(data);
-      setIsLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
+  if (!isEnabled) {
+    return {
+      zones: [],
+      isLoading: false,
     };
-  }, [isEnabled]);
+  }
 
   return {
     zones,

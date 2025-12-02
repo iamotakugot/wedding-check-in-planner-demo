@@ -18,6 +18,7 @@ import { useRSVPs } from '@/hooks/useRSVPs';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
+import { useGuestGroups } from '@/hooks/useGuestGroups';
 import { calculateTotalAttendees, calculateCheckedInCount, calculateRsvpStats } from '@/utils/rsvpHelpers';
 import { formatGuestName } from '@/utils/guestHelpers';
 
@@ -32,8 +33,74 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const { guests, isLoading: guestsLoading } = useGuests();
   const { zones, isLoading: zonesLoading } = useZones();
   const { tables, isLoading: tablesLoading } = useTables();
+  const { guestGroups } = useGuestGroups();
 
   const isLoading = rsvpsLoading || guestsLoading || zonesLoading || tablesLoading;
+
+  // Calculate visible guests (exclude duplicates)
+  const visibleGuests = useMemo(() => {
+    const processedGroupIds = new Set<string>();
+    const processedGuestIds = new Set<string>();
+    let count = 0;
+
+    // 1. Count guests in groups
+    guestGroups.forEach(group => {
+      if (group.totalCount > 1 && !processedGroupIds.has(group.groupId)) {
+        const groupGuests = group.members
+          .map(member => guests.find(g => g.id === member.id))
+          .filter(g => g !== undefined);
+
+        if (groupGuests.length > 0) {
+          count += groupGuests.length;
+          groupGuests.forEach(g => processedGuestIds.add(g!.id));
+          processedGroupIds.add(group.groupId);
+        }
+      }
+    });
+
+    // 2. Count individual guests
+    guests.forEach(guest => {
+      if (!processedGuestIds.has(guest.id)) {
+        let group = null;
+        if (guest.groupId) group = guestGroups.find(g => g.groupId === guest.groupId);
+        if (!group && guest.rsvpUid) group = guestGroups.find(g => g.groupId === guest.rsvpUid);
+        if (!group && guest.rsvpId) group = guestGroups.find(g => g.groupId === guest.rsvpId);
+        if (!group) group = guestGroups.find(g => g.members.some(m => m.id === guest.id));
+
+        if (group) {
+          const isInGroupMembers = group.members.some(m => m.id === guest.id);
+          if (!isInGroupMembers) {
+            processedGuestIds.add(guest.id);
+            return;
+          }
+        }
+
+        const guestFullName = `${guest.firstName} ${guest.lastName}`.trim().toLowerCase();
+        const isDuplicateMainGuest = guestGroups.some(g => {
+          if (g.members.length === 0) return false;
+          const mainGuest = g.members[0];
+          const mainGuestFullName = `${mainGuest.firstName} ${mainGuest.lastName}`.trim().toLowerCase();
+          if (guestFullName === mainGuestFullName && mainGuestFullName !== '') {
+            const isInThisGroup = g.members.some(m => m.id === guest.id);
+            return !isInThisGroup;
+          }
+          return false;
+        });
+
+        if (isDuplicateMainGuest) {
+          processedGuestIds.add(guest.id);
+          return;
+        }
+
+        if (!group || group.totalCount <= 1) {
+          count++;
+          processedGuestIds.add(guest.id);
+        }
+      }
+    });
+
+    return count;
+  }, [guests, guestGroups]);
 
   // Calculate statistics
   const rsvpStats = useMemo(() => calculateRsvpStats(rsvps), [rsvps]);
@@ -62,7 +129,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
-        <Spin size="large" tip="กำลังโหลดข้อมูล..." />
+        <Spin spinning={true} tip="กำลังโหลดข้อมูล..." size="large">
+          <div style={{ minHeight: '100px' }} />
+        </Spin>
       </div>
     );
   }
@@ -100,7 +169,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 showInfo={false}
               />
               <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>จากแขกทั้งหมด {guests.length} คน</span>
+                <span>จากแขกทั้งหมด {visibleGuests} คน</span>
               </div>
             </Card>
           </Col>

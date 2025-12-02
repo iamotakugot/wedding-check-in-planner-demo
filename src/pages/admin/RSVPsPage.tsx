@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Tag, Button, Modal, Descriptions, Space, Avatar, Input, Tooltip, Typography } from 'antd';
+import { Table, Tag, Button, Modal, Descriptions, Space, Avatar, Input, Tooltip, Typography, List, Card, Grid } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EyeOutlined, UserOutlined, SearchOutlined, PhoneOutlined, ManOutlined, WomanOutlined } from '@ant-design/icons';
 import { useRSVPs } from '@/hooks/useRSVPs';
+import { useGuests } from '@/hooks/useGuests';
+import { useTables } from '@/hooks/useTables';
 import { RSVPData } from '@/types';
+import dayjs from 'dayjs';
+import 'dayjs/locale/th';
+
+dayjs.locale('th');
 
 const { Text } = Typography;
 
@@ -61,11 +67,21 @@ const CustomSearch: React.FC<{
   );
 };
 
+const { useBreakpoint } = Grid;
+
 const RSVPsPage: React.FC = () => {
-  const { rsvps, isLoading } = useRSVPs();
+  const screens = useBreakpoint();
+  const { rsvps, isLoading: rsvpsLoading } = useRSVPs();
+  const { guests, isLoading: guestsLoading } = useGuests();
+  const { tables, isLoading: tablesLoading } = useTables();
+  const isLoading = rsvpsLoading || guestsLoading || tablesLoading;
   const [selectedRSVP, setSelectedRSVP] = useState<RSVPData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 50,
+  });
 
   const filteredRSVPs = rsvps.filter(rsvp => {
     if (!searchText) return true;
@@ -76,12 +92,45 @@ const RSVPsPage: React.FC = () => {
     return fullName.includes(search) || phone.includes(search) || nickname.toLowerCase().includes(search);
   });
 
+  // Prepare filter options
+  const relationFilters = Array.from(new Set(rsvps.map(r => r.relation).filter(Boolean))).map(r => ({ text: r, value: r }));
+  const tableFilters = Array.from(new Set(
+    rsvps.map(r => {
+      const guest = guests.find(g => g.rsvpId === r.id || g.rsvpUid === r.uid);
+      if (!guest?.tableId) return 'ยังไม่จัดโต๊ะ';
+      const table = tables.find(t => t.tableId === guest.tableId);
+      return table ? table.tableName : 'Unknown Table';
+    })
+  )).map(t => ({ text: t, value: t }));
+
   const columns: ColumnsType<RSVPData> = [
+    {
+      title: '#',
+      key: 'index',
+      width: 60,
+      align: 'center',
+      fixed: 'left' as const,
+      render: (_: any, __: any, index: number) => (pagination.current - 1) * pagination.pageSize + index + 1,
+    },
+    {
+      title: 'เวลาตอบรับ',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
+      width: 150,
+      sorter: (a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(),
+      render: (date: string) => (
+        <div className="flex flex-col text-xs">
+          <span>{dayjs(date).format('DD/MM/YYYY')}</span>
+          <span className="text-gray-500">{dayjs(date).format('HH:mm')}</span>
+        </div>
+      ),
+    },
     {
       title: 'ผู้ร่วมงาน',
       key: 'name',
       width: 250,
       fixed: 'left' as const,
+      sorter: (a, b) => a.firstName.localeCompare(b.firstName),
       render: (_, record) => (
         <Space size="middle">
           <Avatar
@@ -114,7 +163,7 @@ const RSVPsPage: React.FC = () => {
       title: 'เบอร์โทรศัพท์',
       dataIndex: 'phoneNumber',
       key: 'phoneNumber',
-      width: 180,
+      width: 150,
       render: (phone: string | undefined) => {
         if (!phone) return <Text type="secondary">-</Text>;
         return (
@@ -137,7 +186,9 @@ const RSVPsPage: React.FC = () => {
     {
       title: 'ความสัมพันธ์',
       dataIndex: 'relation',
-      width: 150,
+      width: 120,
+      filters: relationFilters,
+      onFilter: (value, record) => record.relation === value,
       render: (relation: string) => (
         <Tag color="purple">{relation}</Tag>
       ),
@@ -146,6 +197,11 @@ const RSVPsPage: React.FC = () => {
       title: 'สถานะ',
       dataIndex: 'isComing',
       width: 120,
+      filters: [
+        { text: 'ยินดีร่วมงาน', value: 'yes' },
+        { text: 'ไม่สะดวก', value: 'no' },
+      ],
+      onFilter: (value, record) => record.isComing === value,
       render: (isComing: string) => (
         <Tag color={isComing === 'yes' ? 'success' : 'error'} className="px-3 py-1 text-sm rounded-full">
           {isComing === 'yes' ? 'ยินดีร่วมงาน' : 'ไม่สะดวก'}
@@ -153,10 +209,44 @@ const RSVPsPage: React.FC = () => {
       ),
     },
     {
+      title: 'ฝ่าย',
+      dataIndex: 'side',
+      width: 100,
+      filters: [
+        { text: 'เจ้าบ่าว', value: 'groom' },
+        { text: 'เจ้าสาว', value: 'bride' },
+      ],
+      onFilter: (value, record) => record.side === value,
+      render: (side: string) => (
+        <Tag color={side === 'groom' ? 'blue' : 'magenta'}>
+          {side === 'groom' ? 'เจ้าบ่าว' : 'เจ้าสาว'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'โต๊ะ',
+      key: 'table',
+      width: 150,
+      filters: tableFilters,
+      onFilter: (value, record) => {
+        const guest = guests.find(g => g.rsvpId === record.id || g.rsvpUid === record.uid);
+        if (!guest?.tableId) return value === 'ยังไม่จัดโต๊ะ';
+        const table = tables.find(t => t.tableId === guest.tableId);
+        return (table ? table.tableName : 'Unknown Table') === value;
+      },
+      render: (_, record) => {
+        const guest = guests.find(g => g.rsvpId === record.id || g.rsvpUid === record.uid);
+        if (!guest?.tableId) return <Text type="secondary">-</Text>;
+        const table = tables.find(t => t.tableId === guest.tableId);
+        return table ? <Tag color="geekblue">{table.tableName}</Tag> : <Text type="secondary">-</Text>;
+      },
+    },
+    {
       title: 'ผู้ติดตาม',
       key: 'attendees',
       width: 100,
       align: 'center' as const,
+      sorter: (a, b) => (a.accompanyingGuestsCount || 0) - (b.accompanyingGuestsCount || 0),
       render: (_, record) => {
         if (record.isComing !== 'yes') return '-';
         const total = 1 + (record.accompanyingGuestsCount || 0);
@@ -209,19 +299,73 @@ const RSVPsPage: React.FC = () => {
           </div>
         </div>
 
-        <Table
-          columns={columns}
-          dataSource={filteredRSVPs}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total) => `ทั้งหมด ${total} รายการ`,
-          }}
-          scroll={{ x: 1000 }}
-          className="border border-gray-100 rounded-lg overflow-hidden"
-        />
+        {!screens.md ? (
+          <List
+            grid={{ gutter: 16, column: 1 }}
+            dataSource={filteredRSVPs}
+            renderItem={(item) => (
+              <List.Item>
+                <Card
+                  actions={[
+                    <Button type="link" icon={<PhoneOutlined />} href={`tel:${item.phoneNumber}`} disabled={!item.phoneNumber}>โทร</Button>,
+                    <Button type="link" icon={<EyeOutlined />} onClick={() => { setSelectedRSVP(item); setModalVisible(true); }}>ดู</Button>
+                  ]}
+                >
+                  <Card.Meta
+                    avatar={
+                      <Avatar
+                        size="large"
+                        src={item.photoURL}
+                        icon={!item.photoURL && <UserOutlined />}
+                        className={item.isComing === 'yes' ? 'bg-green-500' : 'bg-gray-400'}
+                      />
+                    }
+                    title={
+                      <div className="flex justify-between items-start">
+                        <span className="truncate pr-2">{item.firstName} {item.lastName}</span>
+                        <Tag color={item.isComing === 'yes' ? 'success' : 'error'} className="mr-0 shrink-0">
+                          {item.isComing === 'yes' ? 'มา' : 'ไม่มา'}
+                        </Tag>
+                      </div>
+                    }
+                    description={
+                      <Space direction="vertical" size={0} className="w-full">
+                        <Space size={4} wrap>
+                          {item.nickname && <Tag className="m-0">{item.nickname}</Tag>}
+                          <Tag color={item.side === 'groom' ? 'blue' : 'magenta'} className="m-0">
+                            {item.side === 'groom' ? 'เจ้าบ่าว' : 'เจ้าสาว'}
+                          </Tag>
+                        </Space>
+                        {item.isComing === 'yes' && (
+                          <Text type="secondary" className="text-xs mt-1 block">
+                            ผู้ติดตาม: {item.accompanyingGuestsCount || 0} ท่าน
+                          </Text>
+                        )}
+                      </Space>
+                    }
+                  />
+                </Card>
+              </List.Item>
+            )}
+          />
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={filteredRSVPs}
+            rowKey="id"
+            loading={isLoading}
+            pagination={{
+              current: pagination.current,
+              pageSize: pagination.pageSize,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total) => `ทั้งหมด ${total} รายการ`,
+              onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+            }}
+            scroll={{ x: 1000 }}
+            className="border border-gray-100 rounded-lg overflow-hidden"
+          />
+        )}
       </div>
 
       <Modal

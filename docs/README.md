@@ -17,16 +17,19 @@ A real-time wedding management system built with React, TypeScript, and Firebase
 - **Guest Management**:
     - Add, edit, and delete guests
     - Expandable tree view with group organization
+    - **New**: Instant filtering by Side and RSVP status
+    - **New**: Advanced sorting columns
     - Individual and group check-in support
-    - Track RSVP status and check-in times
 - **Seating Arrangement**:
-    - Visual canvas-based seating layout
+    - Visual canvas-based seating layout (Desktop)
+    - **New**: Mobile-friendly List View for seating
     - Zone and table management
-    - Drag-and-drop guest assignment
-    - Click-based assignment mode
-    - Cascader filter by relationship (Friends, Family, etc.)
+    - **New**: Auto-assign entire groups to tables
+    - **New**: Enhanced Table Detail Modal with "Available" guest search and sorting
     - Bulk unassign functionality
-- **RSVP Management**: Real-time tracking of guest responses with timestamps
+- **RSVP Management**: 
+    - Real-time tracking of guest responses
+    - **New**: Enhanced table with sorting and filtering
 - **Settings**: Configure wedding card details and invitation URLs
 
 ### Technical Features

@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Tabs, Form, Input, Button, Card, Row, Col, App, QRCode, Statistic, Spin, Space } from 'antd';
-import { CopyOutlined, HeartOutlined, LinkOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Tabs, Form, Input, Button, Card, Row, Col, App, QRCode, Statistic, Spin, Space, FloatButton } from 'antd';
+import { CopyOutlined, HeartOutlined, LinkOutlined, FileTextOutlined, SaveOutlined } from '@ant-design/icons';
 import { useConfig } from '@/hooks/useConfig';
 import { useRSVPs } from '@/hooks/useRSVPs';
 import { ConfigService } from '@/services/firebase/ConfigService';
@@ -67,7 +67,9 @@ const SettingsPage: React.FC = () => {
   if (configLoading || rsvpsLoading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
-        <Spin size="large" tip="กำลังโหลดข้อมูล..." />
+        <Spin spinning={true} tip="กำลังโหลดข้อมูล..." size="large">
+          <div style={{ minHeight: '100px' }} />
+        </Spin>
       </div>
     );
   }
@@ -250,6 +252,13 @@ const SettingsPage: React.FC = () => {
             ),
           },
         ]}
+      />
+      <FloatButton
+        icon={<SaveOutlined />}
+        type="primary"
+        style={{ right: 24, bottom: 24 }}
+        onClick={() => form.submit()}
+        tooltip="บันทึกการตั้งค่า"
       />
     </div>
   );

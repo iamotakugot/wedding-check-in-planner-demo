@@ -4,12 +4,13 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Card, Button, Tabs, App, Modal, List, Tag, Space, Typography, Grid, Segmented, Progress } from 'antd';
+import { Card, Button, Tabs, App, Modal, List, Tag, Space, Typography, Grid, Segmented, Progress, Alert } from 'antd';
 import { PlusOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { useGuests } from '@/hooks/useGuests';
 import { useZones } from '@/hooks/useZones';
 import { useTables } from '@/hooks/useTables';
 import { useGuestGroups } from '@/hooks/useGuestGroups';
+import { GuestService } from '@/services/firebase/GuestService';
 import { Zone, TableData, Guest } from '@/types';
 import { ZoneService } from '@/services/firebase/ZoneService';
 import { TableService } from '@/services/firebase/TableService';
@@ -57,6 +58,13 @@ const SeatingPage: React.FC = () => {
 
   // View Mode (Canvas vs List)
   const [viewMode, setViewMode] = useState<'canvas' | 'list'>('canvas');
+
+  // Default to list view on mobile
+  useEffect(() => {
+    if (!screens.md && screens.xs) {
+      setViewMode('list');
+    }
+  }, [screens.md, screens.xs]);
 
   const seatingManager = new SeatingManager();
 
@@ -121,7 +129,8 @@ const SeatingPage: React.FC = () => {
   // Handle table click
   const handleTableClick = async (table: TableData) => {
     setSelectedTableId(table.id === selectedTableId ? null : table.id);
-    // Modal opening is now handled by onOpenDetail only
+    setActiveTable(table);
+    setIsDetailModalOpen(true);
   };
 
   const handleZoneSubmit = async (zone: Zone) => {
@@ -251,6 +260,51 @@ const SeatingPage: React.FC = () => {
     return <div className="p-6">Loading...</div>;
   }
 
+  // Handle assign guests
+  const handleAssignGuests = async (guestIds: string[]) => {
+    if (!activeTable) return;
+    try {
+      const updates = guestIds.map(id => GuestService.getInstance().update(id, {
+        tableId: activeTable.tableId,
+        zoneId: activeTable.zoneId
+      }));
+      await Promise.all(updates);
+      message.success('เพิ่มแขกเข้าโต๊ะเรียบร้อย');
+    } catch (error) {
+      logger.error('Error assigning guests:', error);
+      message.error('เกิดข้อผิดพลาดในการเพิ่มแขก');
+    }
+  };
+
+  // Handle unassign guest
+  const handleUnassignGuest = async (guestId: string) => {
+    try {
+      await GuestService.getInstance().update(guestId, {
+        tableId: null,
+        zoneId: null
+      });
+      message.success('นำแขกออกจากโต๊ะเรียบร้อย');
+    } catch (error) {
+      logger.error('Error unassigning guest:', error);
+      message.error('เกิดข้อผิดพลาดในการนำแขกออก');
+    }
+  };
+
+  // Handle unassign all guests
+  const handleUnassignAllGuests = async (guestIds: string[]) => {
+    try {
+      const updates = guestIds.map(id => GuestService.getInstance().update(id, {
+        tableId: null,
+        zoneId: null
+      }));
+      await Promise.all(updates);
+      message.success('นำแขกทั้งหมดออกจากโต๊ะเรียบร้อย');
+    } catch (error) {
+      logger.error('Error unassigning all guests:', error);
+      message.error('เกิดข้อผิดพลาดในการนำแขกทั้งหมดออก');
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
@@ -268,6 +322,17 @@ const SeatingPage: React.FC = () => {
           />
         </Space>
       </div>
+
+      {/* Mobile Hint */}
+      {!screens.md && (
+        <Alert
+          message="แนะนำ: ใช้มุมมอง 'รายการ' เพื่อการจัดการที่ง่ายขึ้นบนมือถือ"
+          type="info"
+          showIcon
+          closable
+          className="mb-4"
+        />
+      )}
 
       <Tabs
         type="editable-card"
@@ -483,6 +548,13 @@ const SeatingPage: React.FC = () => {
                           <div className="mt-2 text-xs text-gray-500 text-center">
                             แตะเพื่อจัดการ
                           </div>
+                          <div className="text-center mt-2">
+                            <Button size="small" type="primary" ghost onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveTable(table);
+                              setIsDetailModalOpen(true);
+                            }}>ดูแขก</Button>
+                          </div>
                         </Card>
                       </List.Item>
                     );
@@ -515,53 +587,25 @@ const SeatingPage: React.FC = () => {
         onSubmit={handleTableSubmit}
       />
 
-      {activeTable && (
-        <TableDetailModal
-          visible={isDetailModalOpen}
-          onClose={() => {
-            setIsDetailModalOpen(false);
-            setActiveTable(null);
-            setSelectedTableId(null);
-          }}
-          table={activeTable}
-          guests={guestsByTable.get(activeTable.tableId) || []}
-          unassignedGuests={guests.filter(g => !g.tableId)}
-          guestGroups={guestGroups}
-          onAssignGuests={async (guestIds: string[]) => {
-            try {
-              let successCount = 0;
-              let failCount = 0;
-              for (const guestId of guestIds) {
-                try {
-                  await seatingManager.assignGuestToTable(guestId, activeTable.tableId, activeTable.zoneId);
-                  successCount++;
-                } catch (error) {
-                  failCount++;
-                  logger.error(`Error assigning guest ${guestId}:`, error);
-                }
-              }
-              if (successCount > 0) {
-                message.success(`เพิ่มแขก ${successCount} คนเข้าโต๊ะเรียบร้อย${failCount > 0 ? ` (${failCount} คนไม่สำเร็จ)` : ''}`);
-              } else {
-                message.error(`ไม่สามารถเพิ่มแขกได้ (${failCount} คน)`);
-              }
-            } catch (error) {
-              logger.error('Error assigning guests:', error);
-              message.error('เกิดข้อผิดพลาด');
-            }
-          }}
-          onUnassignGuest={async (guestId: string) => {
-            try {
-              await seatingManager.unassignGuestFromTable(guestId);
-              message.success('ย้ายแขกออกจากโต๊ะเรียบร้อย');
-            } catch (error) {
-              logger.error('Error unassigning guest:', error);
-              message.error('เกิดข้อผิดพลาด');
-            }
-          }}
+      <TableDetailModal
+        visible={isDetailModalOpen}
+        onClose={() => {
+          setIsDetailModalOpen(false);
+          setActiveTable(null);
+          setSelectedTableId(null);
+        }}
+        table={activeTable}
+        guests={guestsByTable.get(activeTable?.tableId || '') || []}
+        allGuests={guests}
+        tables={tables}
+        guestGroups={guestGroups}
+        onAssignGuests={handleAssignGuests}
+        onUnassignGuest={handleUnassignGuest}
+        onUnassignAllGuests={handleUnassignAllGuests}
+      />
 
-        />
-      )}
+
+
     </div>
   );
 };
