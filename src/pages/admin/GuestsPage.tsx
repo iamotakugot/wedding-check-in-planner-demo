@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { App, Typography, Grid, Space, Input, Button, Tag, Avatar, Tooltip, Card, Modal, Table, FloatButton, Select, Checkbox } from 'antd';
+import { App, Typography, Grid, Space, Input, Button, Tag, Avatar, Tooltip, Card, Modal, Table, Select, Checkbox } from 'antd';
 import { SearchOutlined, PhoneOutlined, ManOutlined, WomanOutlined, CheckCircleOutlined, EditOutlined, DeleteOutlined, UserOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useGuests } from '@/hooks/useGuests';
@@ -28,7 +28,9 @@ const CustomSearch: React.FC<{
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   value?: string;
   prefix?: React.ReactNode;
-}> = ({ placeholder, allowClear, style, onSearch, onChange, value, prefix }) => {
+  size?: 'large' | 'middle' | 'small';
+  className?: string;
+}> = ({ placeholder, allowClear, style, onSearch, onChange, value, prefix, size, className }) => {
   const [searchValue, setSearchValue] = useState(value || '');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,12 +47,7 @@ const CustomSearch: React.FC<{
     }
   };
 
-  const handleClear = () => {
-    setSearchValue('');
-    if (onSearch) {
-      onSearch('');
-    }
-  };
+
 
   useEffect(() => {
     if (value !== undefined) {
@@ -67,7 +64,8 @@ const CustomSearch: React.FC<{
       prefix={prefix || <SearchOutlined className="text-gray-400" />}
       allowClear={allowClear}
       style={style}
-      className="w-full"
+      className={`w-full ${className || ''}`}
+      size={size}
     />
   );
 };
@@ -430,7 +428,7 @@ const GuestsPage: React.FC = () => {
         }
         else if (filterCategory === 'rsvp_pending') {
           const status = getGuestRSVPStatus(item, rsvpMap);
-          matchesCategory = status === 'pending';
+          matchesCategory = !status; // null or undefined means pending
         }
       }
 
@@ -537,7 +535,7 @@ const GuestsPage: React.FC = () => {
       align: 'center',
       render: (_, record, index) => {
         // Check if this is a parent row (has children)
-        const isParent = record.children && record.children.length > 0;
+        // const isParent = record.children && record.children.length > 0;
 
         // Check if this is a child row (by checking if it has a parent in the tree)
         // Note: In AntD Table, for child rows, 'index' is the index within the parent's children array.
@@ -658,8 +656,8 @@ const GuestsPage: React.FC = () => {
       key: 'rsvpStatus',
       width: 120,
       sorter: (a, b) => {
-        const statusA = getGuestRSVPStatus(a, rsvpMap);
-        const statusB = getGuestRSVPStatus(b, rsvpMap);
+        const statusA = getGuestRSVPStatus(a, rsvpMap) || '';
+        const statusB = getGuestRSVPStatus(b, rsvpMap) || '';
         return statusA.localeCompare(statusB);
       },
       filterDropdown: (props) => (

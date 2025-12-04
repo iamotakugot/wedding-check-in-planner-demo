@@ -14,7 +14,7 @@ import { GuestService } from '@/services/firebase/GuestService';
 import { Zone, TableData, Guest } from '@/types';
 import { ZoneService } from '@/services/firebase/ZoneService';
 import { TableService } from '@/services/firebase/TableService';
-import { SeatingManager } from '@/managers/SeatingManager';
+
 import DraggableTable from '@/components/admin/DraggableTable';
 import ZoneModal from '@/components/admin/ZoneModal';
 import TableModal from '@/components/admin/TableModal';
@@ -66,7 +66,7 @@ const SeatingPage: React.FC = () => {
     }
   }, [screens.md, screens.xs]);
 
-  const seatingManager = new SeatingManager();
+
 
   const currentZone = zones.find((z) => z && z.id === selectedZoneId && z.zoneName);
   const tablesInCurrentZone = useMemo(

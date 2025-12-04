@@ -213,6 +213,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           >
             {menuItems.map(item => {
               const isActive = currentView === item?.key;
+              const menuItem = item as any;
               return (
                 <button
                   key={item?.key}
@@ -233,7 +234,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
                       transform: isActive ? 'scale(1.1)' : 'scale(1)',
                     }}
                   >
-                    {item?.icon}
+                    {menuItem.icon}
                   </div>
                   <span
                     className="mt-0.5 truncate w-full text-center"
@@ -242,7 +243,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
                       fontWeight: isActive ? 600 : 400,
                     }}
                   >
-                    {item?.label}
+                    {menuItem.label}
                   </span>
                 </button>
               );
