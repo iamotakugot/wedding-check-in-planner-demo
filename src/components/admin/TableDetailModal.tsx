@@ -102,35 +102,56 @@ const TableDetailModalContent: React.FC<TableDetailModalProps> = ({
       filtered = filtered.filter(g => !g.tableId);
     }
 
-    // If search text is present, we want to search in ALL guests, not just unassigned.
-    if (searchText) {
-      const lowerSearch = searchText.toLowerCase();
-      filtered = safeAllGuests.filter(g =>
-        (g.firstName && g.firstName.toLowerCase().includes(lowerSearch)) ||
-        (g.lastName && g.lastName.toLowerCase().includes(lowerSearch)) ||
-        (g.nickname && g.nickname.toLowerCase().includes(lowerSearch))
-      );
-    }
-
-    // Sort by groupId (group members together)
+    // Sort: Effective Group Name -> Owner -> Order -> First Name
     return filtered.sort((a, b) => {
-      // First sort by seated status (unassigned first)
+      // 1. Seated status (unassigned first)
       if (!!a.tableId !== !!b.tableId) return a.tableId ? 1 : -1;
 
-      // Then sort by group
-      if (a.groupId && b.groupId) {
-        if (a.groupId === b.groupId) {
-          // Same group, sort by name
-          return (a.firstName || '').localeCompare(b.firstName || '');
+      // Helper to find member info from ANY group
+      const getMemberInfo = (guestId: string) => {
+        for (const group of safeGuestGroups) {
+          if (!group || !group.members) continue;
+          const member = group.members.find(m => m.id === guestId);
+          if (member) return { member, group };
         }
-        return a.groupId.localeCompare(b.groupId);
-      }
-      if (a.groupId) return -1;
-      if (b.groupId) return 1;
+        return null;
+      };
 
-      return (a.firstName || '').localeCompare(b.firstName || '');
+      const infoA = getMemberInfo(a.id);
+      const infoB = getMemberInfo(b.id);
+
+      // Helper to get effective name
+      const getName = (g: Guest, info: { group: GuestGroup } | null) => {
+        if (info) return info.group.groupName.trim();
+        if ((g as any).groupName) return (g as any).groupName.trim();
+        return (g.firstName || '').trim();
+      };
+
+      const nameA = getName(a, infoA);
+      const nameB = getName(b, infoB);
+
+      // 2. Compare Effective Names (Thai locale)
+      const nameCompare = nameA.localeCompare(nameB, 'th');
+      if (nameCompare !== 0) return nameCompare;
+
+      // 3. If names are equal (Same Group context), sort by internal structure
+      // Owner first
+      const isOwnerA = infoA?.member.isOwner || false;
+      const isOwnerB = infoB?.member.isOwner || false;
+      if (isOwnerA !== isOwnerB) return isOwnerA ? -1 : 1;
+
+      // Then by orderIndex (Ascending: 1, 2, 3...)
+      const orderA = typeof infoA?.member.orderIndex === 'number' ? infoA.member.orderIndex : 999;
+      const orderB = typeof infoB?.member.orderIndex === 'number' ? infoB.member.orderIndex : 999;
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      // 4. Fallback: Sort by First Name
+      return (a.firstName || '').localeCompare(b.firstName || '', 'th');
     });
-  }, [safeAllGuests, searchText]);
+  }, [safeAllGuests, searchText, safeGuestGroups]);
 
   // Count total unassigned guests
   const unassignedCount = useMemo(() => {
@@ -309,36 +330,8 @@ const TableDetailModalContent: React.FC<TableDetailModalProps> = ({
                                 });
 
                                 if (unseatedMembers.length > 1) {
-                                  // Ask to assign all unseated members
-                                  Modal.confirm({
-                                    title: 'นำเข้าทั้งกลุ่ม?',
-                                    content: `คุณ ${guest.firstName} อยู่ในกลุ่ม "${group.groupName}" มีสมาชิกที่ยังไม่มีโต๊ะ ${unseatedMembers.length} คน ต้องการนำเข้าทั้งหมดหรือไม่?`,
-                                    okText: 'นำเข้าทั้งกลุ่ม',
-                                    cancelText: 'แค่คนนี้',
-                                    onOk: () => {
-                                      onAssignGuests(unseatedMembers.map(m => m.id));
-                                    },
-                                    onCancel: () => {
-                                      // If cancel (or select "Just this person"), assign only this guest
-                                      // Note: AntD Modal onCancel is usually for "Cancel operation", 
-                                      // but here we treat it as "Assign Single". 
-                                      // To be safer/clearer, maybe we should just assign single if they cancel? 
-                                      // Or provide a 3rd button? 
-                                      // For now, let's assume "Cancel" means "Don't do anything" 
-                                      // and "Just this person" is not easily doable with standard confirm.
-                                      // Let's just assign single if they cancel? No, that's confusing.
-                                      // Let's use a custom modal or just assign all by default?
-                                      // User said "Must bring guests 1,2,3...", implying mandatory.
-                                      // Let's just assign ALL by default if it's a group.
-                                      // But maybe some are already seated?
-                                      // Let's stick to: Assign ALL unseated members automatically.
-                                      onAssignGuests(unseatedMembers.map(m => m.id));
-                                    }
-                                  });
-                                  // Actually, let's just assign all unseated members automatically for now 
-                                  // as per user request "Must bring guests...".
-                                  // If they want to split, they can remove individually later.
-                                  // So I will comment out the modal and just do it.
+                                  // Assign ALL unseated members automatically
+                                  onAssignGuests(unseatedMembers.map(m => m.id));
                                 } else {
                                   onAssignGuests([guest.id]);
                                 }
