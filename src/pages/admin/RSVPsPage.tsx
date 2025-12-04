@@ -87,6 +87,10 @@ const RSVPsPage: React.FC = () => {
     const nickname = rsvp.nickname || '';
     const search = searchText.toLowerCase();
     return fullName.includes(search) || phone.includes(search) || nickname.toLowerCase().includes(search);
+  }).sort((a, b) => {
+    const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return dateB - dateA;
   });
 
   // Prepare filter options
