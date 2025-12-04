@@ -179,7 +179,7 @@ export class RSVPService {
         rsvpId: id,
         uid: user.uid,
         updates: Object.keys(updates),
-        isComing: updates.isComing || undefined,
+        isComing: updates.isComing ?? null,
       });
     } catch (auditError) {
       // Don't fail RSVP update if audit log fails

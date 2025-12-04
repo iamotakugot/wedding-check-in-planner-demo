@@ -78,10 +78,7 @@ const RSVPsPage: React.FC = () => {
   const [selectedRSVP, setSelectedRSVP] = useState<RSVPData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 50,
-  });
+
 
   const filteredRSVPs = rsvps.filter(rsvp => {
     if (!searchText) return true;
@@ -110,7 +107,7 @@ const RSVPsPage: React.FC = () => {
       width: 60,
       align: 'center',
       fixed: 'left' as const,
-      render: (_: any, __: any, index: number) => (pagination.current - 1) * pagination.pageSize + index + 1,
+      render: (_: any, __: any, index: number) => index + 1,
     },
     {
       title: 'เวลาตอบรับ',
@@ -355,12 +352,10 @@ const RSVPsPage: React.FC = () => {
             rowKey="id"
             loading={isLoading}
             pagination={{
-              current: pagination.current,
-              pageSize: pagination.pageSize,
+              defaultPageSize: 10,
               showSizeChanger: true,
               pageSizeOptions: ['10', '20', '50', '100'],
               showTotal: (total) => `ทั้งหมด ${total} รายการ`,
-              onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
             }}
             scroll={{ x: 1000 }}
             className="border border-gray-100 rounded-lg overflow-hidden"

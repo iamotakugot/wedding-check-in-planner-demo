@@ -153,7 +153,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         {/* Key Metrics */}
         <Row gutter={[16, 16]} className="mb-6">
           <Col xs={24} sm={12} lg={6}>
-            <Card bordered={false} className="shadow-sm h-full">
+            <Card variant="borderless" className="shadow-sm h-full">
               <Statistic
                 title="ผู้เข้าร่วมงานทั้งหมด"
                 value={totalAttendees}
@@ -174,7 +174,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
-            <Card bordered={false} className="shadow-sm h-full">
+            <Card variant="borderless" className="shadow-sm h-full">
               <Statistic
                 title="ตอบรับแล้ว (RSVP)"
                 value={rsvpStats.totalComingForms}
@@ -191,7 +191,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
-            <Card bordered={false} className="shadow-sm h-full">
+            <Card variant="borderless" className="shadow-sm h-full">
               <Statistic
                 title="เช็คอินหน้างาน"
                 value={totalCheckedIn}
@@ -208,7 +208,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={6}>
-            <Card bordered={false} className="shadow-sm h-full">
+            <Card variant="borderless" className="shadow-sm h-full">
               <Statistic
                 title="จัดโต๊ะแล้ว"
                 value={totalSeated}
@@ -232,7 +232,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <Col xs={24} lg={16}>
             <Card
               title={<Space><ExclamationCircleOutlined className="text-red-500" /> สิ่งที่ต้องจัดการ</Space>}
-              bordered={false}
+              variant="borderless"
               className="shadow-sm mb-4"
             >
               <List
@@ -266,7 +266,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
             <Card
               title={<Space><PhoneOutlined className="text-blue-500" /> แขกที่ควรโทรติดตาม</Space>}
-              bordered={false}
+              variant="borderless"
               className="shadow-sm"
             >
               <List
@@ -313,7 +313,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
           {/* Right Column: Quick Stats */}
           <Col xs={24} lg={8}>
-            <Card title="ข้อมูลโซนและโต๊ะ" bordered={false} className="shadow-sm mb-4">
+            <Card title="ข้อมูลโซนและโต๊ะ" variant="borderless" className="shadow-sm mb-4">
               <Row gutter={[16, 16]}>
                 <Col span={12}>
                   <Statistic title="โซนทั้งหมด" value={zones.length} />
@@ -327,7 +327,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             </Card>
 
-            <Card title="การตอบรับล่าสุด" bordered={false} className="shadow-sm">
+            <Card title="การตอบรับล่าสุด" variant="borderless" className="shadow-sm">
               <List
                 size="small"
                 dataSource={rsvps.slice(0, 5)}

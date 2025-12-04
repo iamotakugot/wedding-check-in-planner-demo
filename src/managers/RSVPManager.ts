@@ -22,12 +22,12 @@ export class RSVPManager {
    */
   async createRSVPWithGuests(rsvpData: Omit<RSVPData, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const rsvpId = await this.rsvpService.create(rsvpData);
-    
+
     // ถ้า isComing === 'yes' ให้สร้าง Guest entries
     if (rsvpData.isComing === 'yes' && rsvpData.uid) {
       await this.syncRSVPToGuest(rsvpId);
     }
-    
+
     return rsvpId;
   }
 
@@ -42,7 +42,7 @@ export class RSVPManager {
 
     // หา guests ทั้งหมดที่มี rsvpUid ตรงกัน (เพื่อใช้ groupId เดียวกัน)
     const allGuests = await this.guestService.getAll();
-    const existingGuestsWithRsvpUid = allGuests.filter(g => 
+    const existingGuestsWithRsvpUid = allGuests.filter(g =>
       g.rsvpUid === rsvp.uid || g.rsvpId === rsvp.uid
     );
 
@@ -60,11 +60,11 @@ export class RSVPManager {
     if (existingGuestsWithRsvpUid.length > 0) {
       // หา groupId ที่มีอยู่แล้ว (จาก guest ที่มี groupId)
       const existingGroupId = existingGuestsWithRsvpUid.find(g => g.groupId)?.groupId;
-      
+
       // ถ้ามี groupId อยู่แล้ว → อัปเดต guests ทั้งหมดให้ใช้ groupId เดียวกัน
       if (existingGroupId) {
         const groupName = existingGuestsWithRsvpUid.find(g => g.groupName)?.groupName || `${rsvp.firstName} ${rsvp.lastName}`;
-        
+
         // อัปเดต guests ที่ยังไม่มี groupId หรือ groupId ต่างกัน
         for (const guest of existingGuestsWithRsvpUid) {
           if (!guest.groupId || guest.groupId !== existingGroupId) {
@@ -74,7 +74,7 @@ export class RSVPManager {
             });
           }
         }
-        
+
         // ใช้ mainGuest ที่อัปเดตแล้ว
         if (mainGuest) {
           mainGuest = await this.guestService.getById(mainGuest.id);
@@ -88,7 +88,7 @@ export class RSVPManager {
       if (expectedAccompanyingCount > 0) {
         // หา accompanying guests ที่มีอยู่ (ใช้ groupId จาก mainGuest)
         const groupId = mainGuest.groupId;
-        const existingAccompanyingGuests = allGuests.filter(g => 
+        const existingAccompanyingGuests = allGuests.filter(g =>
           g.id !== mainGuest!.id &&
           g.groupId === groupId &&
           (g.rsvpUid === rsvp.uid || g.rsvpId === rsvp.uid)
@@ -99,7 +99,7 @@ export class RSVPManager {
           // ใช้ groupId จาก mainGuest (ไม่สร้างใหม่)
           const groupId = mainGuest.groupId || `GROUP_${generateId()}`;
           const groupName = mainGuest.groupName || `${rsvp.firstName} ${rsvp.lastName}`;
-          
+
           // ถ้า mainGuest ยังไม่มี groupId → สร้างและอัปเดต
           if (!mainGuest.groupId) {
             await this.guestService.update(mainGuest.id, {
@@ -107,7 +107,7 @@ export class RSVPManager {
               groupName: groupName,
             });
           }
-          
+
           // สร้าง accompanying guests ที่ยังไม่มี
           const existingNames = new Set(existingAccompanyingGuests.map(g => g.firstName));
           for (let i = 0; i < rsvp.accompanyingGuests.length; i++) {
@@ -161,6 +161,7 @@ export class RSVPManager {
       id: mainGuestId,
       firstName: rsvp.firstName,
       lastName: rsvp.lastName,
+      phoneNumber: rsvp.phoneNumber,
       nickname: rsvp.nickname || '',
       age: null,
       gender: 'other',
@@ -180,7 +181,9 @@ export class RSVPManager {
       updatedAt: new Date().toISOString(),
     };
 
-    await this.guestService.createFromRSVP(newMainGuest, rsvp.uid);
+    // FIX: Use create() instead of createFromRSVP() because we're in admin context
+    // createFromRSVP() checks if current user.uid === rsvpUid, which fails when admin is syncing
+    await this.guestService.create(newMainGuest);
 
     // สร้าง Guest สำหรับผู้ติดตาม
     if (rsvp.accompanyingGuests && rsvp.accompanyingGuests.length > 0) {

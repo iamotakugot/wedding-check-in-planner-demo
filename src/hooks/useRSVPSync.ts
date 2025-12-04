@@ -9,11 +9,11 @@ import { RSVPService } from '@/services/firebase/RSVPService';
 import { RSVPManager } from '@/managers/RSVPManager';
 import { logger } from '@/utils/logger';
 
+// Module-level cache to survive Strict Mode remounts
+const globalProcessingSet = new Set<string>();
+const globalProcessedSet = new Set<string>();
+
 export const useRSVPSync = (isEnabled: boolean = true) => {
-  // Track RSVPs ที่กำลังประมวลผลอยู่ (ป้องกัน duplicate processing)
-  const processingRsvpUidsRef = useRef<Set<string>>(new Set());
-  // Track RSVPs ที่สร้าง Guest แล้ว (idempotency)
-  const processedRsvpUidsRef = useRef<Set<string>>(new Set());
   // Cleanup flag เพื่อป้องกัน async operations หลัง unmount
   const isMountedRef = useRef(true);
   // Manager instance
@@ -24,9 +24,11 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
 
     isMountedRef.current = true;
     logger.log('🔄 [RSVP Sync] เริ่ม watch RSVPs...');
-    const processingSet = processingRsvpUidsRef.current;
-    const processedSet = processedRsvpUidsRef.current;
-    
+
+    // Use global sets
+    const processingSet = globalProcessingSet;
+    const processedSet = globalProcessedSet;
+
     if (!rsvpManagerRef.current) {
       rsvpManagerRef.current = new RSVPManager();
     }
@@ -41,10 +43,12 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
       // กรอง RSVPs ที่ต้องสร้าง Guest:
       // 1. isComing === 'yes'
       // 2. มี uid
-      // 3. ยังไม่ถูกประมวลผล
+      // 3. ยังไม่ถูกประมวลผล (ใน session นี้)
       const rsvpsToProcess = rsvps.filter((rsvp) => {
         const hasUid = !!rsvp.uid;
         const isComing = rsvp.isComing === 'yes';
+        // Note: เราเอา notSynced ออกเพื่อให้ Manager เป็นคนเช็คว่า Guest มีอยู่จริงไหม
+        // ถ้า Guest ถูกลบไปแล้ว Manager จะได้สร้างใหม่ให้
         const notProcessing = !processingSet.has(rsvp.uid || '');
         const notProcessed = !processedSet.has(rsvp.uid || '');
 
@@ -62,20 +66,26 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
         const rsvpUid = rsvp.uid;
         if (!rsvpUid || !rsvp.id) continue;
 
+        // 🔒 Double-check locking inside loop (สำคัญมากสำหรับ concurrent processing)
+        // เพราะระหว่างที่รอ await ใน loop รอบก่อนหน้า อาจมี instance อื่นเริ่มทำรายการนี้ไปแล้ว
+        if (processingSet.has(rsvpUid) || processedSet.has(rsvpUid)) {
+          continue;
+        }
+
         // Mark ว่ากำลังประมวลผล
         processingSet.add(rsvpUid);
 
         try {
           // ตรวจสอบว่า component ยัง mount อยู่หรือไม่
           if (!isMountedRef.current) return;
-          
+
           // ใช้ RSVPManager เพื่อ sync RSVP เป็น Guest
           await rsvpManager.syncRSVPToGuest(rsvp.id);
-          
+
           if (!isMountedRef.current) return;
-          
+
           logger.log(`✅ [RSVP Sync] Sync RSVP สำเร็จสำหรับ RSVP UID: ${rsvpUid}`);
-          
+
           // Mark ว่าประมวลผลแล้ว
           processedSet.add(rsvpUid);
         } catch (error) {
@@ -95,9 +105,7 @@ export const useRSVPSync = (isEnabled: boolean = true) => {
       isMountedRef.current = false;
       logger.log('🛑 [RSVP Sync] หยุด watch RSVPs');
       unsubscribeRSVPs();
-      // Reset processing sets
-      processingSet.clear();
-      processedSet.clear();
+      // Note: ไม่ clear global sets เพื่อให้จำ state ได้แม้ component จะ remount (Strict Mode)
     };
   }, [isEnabled]);
 };

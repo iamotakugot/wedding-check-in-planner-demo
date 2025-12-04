@@ -1017,7 +1017,12 @@ const GuestsPage: React.FC = () => {
             dataSource={filteredTreeData}
             rowKey="id"
             loading={isLoading}
-            pagination={{ pageSize: 20 }}
+            pagination={{
+              defaultPageSize: 20,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total) => `ทั้งหมด ${total} รายการ`,
+            }}
             scroll={{ x: 1200 }}
             className="border border-gray-100 rounded-lg overflow-hidden"
           />

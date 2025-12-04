@@ -77,6 +77,16 @@ export class SeatingManager {
   }
 
   /**
+   * Unassign multiple guests from table
+   */
+  async unassignGuests(guestIds: string[]): Promise<void> {
+    const updates = guestIds.map(id =>
+      this.guestService.update(id, { tableId: null, zoneId: null })
+    );
+    await Promise.all(updates);
+  }
+
+  /**
    * Get guests by table
    */
   async getGuestsByTable(tableId: string): Promise<Guest[]> {
@@ -97,12 +107,12 @@ export class SeatingManager {
    */
   async deleteZoneWithTables(zoneId: string): Promise<void> {
     const tables = await this.getTablesByZone(zoneId);
-    
+
     // Delete all tables in zone
     for (const table of tables) {
       await this.tableService.delete(table.id);
     }
-    
+
     // Delete zone
     await this.zoneService.delete(zoneId);
   }

@@ -604,8 +604,6 @@ const SeatingPage: React.FC = () => {
         onUnassignAllGuests={handleUnassignAllGuests}
       />
 
-
-
     </div>
   );
 };
